@@ -252,6 +252,7 @@ paths:
     post:
       operationId: "requestPasswordReset"
       summary: "Generic request; OAuth-only accounts receive no reset credential"
+      description: "Rechecks current recovery email and local credential under the account guard. A stale address racing with email change gets the same 202 without a new proof or reset mail."
       security: []
       responses:
         '202':
@@ -333,6 +334,17 @@ paths:
               schema:
                 type: "string"
                 format: "uri"
+        '429':
+          description: "Per-IP authorize budget exhausted before state insertion (default 10/minute, shared across providers)."
+          headers:
+            Retry-After:
+              schema:
+                type: string
+                const: "60"
+          content:
+            application/problem+json:
+              schema:
+                "$ref": "#/components/schemas/Problem"
         default:
           "$ref": "#/components/responses/Problem"
       parameters:
@@ -359,6 +371,17 @@ paths:
               schema:
                 type: "string"
                 format: "uri"
+        '429':
+          description: "Independent per-IP callback budget exhausted before state consumption/provider work (default 20/minute, including invalid attempts)."
+          headers:
+            Retry-After:
+              schema:
+                type: string
+                const: "60"
+          content:
+            application/problem+json:
+              schema:
+                "$ref": "#/components/schemas/Problem"
         default:
           "$ref": "#/components/responses/Problem"
       parameters:
@@ -394,7 +417,7 @@ paths:
           required: true
           schema:
             type: "string"
-      description: "Only the persisted intent and initiating session control LOGIN/LINK/REAUTH. Redirect is a fixed trusted frontend path plus a non-secret marker. An existing subject ignores changed provider email. Matching claimed email never logs in/links; new subjects enter limited verified-email onboarding. No access/refresh token in redirect."
+      description: "Only the persisted intent and initiating session control LOGIN/LINK/REAUTH. Binding is re-read after the account guard; a removed/replaced observed binding returns identity_conflict and requires a new flow. Redirect is a fixed trusted frontend path plus a non-secret marker. An existing subject ignores changed provider email. Matching claimed email never logs in/links; new subjects enter limited verified-email onboarding. No access/refresh token in redirect. Top-level GET needs no Origin/CSRF. A throttled state remains unconsumed until normal expiry."
   "/api/v1/me/identities/{provider}/link-intents":
     post:
       operationId: "startIdentityLink"

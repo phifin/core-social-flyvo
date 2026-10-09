@@ -1,11 +1,14 @@
 package com.flyvo.socialcore.identity;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import com.flyvo.socialcore.account.api.AccountCommands;
+import com.flyvo.socialcore.account.api.AccountQueries;
 import com.flyvo.socialcore.identity.application.Authentication;
 import com.flyvo.socialcore.identity.application.OAuthAuthentication;
 import com.flyvo.socialcore.identity.application.port.AccessTokens;
@@ -32,6 +35,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.containers.GenericContainer;
@@ -171,6 +175,7 @@ class AuthenticationIT {
   @Autowired AccessTokens tokens;
   @Autowired IdentityRepository identities;
   @Autowired AccountCommands accounts;
+  @MockitoSpyBean AccountQueries accountQueries;
   @Autowired Profiles profiles;
   @Autowired MockMvc mvc;
   @Autowired ObjectMapper json;
@@ -253,6 +258,167 @@ class AuthenticationIT {
     } catch (Exception failure) {
       return failure;
     }
+  }
+
+  // Pause only the tested thread immediately before the real account guard. All reads/writes,
+  // locks and commits still run against PostgreSQL; the competing command commits before resume.
+  private <T> T afterCompetingCommit(UUID user, Callable<T> action, Runnable competing)
+      throws Exception {
+    var entered = new CountDownLatch(1);
+    var resume = new CountDownLatch(1);
+    AccountQueries spy =
+        org.springframework.test.util.AopTestUtils.getUltimateTargetObject(accountQueries);
+    doAnswer(
+            invocation -> {
+              if (Thread.currentThread().getName().equals("review-guard-race")) {
+                entered.countDown();
+                if (!resume.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("timeout");
+              }
+              return invocation.callRealMethod();
+            })
+        .when(spy)
+        .guard(eq(user), anyBoolean());
+    try (var executor =
+        Executors.newSingleThreadExecutor(r -> new Thread(r, "review-guard-race"))) {
+      var result = executor.submit(action);
+      try {
+        assertThat(entered.await(10, TimeUnit.SECONDS)).isTrue();
+        competing.run();
+      } finally {
+        resume.countDown();
+      }
+      return result.get(20, TimeUnit.SECONDS);
+    } finally {
+      reset(spy);
+    }
+  }
+
+  @Test
+  void resetIssuanceAfterRecoveryEmailChangeCannotSendOldMailboxTakeoverProof() throws Exception {
+    String oldEmail = address(), newEmail = address();
+    var owner = actor(user(oldEmail));
+    auth.requestReset(oldEmail);
+    var oldProof = mailSecret(oldEmail, "RESET_PASSWORD");
+    auth.requestEmail(owner, newEmail);
+    var changeProof = mailSecret(newEmail, "CHANGE_EMAIL");
+    long resetJobs =
+        count("SELECT count(*) FROM platform.job WHERE payload->>'template'='RESET_PASSWORD'");
+    afterCompetingCommit(
+        owner.userId(),
+        () -> {
+          auth.requestReset(oldEmail);
+          return true;
+        },
+        () -> auth.completeEmail(owner, changeProof));
+    assertThat(
+            count("SELECT count(*) FROM platform.job WHERE payload->>'template'='RESET_PASSWORD'"))
+        .isEqualTo(resetJobs);
+    assertThat(
+            count(
+                "SELECT count(*) FROM identity.one_time_token WHERE user_id=? AND purpose='RESET_PASSWORD' AND consumed_at IS NULL",
+                owner.userId()))
+        .isZero();
+    assertThatThrownBy(() -> auth.reset(oldProof, "An old mailbox must never take over"))
+        .isInstanceOf(Failure.class);
+    assertThatThrownBy(() -> auth.login(oldEmail, PASSWORD)).isInstanceOf(Failure.class);
+    assertThat(auth.login(newEmail, PASSWORD)).isNotNull();
+    auth.requestReset(newEmail);
+    auth.reset(mailSecret(newEmail, "RESET_PASSWORD"), "A new mailbox chooses this password");
+    assertThat(auth.login(newEmail, "A new mailbox chooses this password")).isNotNull();
+  }
+
+  @Test
+  void oauthLoginCannotUseBindingUnlinkedBeforeItsAccountGuard() throws Exception {
+    oauthUnlinkBeforeGuard("LOGIN");
+  }
+
+  @Test
+  void oauthReauthCannotUseBindingUnlinkedBeforeItsAccountGuard() throws Exception {
+    oauthUnlinkBeforeGuard("REAUTH");
+  }
+
+  @Test
+  void oauthSameAccountLinkCannotReportBindingUnlinkedBeforeItsAccountGuard() throws Exception {
+    oauthUnlinkBeforeGuard("LINK");
+  }
+
+  @Test
+  void oauthLoginCannotFollowReassignedOwnerOrReplacementBinding() throws Exception {
+    for (boolean sameOwner : List.of(false, true)) {
+      var owner = actor(user(address()));
+      var replacement = sameOwner ? owner : actor(user(address()));
+      var proof =
+          new ProviderProof(
+              "GOOGLE", "https://accounts.google.com", "reassigned-" + UUID.randomUUID(), null);
+      callback(proof, "LINK", owner);
+      var binding = auth.identities(owner).getFirst().id();
+      long sessions =
+          count(
+              "SELECT count(*) FROM identity.auth_session WHERE user_id IN (?,?)",
+              owner.userId(),
+              replacement.userId());
+      var result =
+          afterCompetingCommit(
+              owner.userId(),
+              () -> callback(proof, "LOGIN", null),
+              () -> {
+                auth.unlink(owner, binding);
+                assertThat(callback(proof, "LINK", replacement).marker()).isEqualTo("linked");
+              });
+      assertThat(result.marker()).isEqualTo("identity_conflict");
+      assertThat(result.refresh()).isNull();
+      var current = identities.external(proof.provider(), proof.issuer(), proof.subject());
+      assertThat(current.userId()).isEqualTo(replacement.userId());
+      assertThat(current.id()).isNotEqualTo(binding);
+      assertThat(
+              count(
+                  "SELECT count(*) FROM identity.auth_session WHERE user_id IN (?,?)",
+                  owner.userId(),
+                  replacement.userId()))
+          .isEqualTo(sessions);
+      // A new flow observes the committed owner and can log in normally.
+      assertThat(callback(proof, "LOGIN", null).marker()).isEqualTo("signed_in");
+    }
+  }
+
+  private void oauthUnlinkBeforeGuard(String intent) throws Exception {
+    var owner = actor(user(address()));
+    var proof =
+        new ProviderProof(
+            "GOOGLE", "https://accounts.google.com", "unlink-race-" + UUID.randomUUID(), null);
+    assertThat(callback(proof, "LINK", owner).marker()).isEqualTo("linked");
+    var binding = auth.identities(owner).getFirst().id();
+    var start = oauth.start("GOOGLE", intent, owner, null);
+    var code = UUID.randomUUID().toString();
+    provider.codes.put(code, proof);
+    long sessions =
+        count("SELECT count(*) FROM identity.auth_session WHERE user_id=?", owner.userId());
+    long authenticated =
+        count(
+            "SELECT count(*) FROM platform.audit_entry WHERE actor_id=? AND action IN ('LOGIN_SUCCEEDED','REAUTHENTICATED')",
+            owner.userId());
+    var result =
+        afterCompetingCommit(
+            owner.userId(),
+            () -> oauth.callback("GOOGLE", state(start), start.browser(), code, null),
+            () -> auth.unlink(owner, binding));
+    assertThat(result.marker()).isEqualTo("identity_conflict");
+    assertThat(result.refresh()).isNull();
+    assertThat(auth.identities(owner)).isEmpty();
+    assertThat(count("SELECT count(*) FROM identity.auth_session WHERE user_id=?", owner.userId()))
+        .isEqualTo(sessions);
+    assertThat(
+            count(
+                "SELECT count(*) FROM platform.audit_entry WHERE actor_id=? AND action IN ('LOGIN_SUCCEEDED','REAUTHENTICATED')",
+                owner.userId()))
+        .isEqualTo(authenticated);
+    assertThat(identities.session(owner.sessionId(), false).reauthenticatedAt()).isNull();
+    if (intent.equals("LINK"))
+      assertThat(
+              count(
+                  "SELECT count(*) FROM platform.audit_entry WHERE actor_id=? AND action='IDENTITY_LINK_REJECTED' AND reason_code='BINDING_CHANGED'",
+                  owner.userId()))
+          .isEqualTo(1);
   }
 
   @Test

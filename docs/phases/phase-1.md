@@ -1,7 +1,9 @@
 # Phase 1 — Secure accounts and durable authentication
 
 Date: 2026-10-09. Implementation status: complete locally and verified by developer.
-Review status: CHANGES_REQUESTED; main review found R1–R3 despite 59 existing tests passing again. See [current handoff](../agent-handoff.md) for fixes and review disposition.
+Review status: READY_FOR_REVIEW; development proposes R1–R3 fixed after regression
+verification. Findings remain OPEN until the main reviewer closes them; this is
+not phase acceptance. See [current handoff](../agent-handoff.md) for disposition.
 Scope stops at Phase 1. Live-provider/production readiness is separately blocked
 by the gates below; no push, deployment or external email/provider traffic.
 
@@ -90,6 +92,9 @@ table/cache is introduced.
 
 ## Verification evidence
 
+The following table records the original implementation checks, not reruns on
+the review-fix commit. Current round results are recorded separately below.
+
 Commands were run with `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64`
 (the environment's default shell Java is 8). Docker/Testcontainers checks are real,
 not skipped.
@@ -168,5 +173,67 @@ commits revocation/audit when the owning account has become suspended.
 
 No accepted product/security/architecture decision was changed; no ADR superseded.
 Meaningful refinements are documented here and in subsystem/operations docs.
-Next work is Phase 2 only when separately requested. Local commit hash is reported
-at handoff; nothing is pushed, merged or deployed.
+Next work is main-thread re-review of R1–R3. Phase 2 requires separate assignment;
+it is not implemented here. Local commit hashes are recorded in the handoff;
+nothing is pushed, merged or deployed.
+
+## Phase 1 review fixes — round 1 (2026-10-09)
+
+Scope: R1–R3 only, based on code `4ffbc875dd16602e55ccffdd0a82ea6aae889d86`
+and review mailbox commit `0ed701e`. No migrations, new dependencies, module APIs,
+allowlist expansion or Phase 2 work. The account-before-session lock order,
+transactional reset invalidation, callback state consumption before network,
+unique-claim conflict auditing and no-email-auto-link policy remain intact.
+
+- R1: reset's initial email lookup selects an exclusive account guard only.
+  Re-read recovery email and local credential under it before creating proof/mail;
+  stale lookup returns normally without issuing anything. Latch regression proves
+  email change commits between lookup and guard, no new reset job/live proof,
+  old proof cannot take over, and the new address can reset successfully.
+- R2: after LOGIN's shared guard or LINK/REAUTH's exclusive actor guard, re-read
+  the provider binding and validate owner/ID. An observed removed/replaced binding
+  yields `identity_conflict`, no new session/freshness/success audit, and an audited
+  LINK denial. Do not follow another owner or acquire a second account guard.
+  Three latch regressions cover unlink before LOGIN/REAUTH/same-account LINK;
+  another covers reassignment and same-owner replacement, then successful new flow.
+- R3: separate continuously refilled authorize/callback GET buckets default to
+  10/20 requests per minute/IP, shared across both providers, configurable 1–1000.
+  Filter rejection precedes persistence/state consumption/provider calls and
+  returns 429 Problem Details + `Retry-After: 60`. Framework path matching closes
+  encoded-provider bypass. Denials preserve partial refill. Mutable-clock HTTP
+  tests prove bounded rows/exchanges, valid unconsumed state after 429, independent
+  IP/budgets, invalid-attempt budgeting, forwarded-IP resistance, refill, encoded
+  routes and unaffected health/top-level callbacks. Startup rejects invalid limits.
+
+Actual commands (Java 21, real PostgreSQL/Mailpit Testcontainers):
+The first command ran on the initial seven-test regression set, before the
+additional encoded-path, replacement-binding and configuration tests were added.
+
+```bash
+./mvnw -B -ntp spotless:apply test-compile failsafe:integration-test failsafe:verify \
+  '-Dit.test=AuthenticationIT#resetIssuanceAfterRecoveryEmailChangeCannotSendOldMailboxTakeoverProof+oauthLoginCannotUseBindingUnlinkedBeforeItsAccountGuard+oauthReauthCannotUseBindingUnlinkedBeforeItsAccountGuard+oauthSameAccountLinkCannotReportBindingUnlinkedBeforeItsAccountGuard,OAuthAbuseIT'
+./mvnw -B -ntp spotless:apply test \
+  '-Dtest=BrowserBoundaryFilterTest,ProviderContractTest,ArchitectureTest,PersistenceBoundaryTest' \
+  failsafe:integration-test failsafe:verify '-Dit.test=AuthenticationIT,OAuthAbuseIT'
+./mvnw -B -ntp spotless:apply verify
+```
+
+| Round-1 check | Actual result |
+|---|---|
+| First seven regressions on unmodified feature code | All seven FAILED on expected stale-proof/stale-binding or missing-429 assertions; zero test errors/skips after fixture wiring correction |
+| Same seven after fixes | Seven passed, zero failures/errors/skips |
+| Encoded-provider regression on raw-URI limiter | FAILED as expected: 303 instead of 429; passes with framework matcher |
+| Targeted current provider/boundary/architecture + auth/OAuth suites | 11 unit/architecture + 34 integration passed; zero failures/errors/skips |
+| Full `spotless:apply verify` | BUILD SUCCESS: 26 unit/architecture + 43 integration = **69 tests**; zero failures/errors/skips; formatting, Enforcer, dependency convergence pass |
+| Updated OpenAPI 3.1 validation (`openapi-spec-validator==0.7.2`) | Passed |
+| `docker compose config --quiet`, local Markdown links, `git diff --check` | Passed; no broken local links or whitespace errors |
+| Pinned Gitleaks 8.28.0 scan of exact staged source snapshot | Passed, no leaks; ignored keys/build artifacts excluded |
+
+Ten added tests cover these fixes. Original refresh replay, last-method/two-unlink,
+cross-account unique claims, current account/session, CSRF/Origin and durable work
+tests all pass without exclusions. Detailed test names and real code commit are
+in the handoff. Docker image/Compose smoke and live providers are not rerun in this
+fix round; prior evidence is historical. Provider/production gates above still
+apply. Per-instance limits do not survive restart or replace shared/edge controls
+for multi-instance public traffic; no Redis/broker is introduced. Main reviewer
+alone resolves findings or accepts this phase.

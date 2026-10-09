@@ -53,4 +53,13 @@ AuthenticationIT also starts real embedded Tomcat and sends HTTP Bearer requests
 so servlet-startup wiring is covered beyond MockMvc. Isolated container smoke
 checks exercise real cookie/CSRF rotation and SMTP-captured verification/reset.
 
+Phase 1 review regressions pause a test thread immediately before the real
+account guard via a spy on its published API, commit email change or unlink in
+another transaction, then resume. Persistence/guards are not mocked: PostgreSQL
+proves stale reset issuance and LOGIN/REAUTH/LINK cannot authenticate removed or
+replaced bindings. Separate enabled fake-provider HTTP tests use a mutable Clock
+to prove authorize/callback limits, partial refill, independent IPs/budgets,
+forwarded-IP and encoded-path resistance, no state/provider work after 429, and
+unaffected health/top-level callbacks. No sleep-based interleaving is used.
+
 Passing unit tests alone does not complete a persistence/API phase. A phase is done when its acceptance scenarios pass against PostgreSQL, migrations work from empty and prior schema, architecture tests pass, relevant container/provider contracts pass, and known external prerequisites are explicitly reported. Record exact commands/results and any blocked checks in `docs/phases/phase-N.md`. Never claim unrun tests passed.

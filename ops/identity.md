@@ -25,6 +25,8 @@ defaults to UID/GID 10001. Ports are localhost-only.
 | `SMTP_STARTTLS` | Default true, required TLS; only explicit local profile disables it |
 | `WORKER_ENABLED`, `app.worker.poll-ms` | Worker execution (default true), tick (default 1000 ms) |
 | `app.oauth.google.*`, `app.oauth.facebook.*` | Provider settings below; disabled by default |
+| `OAUTH_AUTHORIZE_PER_MINUTE` / `app.auth.oauth-authorize-per-minute` | Per-IP OAuth authorize GET bucket capacity/refill per minute; default 10 |
+| `OAUTH_CALLBACK_PER_MINUTE` / `app.auth.oauth-callback-per-minute` | Independent per-IP OAuth callback GET bucket capacity/refill per minute; default 20 |
 
 Auth properties are typed/validated; TLS/Origin, key sizes and provider settings
 are checked at startup. Ephemeral keys are rejected outside local/test profiles
@@ -33,6 +35,19 @@ HTTP-client wire/debug logging must stay disabled: provider protocol credentials
 and mailbox proofs must never reach logs, tracing or proxy access logs. Redact
 callback query strings at the edge. Email secrets are placed in frontend fragments;
 submit them in POST bodies and remove the fragment after completion.
+
+OAuth budgets must be integers 1–1000 (invalid configuration fails startup).
+Each starts full and refills continuously over 60 seconds; both providers share
+each budget. Requests over budget get sanitized 429/`RATE_LIMITED` and conservative
+`Retry-After: 60` before state insertion, consumption or provider work. Invalid
+callbacks spend the same callback budget; a throttled valid state remains usable
+until its normal expiry. GET redirects remain exempt from unsafe Origin/CSRF
+checks. Health probes do not spend these budgets. Limiter keys use socket remote
+IP, not client-supplied forwarded headers; configure trusted proxy/edge protection
+before deployment. Shared state is still required before multi-instance public
+traffic; per-instance buckets reset on process restart and are not a global quota.
+The existing 10,000-key bound fails closed for new keys when full; this is not a
+substitute for deployment-edge DDoS protection.
 
 ## Provider configuration and release gates
 
@@ -80,7 +95,12 @@ Authentication can clear/rotate the cookie; fetch `/auth/csrf` again when absent
 
 Unknown/existing email registration and reset requests return the same 202.
 Existing registration gets sign-in guidance; OAuth-only reset creates no local
-credential. Do not merge/link by email or change unique claims manually to solve
+credential. Reset issuance rechecks current recovery address and local credential
+under the account guard; a request racing with email change cannot mail a new
+usable proof to the old address. Provider callbacks reject an observed binding
+removed/replaced while waiting for the guard (`identity_conflict`); start a new
+flow, never restore bindings manually or replay consumed state.
+Do not merge/link by email or change unique claims manually to solve
 collisions. Lost recovery email or account merging needs a separately approved
 operator recovery policy; no public bypass exists. Account deletion denies access
 and records a deletion event; full erasure remains Phase 9A. Phase 2 must add its

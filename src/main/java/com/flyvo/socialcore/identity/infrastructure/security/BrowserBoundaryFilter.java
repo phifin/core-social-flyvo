@@ -11,16 +11,27 @@ import java.time.Clock;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.core.env.Environment;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.servlet.HandlerExceptionResolver;
 
 @Component
 public class BrowserBoundaryFilter extends OncePerRequestFilter {
+  private static final RequestMatcher OAUTH_AUTHORIZE =
+      PathPatternRequestMatcher.withDefaults()
+          .matcher(HttpMethod.GET, "/api/v1/auth/oauth/{provider}/authorize");
+  private static final RequestMatcher OAUTH_CALLBACK =
+      PathPatternRequestMatcher.withDefaults()
+          .matcher(HttpMethod.GET, "/api/v1/auth/oauth/{provider}/callback");
   private final String origin;
   private final HandlerExceptionResolver errors;
   private final Secrets secrets;
   private final Clock clock;
+  private final int oauthAuthorizeLimit;
+  private final int oauthCallbackLimit;
   private final Map<String, Bucket> buckets = new LinkedHashMap<>();
 
   private record Bucket(double tokens, long at) {}
@@ -35,6 +46,8 @@ public class BrowserBoundaryFilter extends OncePerRequestFilter {
     this.errors = errors;
     this.secrets = secrets;
     this.clock = clock;
+    oauthAuthorizeLimit = oauthLimit(env, "oauth-authorize-per-minute", 10);
+    oauthCallbackLimit = oauthLimit(env, "oauth-callback-per-minute", 20);
     var uri = java.net.URI.create(origin);
     boolean secure = env.getProperty("app.auth.secure-cookies", Boolean.class, true);
     if (uri.getHost() == null
@@ -55,6 +68,19 @@ public class BrowserBoundaryFilter extends OncePerRequestFilter {
     String path = request.getRequestURI();
     boolean unsafe = !java.util.Set.of("GET", "HEAD", "OPTIONS").contains(request.getMethod());
     if (path.startsWith("/api/v1/")) response.setHeader("Cache-Control", "no-store");
+    // Top-level OAuth GETs need abuse protection without unsafe-method Origin/CSRF checks.
+    // Share each budget across both providers; reject before insertion/state consumption/network.
+    boolean authorize = OAUTH_AUTHORIZE.matches(request);
+    if (authorize || OAUTH_CALLBACK.matches(request)) {
+      if (!take(
+          "ip:" + request.getRemoteAddr() + (authorize ? ":oauth-authorize" : ":oauth-callback"),
+          authorize ? oauthAuthorizeLimit : oauthCallbackLimit,
+          60000)) {
+        response.setHeader("Retry-After", "60");
+        errors.resolveException(request, response, null, new Failure(429, "RATE_LIMITED"));
+        return;
+      }
+    }
     if (unsafe && path.startsWith("/api/v1/")) {
       if (!origin.equals(request.getHeader("Origin"))) {
         errors.resolveException(request, response, null, new Failure(403, "UNTRUSTED_ORIGIN"));
@@ -137,6 +163,13 @@ public class BrowserBoundaryFilter extends OncePerRequestFilter {
     if (!take("login:" + key, 5, 60000)) throw new Failure(429, "RATE_LIMITED");
   }
 
+  private static int oauthLimit(Environment env, String property, int fallback) {
+    int value = env.getProperty("app.auth." + property, Integer.class, fallback);
+    if (value < 1 || value > 1000)
+      throw new IllegalStateException("OAuth rate limits must be between 1 and 1000 per minute");
+    return value;
+  }
+
   private synchronized boolean take(String key, int capacity, long window) {
     long now = clock.millis();
     buckets.entrySet().removeIf(e -> now - e.getValue().at() > 3600000);
@@ -147,7 +180,7 @@ public class BrowserBoundaryFilter extends OncePerRequestFilter {
             ? capacity
             : Math.min(
                 capacity, old.tokens() + Math.max(0, now - old.at()) * (double) capacity / window);
-    buckets.put(key, new Bucket(Math.max(0, available - 1), now));
+    buckets.put(key, new Bucket(available >= 1 ? available - 1 : available, now));
     return available >= 1;
   }
 }

@@ -64,6 +64,8 @@ app:
     private-key-file: ${AUTH_PRIVATE_KEY_FILE:}
     public-key-file: ${AUTH_PUBLIC_KEY_FILE:}
     retained-public-keys: ${AUTH_RETAINED_PUBLIC_KEYS:}
+    oauth-authorize-per-minute: ${OAUTH_AUTHORIZE_PER_MINUTE:10}
+    oauth-callback-per-minute: ${OAUTH_CALLBACK_PER_MINUTE:20}
   security:
     encryption-key-file: ${MAIL_ENCRYPTION_KEY_FILE:}
     limiter-key-file: ${LIMITER_KEY_FILE:}

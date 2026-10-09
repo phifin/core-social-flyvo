@@ -16,7 +16,11 @@ Perform expensive password hashing/verification outside long database locks, the
 
 Phase 1 refinements: changing a password or recovery email also invalidates
 outstanding password-reset proofs under the account guard, so an old mailbox
-proof cannot regain access after email change. Adding the first password to an
+proof cannot regain access after email change. Reset issuance uses its email lookup
+only to select the exclusive account guard, then re-reads current recovery email
+and local-credential eligibility under that guard. A stale old-address lookup
+returns the same generic response without issuing a proof or reset mail.
+Adding the first password to an
 OAuth-only account requires an explicit completed provider REAUTH transaction,
 in addition to the verified recovery email and five-minute freshness check.
 The local common-password snapshot and provenance are in
@@ -75,6 +79,14 @@ The Meta documentation endpoint could not be fetched during blueprint research. 
 
 LINK requires authentication within the last 5 minutes via password/provider reauthentication, not merely a recently refreshed token; bind fresh authentication time to the server-side session. Keep old sessions independent of linking; notify the account of added/removed methods. A forged callback cannot attach an attacker's identity to a victim's ambient session.
 
+Callbacks re-read the provider/issuer/subject binding after the account guard.
+LOGIN requires the same binding ID and owner as the pre-guard observation;
+LINK/REAUTH also reject a previously observed binding that was removed or replaced.
+Return `identity_conflict` and require a new flow rather than granting from stale
+facts or following a reassigned owner with another account lock. LINK's changed-
+binding rejection is audited. Unlink therefore serializes with authentication,
+without holding business locks during the provider exchange.
+
 ## Authorization placement
 
 Transport extracts a minimal `ActorContext` (user ID/session ID or anonymous) and validates syntax. Application commands call named resource policies after loading minimal authoritative facts; the domain enforces intrinsic transitions. The actor is never accepted from JSON. Module APIs accept actor context explicitly for user-facing operations; background/system capability methods are separate narrow contracts, not a magical `isSystem=true` bypass.
@@ -126,5 +138,16 @@ Normal reads authorize against committed state near request time, not a global s
 ## Abuse controls and secrets
 
 Phase 1 uses bounded per-instance token buckets and deployment-edge limits, plus DB-backed per-email verification/reset issuance windows. Initial limits: login 10/min/IP and 5/min/account key; registration/reset email 3/hour/address and 20/hour/IP; API writes 60/min/user; uploads 10/min/user with storage quotas; search 30/min/user. These are tunable defaults, not account lockouts an attacker can trigger indefinitely. Hash normalized emails in limiter keys. Trust forwarded IP headers only from configured proxies. Introduce shared Redis limits before multi-instance public traffic.
+
+Public OAuth GETs have separate per-IP budgets: authorize 10/minute and callback
+20/minute, shared across Google/Facebook. These run before state insertion or
+callback state consumption/provider exchange, independently of unsafe-method
+Origin/CSRF checks; top-level callbacks need neither Origin nor CSRF. Invalid
+callback attempts also spend the budget. Route matching uses decoded framework
+paths, not raw-URI string comparisons. Exhaustion returns `RATE_LIMITED` Problem
+Details, 429 and `Retry-After: 60`. Buckets start full, refill continuously, retain
+partial refill on denial, and share the existing 10,000-key per-instance bound.
+Properties/environment overrides and deployment limitations are in
+[identity operations](../ops/identity.md).
 
 Explicit allowlisted request DTOs prevent mass assignment; ignore/reject unexpected privilege fields consistently. Set request/body/upload limits, database statement timeouts and provider timeouts. Parameterize SQL. Return plain text; rich HTML remains disabled. No remote URL downloads without SSRF review. Store secrets in environment/secret manager, never git/logs/events. Redact Authorization, cookies, reset codes, provider tokens, passwords, raw emails and presigned URL query strings. Log reason codes and correlation IDs instead. CORS, CSRF, object-level denial, rate-limit bypass, logout races and malicious upload cases are required tests.

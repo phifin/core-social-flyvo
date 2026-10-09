@@ -342,9 +342,13 @@ public class Authentication {
           var now = clock.instant();
           if (!store.dispatch(secrets.emailKey(email), "RESET", now)) return;
           var user = store.emailOwner(email);
-          if (user == null || store.credential(user) == null) return;
-          accounts.guard(user, true);
-          if (!accounts.find(user).active()) return;
+          if (user == null) return;
+          // The pre-lock lookup only selects the guard. Email change may have committed while
+          // waiting; only current recovery-email ownership and local eligibility may issue proof.
+          if (!accounts.guard(user, true).active()
+              || !email.equals(store.email(user))
+              || store.credential(user) == null) return;
+          now = clock.instant();
           var id = UUID.randomUUID();
           var secret = secrets.randomToken();
           store.oneTime(id, user, "RESET_PASSWORD", secrets.hash(secret), null, now);

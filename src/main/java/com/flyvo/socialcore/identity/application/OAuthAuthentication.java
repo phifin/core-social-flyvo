@@ -127,6 +127,19 @@ public class OAuthAuthentication {
                 if (!"LOGIN".equals(transaction.intent())) {
                   var actor = new ActorContext(transaction.userId(), transaction.sessionId());
                   auth.current(actor, true, "LINK".equals(transaction.intent()));
+                  var guarded = store.external(proof.provider(), proof.issuer(), proof.subject());
+                  if (existing != null && !sameBinding(existing, guarded)) {
+                    if ("LINK".equals(transaction.intent()))
+                      work.audit(
+                          actor.userId(),
+                          "IDENTITY_LINK_REJECTED",
+                          "account",
+                          actor.userId(),
+                          "DENIED",
+                          "BINDING_CHANGED");
+                    return new Result("identity_conflict", null, null);
+                  }
+                  existing = guarded;
                   if ("REAUTH".equals(transaction.intent())) {
                     if (existing == null || !actor.userId().equals(existing.userId()))
                       return new Result("identity_conflict", null, null);
@@ -164,9 +177,14 @@ public class OAuthAuthentication {
                 }
                 if (existing != null) {
                   auth.activeGuard(existing.userId(), false);
-                  var grant = auth.grant(existing.userId());
+                  // Never grant from an observation made before the guard or follow a new owner
+                  // by acquiring a second account guard out of order. A new flow is required.
+                  var guarded = store.external(proof.provider(), proof.issuer(), proof.subject());
+                  if (!sameBinding(existing, guarded))
+                    return new Result("identity_conflict", null, null);
+                  var grant = auth.grant(guarded.userId());
                   work.audit(
-                      existing.userId(),
+                      guarded.userId(),
                       "LOGIN_SUCCEEDED",
                       "account",
                       existing.userId(),
@@ -215,6 +233,12 @@ public class OAuthAuthentication {
       return new Result("identity_conflict", null, null);
     }
     return result;
+  }
+
+  private boolean sameBinding(External observed, External guarded) {
+    return guarded != null
+        && observed.id().equals(guarded.id())
+        && observed.userId().equals(guarded.userId());
   }
 
   public void register(
