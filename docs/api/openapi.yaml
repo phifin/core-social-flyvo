@@ -1,0 +1,76 @@
+openapi: 3.1.0
+info:
+  title: social-core foundation
+  version: 0.0.1
+  description: >-
+    Phase 0 implemented surface only. No business API or authentication is implemented.
+    All routes except the three GET health probes are denied by default.
+paths:
+  /actuator/health:
+    get:
+      operationId: getHealth
+      summary: Aggregate health without component details
+      responses:
+        '200':
+          $ref: '#/components/responses/Health'
+        '503':
+          $ref: '#/components/responses/Health'
+  /actuator/health/liveness:
+    get:
+      operationId: getLiveness
+      summary: Process liveness independent of PostgreSQL availability
+      responses:
+        '200':
+          $ref: '#/components/responses/Health'
+        '503':
+          $ref: '#/components/responses/Health'
+  /actuator/health/readiness:
+    get:
+      operationId: getReadiness
+      summary: Readiness requiring application availability and PostgreSQL
+      responses:
+        '200':
+          $ref: '#/components/responses/Health'
+        '503':
+          $ref: '#/components/responses/Health'
+components:
+  responses:
+    Health:
+      description: Minimal operational health; Actuator status format, not a business error.
+      headers:
+        X-Request-ID:
+          schema:
+            type: string
+      content:
+        application/vnd.spring-boot.actuator.v3+json:
+          schema:
+            type: object
+            required: [status]
+            properties:
+              status:
+                type: string
+                enum: [UP, DOWN, OUT_OF_SERVICE, UNKNOWN]
+              groups:
+                type: array
+                items:
+                  type: string
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status, detail, instance, code, requestId]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        code:
+          type: string
+        requestId:
+          type: string

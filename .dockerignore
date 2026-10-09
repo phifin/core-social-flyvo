@@ -1,0 +1,11 @@
+.git
+.idea
+.agents
+.aws
+.codex
+.env
+.env.*
+target
+docs
+*.pem
+*.key

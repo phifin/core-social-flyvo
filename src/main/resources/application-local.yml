@@ -1,0 +1,6 @@
+# Explicit local-only defaults. Production has no credential fallback.
+app:
+  database:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/social_core}
+    username: ${DB_USERNAME:social_core}
+    password: ${DB_PASSWORD:local-development-only}

@@ -1,0 +1,105 @@
+package com.flyvo.socialcore.architecture;
+
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noFields;
+import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices;
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.tngtech.archunit.core.importer.ClassFileImporter;
+import com.tngtech.archunit.core.importer.ImportOption;
+import jakarta.persistence.Entity;
+import org.junit.jupiter.api.Test;
+
+class ArchitectureTest {
+  private static final String ROOT = "com.flyvo.socialcore";
+  private static final com.tngtech.archunit.core.domain.JavaClasses PRODUCTION =
+      new ClassFileImporter()
+          .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
+          .importPackages(ROOT);
+
+  @Test
+  void moduleBoundariesAndDependencyGraphAreEnforced() {
+    ModuleRules.boundaries(ROOT).check(PRODUCTION);
+    slices().matching(ROOT + ".(*)..").should().beFreeOfCycles().check(PRODUCTION);
+    assertThat(PRODUCTION).isNotEmpty();
+  }
+
+  @Test
+  void deliberatelyForbiddenFixtureIsDetected() {
+    var fixtures = new ClassFileImporter().importPackages("com.flyvo.archfixtures");
+    var result = ModuleRules.boundaries("com.flyvo.archfixtures").evaluate(fixtures);
+    assertThat(result.hasViolation()).isTrue();
+    assertThat(result.getFailureReport().getDetails())
+        .anyMatch(detail -> detail.contains("SecretRepository"));
+  }
+
+  @Test
+  void domainAndApplicationDoNotDependOnTransport() {
+    noClasses()
+        .that()
+        .resideInAnyPackage("..domain..", "..application..")
+        .should()
+        .dependOnClassesThat()
+        .resideInAnyPackage("..web..", "org.springframework.web..", "jakarta.servlet..")
+        .allowEmptyShould(true)
+        .check(PRODUCTION);
+    noClasses()
+        .that()
+        .resideInAnyPackage("..domain..")
+        .should()
+        .dependOnClassesThat()
+        .resideInAnyPackage(
+            "org.springframework..",
+            "tools.jackson..",
+            "com.fasterxml.jackson..",
+            "..application..",
+            "..infrastructure..")
+        .allowEmptyShould(true)
+        .check(PRODUCTION);
+  }
+
+  @Test
+  void publicContractsAndWebDoNotExposePersistence() {
+    noClasses()
+        .that()
+        .resideInAnyPackage("..api..", "..web..")
+        .should()
+        .dependOnClassesThat()
+        .areAnnotatedWith(Entity.class)
+        .allowEmptyShould(true)
+        .check(PRODUCTION);
+    noClasses()
+        .that()
+        .resideInAnyPackage("..api..")
+        .should()
+        .dependOnClassesThat()
+        .resideInAnyPackage(
+            "org.springframework..",
+            "jakarta.persistence..",
+            "..domain..",
+            "..infrastructure..",
+            "..application..",
+            "..web..")
+        .allowEmptyShould(true)
+        .check(PRODUCTION);
+    noClasses()
+        .that()
+        .resideInAnyPackage("..web..")
+        .should()
+        .dependOnClassesThat()
+        .resideInAnyPackage("..infrastructure.persistence..", "..application.port..")
+        .check(PRODUCTION);
+  }
+
+  @Test
+  void injectionUsesConstructors() {
+    for (String annotation :
+        new String[] {
+          "org.springframework.beans.factory.annotation.Autowired",
+          "jakarta.inject.Inject",
+          "jakarta.annotation.Resource"
+        }) {
+      noFields().should().beAnnotatedWith(annotation).check(PRODUCTION);
+    }
+  }
+}
