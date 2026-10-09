@@ -1,9 +1,10 @@
 # Phase 1 — Secure accounts and durable authentication
 
 Date: 2026-10-09. Implementation status: complete locally and verified by developer.
-Review status: READY_FOR_REVIEW; development proposes R1–R3 fixed after regression
-verification. Findings remain OPEN until the main reviewer closes them; this is
-not phase acceptance. See [current handoff](../agent-handoff.md) for disposition.
+Review status: ACCEPTED by main reviewer after R1–R3 fixes in `7aa6b47`.
+Independent Java 21 `./mvnw -B -ntp verify` passed all 69 tests with zero
+failures/errors/skips. Accepted for local implementation progression; production
+readiness remains gated below. See [current handoff](../agent-handoff.md) for review evidence.
 Scope stops at Phase 1. Live-provider/production readiness is separately blocked
 by the gates below; no push, deployment or external email/provider traffic.
 
