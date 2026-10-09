@@ -30,6 +30,30 @@ Rows without a public resource identity (follows, membership key, reaction assoc
 
 Media FK/profile avatar column is added in Phase 4 after media schema exists. Phase 1 creates profile without it. Account creation, email claim, credential/external binding and initial profile commit together; competing claims are resolved by the unique email/identity indexes. `PENDING_VERIFICATION` is reserved for administrative/imported accounts; ordinary registration stores an intent and creates an ACTIVE account only after verification. Unverified intents cannot reserve a login email indefinitely.
 
+### Phase 1 concrete schema refinements
+
+`V0002`–`V0008` implement the preceding account/identity/profile design and the
+platform durability tables below. `identity.external_onboarding` additionally
+stores a hashed limited capability, browser hash, encrypted provider proof,
+expiry and consumption time for provider flows without a confirmed recovery
+email. It reserves neither email nor account. Only verified completion claims
+the unique email/provider indexes. `email_original` currently stores the same
+canonical address as `email_normalized`; self responses use the canonical value.
+
+Account/profile/preferences use JPA versions. Identity mutable state uses owned
+parameterized JDBC, account/session guards and explicit version increments/CAS,
+not a second JPA representation. Audit is protected by an append-only trigger
+as well as the production runtime-role requirement. Additional CHECKs enforce
+OAuth initiators, secret hash sizes, session expiry order and running leases.
+There are no SQL views, media FK or generic idempotency records in Phase 1:
+auth secrets must not enter response caches, and no eligible creating API uses
+generic idempotency yet. Cleanup is bounded to 500 records per category/claim
+cycle; old refresh generations are removed oldest-first to respect successor FKs.
+
+`auth_session.reauthentication_required` prevents mailbox completion of external
+onboarding from renewing provider authentication freshness. Explicit password/
+bound-provider reauthentication clears it; refresh rotation cannot clear it.
+
 ## Communities
 
 | Table | Important columns | Constraints / indexes |

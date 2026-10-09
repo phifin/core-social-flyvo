@@ -180,6 +180,17 @@ content/
 
 ## Architecture enforcement
 
+Phase 1 uses JPA aggregates/repository ports for account/profile and an owned
+JDBC repository port for identity snapshots and guarded SQL writes. All join
+the same transaction manager. SecurityConfiguration and its bearer adapter
+live in identity infrastructure, where account/session dependencies are allowed.
+Identity's `SessionQueries`/`CurrentSessions` validates current authentication
+before the bearer adapter creates a trusted `ActorContext`. This check runs on
+every supplied Bearer token, including public profile reads. Profile application
+policies check authoritative account status and ownership/visibility; mutations
+hold the account lifecycle guard. Profile does not call identity via a platform
+callback port. Platform imports no business module and the module DAG is unchanged.
+
 ArchUnit tests enforce the dependency allowlist, no module cycles, no cross-module internals, no web imports from domain/application, no field injection, and no entity in public API/controller signatures. Platform must not depend on business modules. Package annotations or a small test-owned map identify modules; Spring Modulith is optional later, not an extra required framework now.
 
 SQL/resource checks enforce the documented published-view allowlist and migration ownership. These checks complement review; static Java checks cannot discover arbitrary SQL strings. Contract tests verify view columns and policy parity. Ban cross-module JPA associations even when there is a database FK.

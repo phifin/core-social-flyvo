@@ -41,6 +41,25 @@ Email jobs containing verification/reset links require recoverable secrets for d
 
 ## Notification semantics (Phase 7)
 
+Phase 1 appends `UserRegistered`, `AccountStatusChanged`,
+`AccountDeletionRequested` and `ProfileUpdated` to the outbox. There are no
+production projection consumers yet: delivery rows are created only for
+code-registered consumers. Integration tests register a real DB-effect consumer
+to exercise receipts, duplicate delivery and rollback. Mail is a direct job;
+its general JSON contains only payload ID/template, not email/token.
+
+The initial scheduler processes one mail job then one DB delivery per tick,
+bounding workload concurrency to one per process; multiple workers use
+SKIP LOCKED and a 60-second fenced lease. Mail retries begin at five seconds
+with jitter, cap at one hour and stop at ten attempts or payload expiry.
+SMTP ambiguity can duplicate delivery with the same deterministic Message-ID.
+Ciphertext is removed after completion/expiry (and on terminal mail failure).
+DEAD mail requires a new authentication request/proof, not resurrection of an
+old link. See [worker recovery](../ops/identity.md). Completed jobs/events are
+pruned after 30 days only when deliveries are completed; unresolved DEAD state
+is retained. Security audit retention needs a controlled owner-role process,
+not an application trigger bypass.
+
 Persist recipient inbox independently of realtime transport. Notification kinds include FRIEND_REQUEST, FRIENDSHIP_ACCEPTED, COMMUNITY_INVITATION, COMMENT_ON_POST, REPLY_TO_COMMENT, MENTION and REACTION_ON_CONTENT. Targets reference post/comment/request/community IDs, with template kind and typed data; render/localize on the client from authorized current summaries. Drop self-notification. Coalesce a single event that targets the same recipient via mention/comment paths using precedence MENTION > REPLY > COMMENT. Preferences suppress optional social events, never mandatory security emails.
 
 Initial grouping applies to reactions on the same target per recipient in a fixed UTC one-hour bucket: `(recipient,kind,targetType,targetId,bucketStart)`, encoded as a deterministic grouping_key. Other notification kinds use `kind:eventId` keys so unrelated comments are not merged. Distinct actor contributions support “Alice, Bob and 8 others”; show at most three current eligible actor summaries. Repeated same-type reactions add no activity; changing type updates contribution without counting the actor twice; removal deactivates it. Event receipt + source version prevent retries/out-of-order changes from inflating counts.

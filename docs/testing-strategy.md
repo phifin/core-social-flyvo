@@ -41,4 +41,16 @@ Track JaCoCo coverage as a diagnostic, especially policy/state branches; avoid v
 
 ## Definition of tested
 
+Phase 1 adds real PostgreSQL + Mailpit tests, a JDK local HTTP provider server
+(no live-provider CI calls or additional mock-server dependency), signed JWT/JWKS
+fixtures, separate-transaction/barrier races and an instrumented password-hashing
+boundary for reset-during-login. Upgrade starts from an actual Flyway V0001-only
+database and validates its unchanged checksum. Session lookup EXPLAIN uses
+10,000 synthetic sessions and requires the primary-key index. Test-only keys
+are ephemeral; mounted-key restart/tamper behavior has a separate real-crypto
+test. No Docker test is skipped. Exact evidence is in [Phase 1](phases/phase-1.md).
+AuthenticationIT also starts real embedded Tomcat and sends HTTP Bearer requests,
+so servlet-startup wiring is covered beyond MockMvc. Isolated container smoke
+checks exercise real cookie/CSRF rotation and SMTP-captured verification/reset.
+
 Passing unit tests alone does not complete a persistence/API phase. A phase is done when its acceptance scenarios pass against PostgreSQL, migrations work from empty and prior schema, architecture tests pass, relevant container/provider contracts pass, and known external prerequisites are explicitly reported. Record exact commands/results and any blocked checks in `docs/phases/phase-N.md`. Never claim unrun tests passed.

@@ -2,7 +2,7 @@
 
 A reusable Java backend core for social networks and communities. The core has no family, university, alumni, employer, or other application-specific domain concepts.
 
-**Current status: Phase 0 foundation implemented; social features are not implemented yet.** The application is named `social-core`, with root package `com.flyvo.socialcore`. The checkout directory may remain `fly-social`. See [Phase 0 evidence](docs/phases/phase-0.md). Architecture documents describe the target system; only completed phase records describe delivered capabilities.
+**Current status: Phase 1 accounts, authentication, basic profiles and durable email implemented.** Communities and later social features remain planned. The application is `social-core`, root package `com.flyvo.socialcore`; the checkout may remain `fly-social`. See [Phase 0](docs/phases/phase-0.md) and [Phase 1 evidence](docs/phases/phase-1.md). Architecture documents describe the target; phase records describe delivery.
 
 ## Start here
 
@@ -28,7 +28,8 @@ One deliberate adjustment to the requested testing defaults: Boot 4 manages JUni
 Prerequisites: JDK **21** (set JAVA_HOME appropriately), Docker Engine with Compose v2+ and permission to access Docker. The Maven wrapper downloads Maven/dependencies on first use. Tests require Docker; no local database installation is needed.
 
 ```bash
-docker compose up -d --wait postgres
+bash ops/local/generate-keys.sh
+docker compose up -d --wait postgres mailpit
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
@@ -38,11 +39,17 @@ To build and run the entire local stack in containers:
 
 ```bash
 ./mvnw verify
-docker compose --profile app up --build -d --wait
+APP_UID="$(id -u)" APP_GID="$(id -g)" docker compose --profile app up --build -d --wait
 curl --fail --retry 10 --retry-connrefused --retry-delay 1 -i http://localhost:8080/actuator/health/readiness
 ```
 
-The app service is opt-in, runs as UID/GID 10001 with a read-only root filesystem, uses `/tmp` tmpfs, and connects to the Compose database internally. Published ports bind to localhost only. `POSTGRES_PORT` and `APP_PORT` customize host ports. Database data lives in a named volume. `docker compose --profile app down` stops this stack and preserves the database; add `--volumes` only when intentionally discarding local data.
+The app service is opt-in; the image defaults to UID/GID 10001. Local Compose can use the non-root developer UID/GID above to read its mode-0600 mounted keys. It retains a read-only root filesystem and `/tmp` tmpfs. Ports bind to localhost; `POSTGRES_PORT`, `APP_PORT`, `SMTP_PORT` and `MAILPIT_PORT` customize ports. PostgreSQL data uses a named volume. `docker compose --profile app down` preserves it; add `--volumes` only when intentionally discarding data.
+
+Local keys live in ignored `.local/secrets`, survive restarts and must be retained with the local database. The generator never replaces existing keys. Production requires externally mounted signing, mail-encryption and limiter keys; see [authentication operations](ops/identity.md). Ephemeral keys are for tests. Mailpit's inbox is at `http://localhost:8025`; the local frontend origin defaults to `http://localhost:3000`, configurable with `FRONTEND_ORIGIN`. This backend does not implement a frontend.
+
+Browser flow: fetch `GET /api/v1/auth/csrf` with credentials; send its `X-XSRF-TOKEN` header, cookie and exact Origin on unsafe requests. Request `/auth/registrations` with email only. The captured email contains a fragment-bound one-use proof; complete `/auth/registrations/complete` with proof and a newly chosen password in the initiating browser. Keep the returned access token in memory; refresh is a host-only HttpOnly cookie. Serialize refresh across tabs: concurrent/lost-response retries revoke the whole family. Auth endpoints, own-session management and basic profile/privacy routes are in [OpenAPI](docs/api/openapi.yaml).
+
+Google and Facebook are disabled until configured. New provider subjects still require our recovery-mailbox proof, and matching email never links an account. Facebook additionally requires recorded official-contract approval before enablement; live provider smoke tests and Meta review/callback requirements remain deployment gates.
 
 Host JVM runs via the Maven plugin and the container entrypoint use UTC. For a standalone jar use `java -Duser.timezone=UTC -jar target/social-core-0.0.1-SNAPSHOT.jar` with database environment variables. Persistence independently enforces UTC even when the caller's JVM uses another timezone.
 
@@ -65,14 +72,15 @@ GitHub Actions runs the same verify gate, validates Compose, builds the image af
 | `GET /actuator/health` | Aggregate status only; no database/component details |
 | `GET /actuator/health/liveness` | Process availability, independent of database health |
 | `GET /actuator/health/readiness` | Application availability plus PostgreSQL connectivity; database loss returns 503 |
-| Other GET requests | 401 Problem Details; no generated password, Basic auth or login form |
+| Implemented Phase 1 routes | Explicit auth/privacy rules in OpenAPI; current PostgreSQL session/account checks |
+| Unsupported GET requests | 401 without authentication, 403 with it; deny by default |
 | Unsafe methods without CSRF proof | 403 Problem Details |
 
-These three health endpoints are the only public routes. Authenticated requests are also denied by the shell until explicit Phase 1 rules replace it. `/actuator/prometheus` is configured but protected, pending an actual operational authentication mechanism; never open it publicly to make scraping convenient. Micrometer collects metrics. Business/authentication endpoints, credentials, roles, outbox and domain tables do not exist yet. [OpenAPI](docs/api/openapi.yaml) contains only implemented health routes and the error schema; Actuator health failures use its status representation, not business Problem Details.
+Health probes and explicitly implemented auth/onboarding and visible-profile routes have public entry points; unsafe API calls require CSRF and Origin even with Bearer authentication. An invalid supplied Bearer never becomes anonymous. PostgreSQL failure on authenticated requests is 503. `/actuator/prometheus` remains denied pending operational authentication. Mail outage does not fail health/readiness: jobs retry and expose queue/failure metrics. Actuator failures retain its status representation; business/filter errors use Problem Details.
 
 Responses carry `X-Request-ID`; safe incoming IDs up to 64 ASCII characters are retained and invalid IDs are replaced. Structured JSON logs include requestId from MDC during request handling. Errors expose stable code/requestId and sanitized details, not rejected values or exception messages. JDBC connect/read timeouts are five seconds, pool acquisition five seconds, and readiness is intentionally separate from liveness.
 
-Flyway `V0001__platform_foundation.sql` creates only the `platform` schema. Hibernate validates schema, OSIV is off, automatic SQL initialization is disabled, and Flyway clean is disabled. Future business tables belong to later phase migrations. The same database role runs migrations and application locally; production must separate migration/runtime roles before launch as described in [operations](docs/operations.md).
+Flyway `V0001` is unchanged; `V0002`–`V0008` add owned account, identity, profile and durable-work state. Hibernate validates account/profile mappings; identity/worker adapters use parameterized JDBC under the same local transaction manager. OSIV and auto-DDL remain off. Production must separate migration/runtime roles before launch. No community, graph, media, Redis or broker is introduced.
 
 ## Troubleshooting
 

@@ -1,6 +1,20 @@
 # Explicit local-only defaults. Production has no credential fallback.
 app:
+  security:
+    ephemeral-keys: false
+    encryption-key-file: ${MAIL_ENCRYPTION_KEY_FILE:.local/secrets/mail.b64}
+    limiter-key-file: ${LIMITER_KEY_FILE:.local/secrets/limiter.b64}
+  auth:
+    secure-cookies: false
+    frontend-origin: ${FRONTEND_ORIGIN:http://localhost:3000}
+    private-key-file: ${AUTH_PRIVATE_KEY_FILE:.local/secrets/signing-private.pem}
+    public-key-file: ${AUTH_PUBLIC_KEY_FILE:.local/secrets/signing-public.pem}
   database:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/social_core}
     username: ${DB_USERNAME:social_core}
     password: ${DB_PASSWORD:local-development-only}
+spring:
+  mail:
+    properties:
+      mail.smtp.starttls.enable: false
+      mail.smtp.starttls.required: false

@@ -1,0 +1,153 @@
+package com.flyvo.socialcore.identity.infrastructure.security;
+
+import com.flyvo.socialcore.platform.api.Failure;
+import com.flyvo.socialcore.platform.api.Secrets;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.time.Clock;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import org.springframework.core.env.Environment;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.servlet.HandlerExceptionResolver;
+
+@Component
+public class BrowserBoundaryFilter extends OncePerRequestFilter {
+  private final String origin;
+  private final HandlerExceptionResolver errors;
+  private final Secrets secrets;
+  private final Clock clock;
+  private final Map<String, Bucket> buckets = new LinkedHashMap<>();
+
+  private record Bucket(double tokens, long at) {}
+
+  public BrowserBoundaryFilter(
+      Environment env,
+      @org.springframework.beans.factory.annotation.Qualifier("handlerExceptionResolver")
+          HandlerExceptionResolver errors,
+      Secrets secrets,
+      Clock clock) {
+    origin = env.getRequiredProperty("app.auth.frontend-origin");
+    this.errors = errors;
+    this.secrets = secrets;
+    this.clock = clock;
+    var uri = java.net.URI.create(origin);
+    boolean secure = env.getProperty("app.auth.secure-cookies", Boolean.class, true);
+    if (uri.getHost() == null
+        || uri.getQuery() != null
+        || uri.getFragment() != null
+        || !uri.getPath().isEmpty()
+        || (!"https".equals(uri.getScheme())
+            && !(env.matchesProfiles("local", "test")
+                && "http".equals(uri.getScheme())
+                && java.util.Set.of("localhost", "127.0.0.1").contains(uri.getHost())))
+        || !secure && !env.matchesProfiles("local", "test"))
+      throw new IllegalStateException("Invalid browser origin/cookie configuration");
+  }
+
+  protected void doFilterInternal(
+      HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+      throws IOException, ServletException {
+    String path = request.getRequestURI();
+    boolean unsafe = !java.util.Set.of("GET", "HEAD", "OPTIONS").contains(request.getMethod());
+    if (path.startsWith("/api/v1/")) response.setHeader("Cache-Control", "no-store");
+    if (unsafe && path.startsWith("/api/v1/")) {
+      if (!origin.equals(request.getHeader("Origin"))) {
+        errors.resolveException(request, response, null, new Failure(403, "UNTRUSTED_ORIGIN"));
+        return;
+      }
+      int limit =
+          path.equals("/api/v1/auth/login") || path.equals("/api/v1/auth/reauthenticate")
+              ? 10
+              : path.equals("/api/v1/auth/registrations")
+                      || path.equals("/api/v1/auth/password-resets")
+                  ? 20
+                  : 60;
+      long window = limit == 20 ? 3600000 : 60000;
+      String key =
+          "ip:"
+              + request.getRemoteAddr()
+              + ":"
+              + (limit == 20 ? "email" : limit == 10 ? "login" : "write");
+      if (!take(key, limit, window)) {
+        response.setHeader("Retry-After", limit == 20 ? "3600" : "60");
+        errors.resolveException(request, response, null, new Failure(429, "RATE_LIMITED"));
+        return;
+      }
+      var auth =
+          org.springframework.security.core.context.SecurityContextHolder.getContext()
+              .getAuthentication();
+      if (auth != null
+          && auth.getPrincipal() instanceof com.flyvo.socialcore.platform.api.ActorContext actor
+          && !take("user:" + actor.userId(), 60, 60000)) {
+        response.setHeader("Retry-After", "60");
+        errors.resolveException(request, response, null, new Failure(429, "RATE_LIMITED"));
+        return;
+      }
+      if (request.getContentLengthLong() > 16384) {
+        errors.resolveException(request, response, null, new Failure(413, "BODY_TOO_LARGE"));
+        return;
+      }
+      byte[] body = request.getInputStream().readNBytes(16385);
+      if (body.length > 16384) {
+        errors.resolveException(request, response, null, new Failure(413, "BODY_TOO_LARGE"));
+        return;
+      }
+      request =
+          new jakarta.servlet.http.HttpServletRequestWrapper(request) {
+            @Override
+            public jakarta.servlet.ServletInputStream getInputStream() {
+              var input = new java.io.ByteArrayInputStream(body);
+              return new jakarta.servlet.ServletInputStream() {
+                public int read() {
+                  return input.read();
+                }
+
+                public boolean isFinished() {
+                  return input.available() == 0;
+                }
+
+                public boolean isReady() {
+                  return true;
+                }
+
+                public void setReadListener(jakarta.servlet.ReadListener listener) {
+                  throw new UnsupportedOperationException("Async request bodies are not supported");
+                }
+              };
+            }
+
+            @Override
+            public java.io.BufferedReader getReader() {
+              return new java.io.BufferedReader(
+                  new java.io.InputStreamReader(
+                      getInputStream(), java.nio.charset.StandardCharsets.UTF_8));
+            }
+          };
+    }
+    chain.doFilter(request, response);
+  }
+
+  public void loginKey(String email) {
+    String key = java.util.Base64.getEncoder().encodeToString(secrets.emailKey(email));
+    if (!take("login:" + key, 5, 60000)) throw new Failure(429, "RATE_LIMITED");
+  }
+
+  private synchronized boolean take(String key, int capacity, long window) {
+    long now = clock.millis();
+    buckets.entrySet().removeIf(e -> now - e.getValue().at() > 3600000);
+    var old = buckets.get(key);
+    if (old == null && buckets.size() >= 10000) return false;
+    double available =
+        old == null
+            ? capacity
+            : Math.min(
+                capacity, old.tokens() + Math.max(0, now - old.at()) * (double) capacity / window);
+    buckets.put(key, new Bucket(Math.max(0, available - 1), now));
+    return available >= 1;
+  }
+}

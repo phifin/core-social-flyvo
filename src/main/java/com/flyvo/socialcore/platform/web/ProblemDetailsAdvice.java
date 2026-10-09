@@ -20,6 +20,56 @@ public class ProblemDetailsAdvice extends ResponseEntityExceptionHandler {
   private static final Logger LOG = LoggerFactory.getLogger(ProblemDetailsAdvice.class);
   private final ProblemResponses problems;
 
+  @ExceptionHandler(com.flyvo.socialcore.platform.api.Failure.class)
+  ResponseEntity<Object> failure(
+      com.flyvo.socialcore.platform.api.Failure failure,
+      HttpServletRequest request,
+      jakarta.servlet.http.HttpServletResponse response) {
+    var headers = safeHeaders(HttpHeaders.EMPTY);
+    if (failure.status() == 429)
+      headers.set(
+          "Retry-After",
+          response.getHeader("Retry-After") == null
+              ? (failure.code().equals("EMAIL_RATE_LIMITED") ? "3600" : "60")
+              : response.getHeader("Retry-After"));
+    return ResponseEntity.status(failure.status())
+        .headers(headers)
+        .body(
+            problems.create(
+                request,
+                HttpStatus.valueOf(failure.status()),
+                failure.code(),
+                "The request could not be completed."));
+  }
+
+  @ExceptionHandler(org.springframework.dao.DataAccessException.class)
+  ResponseEntity<Object> database(
+      org.springframework.dao.DataAccessException failure, HttpServletRequest request) {
+    boolean conflict = failure instanceof org.springframework.dao.DataIntegrityViolationException;
+    var status = conflict ? HttpStatus.CONFLICT : HttpStatus.SERVICE_UNAVAILABLE;
+    return ResponseEntity.status(status)
+        .headers(safeHeaders(HttpHeaders.EMPTY))
+        .body(
+            problems.create(
+                request,
+                status,
+                conflict ? "CONFLICT" : "DEPENDENCY_UNAVAILABLE",
+                "The request could not be completed."));
+  }
+
+  @ExceptionHandler(org.springframework.transaction.TransactionException.class)
+  ResponseEntity<Object> transaction(
+      org.springframework.transaction.TransactionException failure, HttpServletRequest request) {
+    return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+        .headers(safeHeaders(HttpHeaders.EMPTY))
+        .body(
+            problems.create(
+                request,
+                HttpStatus.SERVICE_UNAVAILABLE,
+                "DEPENDENCY_UNAVAILABLE",
+                "The request could not be completed."));
+  }
+
   public ProblemDetailsAdvice(ProblemResponses problems) {
     this.problems = problems;
   }

@@ -26,6 +26,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @SpringBootTest
 @AutoConfigureMockMvc
 @Testcontainers
+@org.springframework.test.context.ActiveProfiles("test")
 class FoundationIT {
   @Container
   static final PostgreSQLContainer POSTGRES =
@@ -44,6 +45,7 @@ class FoundationIT {
   @Autowired DataSource dataSource;
   @Autowired EntityManagerFactory entityManagerFactory;
   @Autowired org.springframework.core.env.Environment environment;
+  @Autowired com.flyvo.socialcore.identity.application.port.AccessTokens accessTokens;
 
   @Test
   void migrationsRunOnRealPostgresAndRemainRepeatable() {
@@ -56,7 +58,7 @@ class FoundationIT {
                 "select count(*) from information_schema.schemata where schema_name = 'platform'",
                 Integer.class))
         .isEqualTo(1);
-    assertThat(flyway.info().applied()).hasSize(1);
+    assertThat(flyway.info().applied()).hasSize(8);
     flyway.validate();
     assertThat(flyway.migrate().migrationsExecuted).isZero();
     assertThat(entityManagerFactory.getProperties())
@@ -83,9 +85,28 @@ class FoundationIT {
     assertThat(
             new JdbcTemplate(dataSource)
                 .queryForObject(
-                    "select count(*) from information_schema.tables where table_schema = 'platform'",
+                    "select count(*) from information_schema.tables where table_schema = 'platform' and table_name = 'missing_table_probe'",
                     Integer.class))
         .isZero();
+  }
+
+  @Test
+  void phaseZeroSchemaUpgradesWithoutChangingItsChecksum() {
+    var name = "upgrade_" + java.util.UUID.randomUUID().toString().replace("-", "");
+    new JdbcTemplate(dataSource).execute("CREATE DATABASE " + name);
+    String url = POSTGRES.getJdbcUrl().replace("/test?", "/" + name + "?");
+    var phaseZero =
+        Flyway.configure()
+            .dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword())
+            .target("0001")
+            .load();
+    assertThat(phaseZero.migrate().migrationsExecuted).isEqualTo(1);
+    var checksum = phaseZero.info().applied()[0].getChecksum();
+    var upgrade =
+        Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(7);
+    assertThat(upgrade.info().applied()[0].getChecksum()).isEqualTo(checksum);
+    upgrade.validate();
   }
 
   @Test
@@ -100,6 +121,13 @@ class FoundationIT {
       mvc.perform(get("/actuator/health/liveness"))
           .andExpect(status().isOk())
           .andExpect(jsonPath("$.status").value("UP"));
+      var token =
+          accessTokens.issue(
+              new com.flyvo.socialcore.platform.api.ActorContext(
+                  java.util.UUID.randomUUID(), java.util.UUID.randomUUID()));
+      mvc.perform(get("/api/v1/me/account").header("Authorization", "Bearer " + token))
+          .andExpect(status().isServiceUnavailable())
+          .andExpect(jsonPath("$.code").value("DEPENDENCY_UNAVAILABLE"));
     } finally {
       docker.unpauseContainerCmd(POSTGRES.getContainerId()).exec();
     }

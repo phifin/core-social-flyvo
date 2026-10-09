@@ -14,6 +14,14 @@ Perform expensive password hashing/verification outside long database locks, the
 
 ## Access tokens and refresh families
 
+Phase 1 refinements: changing a password or recovery email also invalidates
+outstanding password-reset proofs under the account guard, so an old mailbox
+proof cannot regain access after email change. Adding the first password to an
+OAuth-only account requires an explicit completed provider REAUTH transaction,
+in addition to the verified recovery email and five-minute freshness check.
+The local common-password snapshot and provenance are in
+`src/main/resources/security/`; review it during security maintenance.
+
 Use signed JWT access tokens, 5-minute lifetime, asymmetric RS256 initially, library validation with exact algorithm/issuer/audience allowlists and key ID rotation. Claims: `sub` user UUID, `sid` session UUID, `iss`, `aud`, `iat`, `exp`, `jti`; no email, profile data, community memberships or long-lived authorization roles. Sign with a secret-manager-mounted private key, publish/cache only verification keys; keep old verification keys through maximum token lifetime plus clock skew (30 seconds). Do not invent JWT parsing/crypto.
 
 Every authenticated request validates JWT **and current session/account state in PostgreSQL**. The deliberate indexed lookup provides immediate revocation and suspension. A JWT is not authorization and is not treated as irrevocable until expiry. No Redis positive-status cache initially. DB failure fails protected requests closed with 503, not a misleading 401. Public requests with an invalid Authorization header return 401 rather than silently becoming anonymous.
@@ -27,6 +35,18 @@ Browser default: access token held only in memory and sent as Bearer; refresh to
 Native clients are deferred; introduce a documented secure-storage/token transport profile when a real native app begins. Do not expose a JSON refresh token based solely on a client-supplied `clientType` flag. Cross-site browser deployment is not the baseline; configure same-site app/API behind TLS and exact CORS origins with no wildcard credentials.
 
 ## Google and Facebook login
+
+Implemented provider defaults are disabled. See [provider operations](../ops/identity.md)
+for configuration and readiness gates. Public authorize GET starts LOGIN only;
+authenticated link-intent/provider-reauth POSTs return `authorizationUrl` for
+frontend navigation, with their persisted intent controlling the callback.
+An unbound subject receives an encrypted, browser-bound, ten-minute onboarding
+capability, never a full user session. It submits an email through registration
+and must complete our own mailbox verification without a local password.
+The resulting onboarding session requires explicit bound-provider reauthentication
+before any action requiring fresh authentication. Mailbox completion and refresh
+cannot turn an older provider proof into a fresh one.
+All access/refresh secrets remain out of callback redirects.
 
 Use backend authorization-code flow through Spring Security OAuth client facilities; Google OIDC uses PKCE S256 and nonce. Persist a short-lived one-use OAuth transaction bound to provider, intent, browser, and initiating session for linking. Validate state before token exchange, exact redirect allowlist, provider response/error, and trusted transport. OAuth network calls happen outside business transactions with strict timeout and no token logging.
 

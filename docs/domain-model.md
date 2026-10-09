@@ -16,6 +16,14 @@ This is the source of truth for lifecycle semantics. Database details are in [da
 
 ## Communities
 
+Phase 1 implementation provides account suspension/deletion-request primitives,
+exactly one default profile and preference row at registration, and profile
+scopes PUBLIC/AUTHENTICATED/PRIVATE. FRIENDS profile scope waits for Phase 3;
+the neutral default post audience remains FRIENDS. No avatar column/media FK
+exists before Phase 4. Deletion currently denies access and persists its event;
+there is no erasure claim. Phase 2 must integrate the active-community ownership
+check before enabling its ownership model.
+
 `Community` owns name, stable slug, description, visibility (`PUBLIC`, `PRIVATE`), join mode (`OPEN`, `REQUEST`, `INVITE_ONLY`), status (`ACTIVE`, `ARCHIVED`) and exactly one owner reference. Defaults: PRIVATE + INVITE_ONLY. Private communities are discoverable by minimal name/description cards to signed-in users so request-to-join works; member lists/posts remain private. Hidden communities are a future explicit product extension, not an ambiguous meaning of PRIVATE.
 
 Community visibility and membership mode are orthogonal. PUBLIC permits reading its posts anonymously; posting/commenting/reacting requires active membership. PRIVATE + OPEN permits immediate membership by a verified user, but content still requires membership. Members are not automatically friends/followers.

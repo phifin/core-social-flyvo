@@ -1,0 +1,8 @@
+app:
+  security:
+    ephemeral-keys: true
+  auth:
+    secure-cookies: true
+    frontend-origin: https://social-core.invalid
+  worker:
+    enabled: false

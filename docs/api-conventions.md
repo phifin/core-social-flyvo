@@ -26,6 +26,19 @@ GET returns an ETag derived from resource version. PATCH/DELETE on mutable owned
 
 For resource-creating authenticated POSTs (posts, comments, invitations, reports, upload intents), support `Idempotency-Key`: actor + normalized route + key hash, request hash and response reference, 24h retention. Same key/body returns original logical result, after current authorization; differing body ->409. Insert record and business mutation in one transaction. Avoid replaying a cached private body after permissions change. Generic idempotency does not apply to auth secrets or replace unique domain constraints. Clients can retry graph/reaction PUT/DELETE without a key.
 
+## Phase 1 implemented surface
+
+Phase 1 implements the auth/identity and initial profile routes in OpenAPI.
+Its small own-session list uses stable `(created_at DESC,id DESC)` ordering with
+`size` 1–100 and `offset` 0–10,000, without a total. Profile/preferences and own
+account reads return version ETags; profile/preferences PATCH and account DELETE
+require a strong quoted `If-Match`. All unsafe Phase 1 API calls use CSRF and
+exact Origin, even with a Bearer. Unknown JSON fields are rejected consistently.
+Clients read the current CSRF cookie for each call, fetching `/auth/csrf`
+again when authentication has cleared/rotated it; never cache an old token.
+API bodies, including chunked bodies, are capped at 16 KiB. Provider link/reauth
+start returns a URL in JSON; callbacks redirect with a marker, never credentials.
+
 ## Pagination
 
 Feeds/timelines/posts/notifications/comments use signed opaque keyset cursors, default limit 20, max 100 (feed max 50). Cursor includes version, query scope/filter hash, viewer binding, ordering fields, asOf cutoff and expiry; HMAC validates integrity, not secrecy. Do not put sensitive email/content in cursors. A changed viewer/filter rejects with 400; expired feed cursor asks client to refresh. No client-controlled SQL sort fields beyond an allowlist.

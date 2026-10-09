@@ -40,3 +40,4 @@ build/
 *.key
 *.p12
 *.jks
+.local/

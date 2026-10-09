@@ -10,6 +10,14 @@ Single-instance deployment is a Phase 1 limiter assumption. Before multiple publ
 
 ## Logging, audit and observability
 
+Phase 1 setup, provider approval gates, persistent local/mounted production keys,
+rotation and worker recovery are in [identity operations](../ops/identity.md).
+Its worker exposes queue/dead/retry depth, oldest pending age and failure count.
+Mail health is deliberately excluded from aggregate health; PostgreSQL remains
+the readiness dependency. SQL statement timeout is five seconds and lock timeout
+three seconds. Local process hashing concurrency is four; public traffic remains
+single-instance plus deployment-edge limits until shared limits are introduced.
+
 Emit structured JSON with UTC time, level, service/version/environment, requestId, traceId when present, bounded route template, event/job ID and error code. Validate inbound X-Request-ID length/character set or replace it; generate UUID otherwise and return it in responses/Problem Details. Propagate correlation/causation into outbox/jobs. Never log tokens/cookies/passwords/presigned queries/raw private content or email body. User IDs only where necessary for restricted audit, not as high-cardinality metric labels.
 
 Audit domain-sensitive commands synchronously: login/link/recovery/revocation events, community ownership/roles/bans, audience widening, moderation, administrative reads/changes and erasure. Record actor, action, target/scope, reason, result and request ID with minimal metadata. An audit entry is append-only at application DB permissions; this is not proof against a database superuser. Export to restricted immutable storage if compliance requires stronger tamper evidence. Mandatory audit-write failure rolls back the sensitive state change. Failed authentication audit uses a separate deliberately committed security recording path because the business transaction may not exist; avoid leaking identity via the audit API.

@@ -1,6 +1,6 @@
 # HANDOFF TO IMPLEMENTATION MODEL
 
-This blueprint is the architectural source of truth. Phase 0 foundation is implemented; see [its completion evidence](phases/phase-0.md) and README for the actual runnable surface. Later product capabilities remain planned. Your task is to implement the **requested phase only**, preserving the decisions below. Do not rebuild the architecture from a summary prompt.
+This blueprint is the architectural source of truth. Phase 0 and Phase 1 are implemented; see [foundation evidence](phases/phase-0.md), [identity evidence](phases/phase-1.md) and README for the actual surface. Phase 2 onward remain planned. Implement the **requested phase only**, preserving the decisions below.
 
 ## Read first
 

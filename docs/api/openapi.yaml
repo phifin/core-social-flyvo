@@ -1,76 +1,1171 @@
-openapi: 3.1.0
+openapi: "3.1.0"
 info:
-  title: social-core foundation
-  version: 0.0.1
-  description: >-
-    Phase 0 implemented surface only. No business API or authentication is implemented.
-    All routes except the three GET health probes are denied by default.
+  title: "social-core accounts and authentication"
+  version: "0.1.0"
+  description: "Implemented Phase 0/1 only. All unsafe API calls require CSRF cookie/header and exact trusted Origin, including Bearer calls. Every Bearer validates current PostgreSQL session/account; dependency outage is 503. Auth/API responses are no-store. Unsupported routes remain deny-by-default. Browser deployment is same-site TLS; native clients and Phase 2+ are not implemented."
 paths:
-  /actuator/health:
+  "/actuator/health":
     get:
-      operationId: getHealth
-      summary: Aggregate health without component details
+      operationId: "getHealth"
+      summary: "Aggregate health without component details"
+      security: []
       responses:
         '200':
-          $ref: '#/components/responses/Health'
+          "$ref": "#/components/responses/Health"
         '503':
-          $ref: '#/components/responses/Health'
-  /actuator/health/liveness:
+          "$ref": "#/components/responses/Health"
+  "/actuator/health/liveness":
     get:
-      operationId: getLiveness
-      summary: Process liveness independent of PostgreSQL availability
+      operationId: "getLiveness"
+      summary: "Process liveness"
+      security: []
       responses:
         '200':
-          $ref: '#/components/responses/Health'
+          "$ref": "#/components/responses/Health"
         '503':
-          $ref: '#/components/responses/Health'
-  /actuator/health/readiness:
+          "$ref": "#/components/responses/Health"
+  "/actuator/health/readiness":
     get:
-      operationId: getReadiness
-      summary: Readiness requiring application availability and PostgreSQL
+      operationId: "getReadiness"
+      summary: "Readiness requiring PostgreSQL"
+      security: []
       responses:
         '200':
-          $ref: '#/components/responses/Health'
+          "$ref": "#/components/responses/Health"
         '503':
-          $ref: '#/components/responses/Health'
+          "$ref": "#/components/responses/Health"
+  "/api/v1/auth/csrf":
+    get:
+      operationId: "getCsrf"
+      summary: "Issue host-only CSRF cookie and readable token"
+      security: []
+      responses:
+        '200':
+          description: "Issue host-only CSRF cookie and readable token"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Csrf"
+        default:
+          "$ref": "#/components/responses/Problem"
+  "/api/v1/auth/registrations":
+    post:
+      operationId: "requestRegistration"
+      summary: "Generic verification or sign-in guidance; creates no account"
+      security: []
+      responses:
+        '202':
+          description: "Generic verification or sign-in guidance; creates no account"
+        default:
+          "$ref": "#/components/responses/Problem"
+      description: "Sets registration_binding cookie. Optional onboarding cookie plus oauth_binding selects proof-bound external onboarding; an email supplied by a provider never bypasses our mailbox verification."
+      parameters:
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/Email"
+  "/api/v1/auth/registrations/complete":
+    post:
+      operationId: "completeRegistration"
+      summary: "Atomically create account, verified identity and one profile"
+      security: []
+      responses:
+        '200':
+          description: "Atomically create account, verified identity and one profile"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Access"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+        -
+          name: "registration_binding"
+          in: "cookie"
+          required: true
+          schema:
+            type: "string"
+      description: "LOCAL requires a password chosen now. EXTERNAL requires password omitted/null and a provider proof attached to the registration intent. Secret expires after 30 minutes. Sets refresh cookie; returns no refresh secret in JSON."
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/RegistrationCompletion"
+  "/api/v1/auth/login":
+    post:
+      operationId: "login"
+      summary: "Local password authentication with generic denial"
+      security: []
+      responses:
+        '200':
+          description: "Local password authentication with generic denial"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Access"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/Login"
+  "/api/v1/auth/refresh":
+    post:
+      operationId: "refresh"
+      summary: "Rotate single-use refresh generation"
+      security:
+        -
+          RefreshCookie: []
+      responses:
+        '200':
+          description: "Rotate single-use refresh generation"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Access"
+        default:
+          "$ref": "#/components/responses/Problem"
+      description: "Strict replay revokes and commits the whole family before 401. No grace window or generic Idempotency-Key cache. Clients serialize refresh across tabs."
+      parameters:
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+        -
+          name: "refresh"
+          in: "cookie"
+          required: true
+          schema:
+            type: "string"
+            minLength: 43
+            maxLength: 43
+            pattern: "^[A-Za-z0-9_-]{43}$"
+            writeOnly: true
+  "/api/v1/auth/logout":
+    post:
+      operationId: "logout"
+      summary: "Revoke cookie session and clear refresh cookie"
+      security: []
+      responses:
+        '204':
+          description: "Revoke cookie session and clear refresh cookie"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+  "/api/v1/auth/logout-all":
+    post:
+      operationId: "logoutAll"
+      summary: "Revoke all own sessions"
+      security:
+        -
+          BearerAuth: []
+      responses:
+        '204':
+          description: "Revoke all own sessions"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+  "/api/v1/auth/sessions":
+    get:
+      operationId: "listSessions"
+      summary: "List active own sessions, bounded and ordered"
+      security:
+        -
+          BearerAuth: []
+      responses:
+        '200':
+          description: "List active own sessions, bounded and ordered"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Sessions"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+        -
+          name: "size"
+          in: "query"
+          schema:
+            type: "integer"
+            minimum: 1
+            maximum: 100
+            default: 20
+        -
+          name: "offset"
+          in: "query"
+          schema:
+            type: "integer"
+            minimum: 0
+            maximum: 10000
+            default: 0
+  "/api/v1/auth/sessions/{id}":
+    delete:
+      operationId: "revokeSession"
+      summary: "Revoke an own session; foreign session is 404"
+      security:
+        -
+          BearerAuth: []
+      responses:
+        '204':
+          description: "Revoke an own session; foreign session is 404"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+        -
+          name: "id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            format: "uuid"
+  "/api/v1/auth/password-resets":
+    post:
+      operationId: "requestPasswordReset"
+      summary: "Generic request; OAuth-only accounts receive no reset credential"
+      security: []
+      responses:
+        '202':
+          description: "Generic request; OAuth-only accounts receive no reset credential"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/Email"
+  "/api/v1/auth/password-resets/complete":
+    post:
+      operationId: "completePasswordReset"
+      summary: "Consume mailbox proof and revoke every session"
+      security: []
+      responses:
+        '204':
+          description: "Consume mailbox proof and revoke every session"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/PasswordResetCompletion"
+  "/api/v1/auth/reauthenticate":
+    post:
+      operationId: "reauthenticate"
+      summary: "Reauthenticate using password or start a bound provider proof"
+      security:
+        -
+          BearerAuth: []
+      responses:
+        '200':
+          description: "Navigate to provider"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/AuthorizationUrl"
+        '204':
+          description: "Password proof accepted"
+        default:
+          "$ref": "#/components/responses/Problem"
+      description: "Supply exactly password or provider. Password success is 204; provider start is 200 with authorizationUrl. Refresh never updates authentication freshness."
+      parameters:
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/Reauthentication"
+  "/api/v1/auth/oauth/{provider}/authorize":
+    get:
+      operationId: "authorizeProvider"
+      summary: "Start configured provider LOGIN with state/browser binding"
+      security: []
+      responses:
+        '303':
+          description: "Navigate to provider"
+          headers:
+            Location:
+              schema:
+                type: "string"
+                format: "uri"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+        -
+          name: "provider"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            enum:
+              - "google"
+              - "facebook"
+      description: "Google uses S256 PKCE and nonce. Sets short-lived HttpOnly SameSite=Lax oauth_binding cookie. Disabled/unapproved provider is 404."
+  "/api/v1/auth/oauth/{provider}/callback":
+    get:
+      operationId: "providerCallback"
+      summary: "Consume server transaction once before provider exchange"
+      security: []
+      responses:
+        '303':
+          description: "Trusted frontend result marker; refresh/onboarding cookies when appropriate"
+          headers:
+            Location:
+              schema:
+                type: "string"
+                format: "uri"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+        -
+          name: "provider"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            enum:
+              - "google"
+              - "facebook"
+        -
+          name: "state"
+          in: "query"
+          required: true
+          schema:
+            type: "string"
+        -
+          name: "code"
+          in: "query"
+          schema:
+            type: "string"
+            maxLength: 4096
+        -
+          name: "error"
+          in: "query"
+          schema:
+            type: "string"
+        -
+          name: "oauth_binding"
+          in: "cookie"
+          required: true
+          schema:
+            type: "string"
+      description: "Only the persisted intent and initiating session control LOGIN/LINK/REAUTH. Redirect is a fixed trusted frontend path plus a non-secret marker. An existing subject ignores changed provider email. Matching claimed email never logs in/links; new subjects enter limited verified-email onboarding. No access/refresh token in redirect."
+  "/api/v1/me/identities/{provider}/link-intents":
+    post:
+      operationId: "startIdentityLink"
+      summary: "Require current session and authentication within five minutes"
+      security:
+        -
+          BearerAuth: []
+      responses:
+        '200':
+          description: "Require current session and authentication within five minutes"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/AuthorizationUrl"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+        -
+          name: "provider"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            enum:
+              - "google"
+              - "facebook"
+  "/api/v1/me/account":
+    get:
+      operationId: "getOwnAccount"
+      summary: "Own identity data; email is never in public profiles"
+      security:
+        -
+          BearerAuth: []
+      responses:
+        '200':
+          description: "Own identity data; email is never in public profiles"
+          headers:
+            ETag:
+              schema:
+                type: string
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Account"
+        default:
+          "$ref": "#/components/responses/Problem"
+    delete:
+      operationId: "requestAccountDeletion"
+      summary: "Request deletion and immediately revoke all sessions"
+      security:
+        -
+          BearerAuth: []
+      responses:
+        '204':
+          description: "Request deletion and immediately revoke all sessions"
+        default:
+          "$ref": "#/components/responses/Problem"
+      description: "Requires authentication within five minutes. Phase 1 has no communities/ownership blockers; Phase 2 must integrate its ownership API. Full erasure is Phase 9A."
+      parameters:
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+        -
+          name: If-Match
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^"[0-9]{1,18}"$'
+  "/api/v1/me/password":
+    put:
+      operationId: "changePassword"
+      summary: "Recent authentication; change password or add after provider reauth"
+      security:
+        -
+          BearerAuth: []
+      responses:
+        '204':
+          description: "Recent authentication; change password or add after provider reauth"
+        default:
+          "$ref": "#/components/responses/Problem"
+      description: "OAuth-only users must complete provider REAUTH first. Keeps initiating session, revokes others and pending password-reset proofs, queues security email."
+      parameters:
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/Password"
+  "/api/v1/me/email-changes":
+    post:
+      operationId: "requestEmailChange"
+      summary: "Recent authentication and proof sent to unclaimed new mailbox"
+      security:
+        -
+          BearerAuth: []
+      responses:
+        '202':
+          description: "Recent authentication and proof sent to unclaimed new mailbox"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/Email"
+  "/api/v1/me/email-changes/complete":
+    post:
+      operationId: "completeEmailChange"
+      summary: "Consume own new-mailbox proof and atomically claim email"
+      security:
+        -
+          BearerAuth: []
+      responses:
+        '204':
+          description: "Consume own new-mailbox proof and atomically claim email"
+        default:
+          "$ref": "#/components/responses/Problem"
+      description: "Recent authentication required; revokes other sessions and old reset proofs; notifies old address durably."
+      parameters:
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/Proof"
+  "/api/v1/me/identities":
+    get:
+      operationId: "listOwnIdentities"
+      summary: "Own provider bindings without provider credentials or subject details"
+      security:
+        -
+          BearerAuth: []
+      responses:
+        '200':
+          description: "Own provider bindings without provider credentials or subject details"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Identities"
+        default:
+          "$ref": "#/components/responses/Problem"
+  "/api/v1/me/identities/{id}":
+    delete:
+      operationId: "unlinkIdentity"
+      summary: "Recent authentication; retain at least one usable login method"
+      security:
+        -
+          BearerAuth: []
+      responses:
+        '204':
+          description: "Recent authentication; retain at least one usable login method"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+        -
+          name: "id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            format: "uuid"
+  "/api/v1/users/{id}/profile":
+    get:
+      operationId: "getVisibleProfile"
+      summary: "PUBLIC anonymous; AUTHENTICATED current actor; PRIVATE owner only"
+      security: []
+      responses:
+        '200':
+          description: "Visible profile"
+          headers:
+            ETag:
+              schema:
+                type: "string"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Profile"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+        -
+          name: "id"
+          in: "path"
+          required: true
+          schema:
+            type: "string"
+            format: "uuid"
+      description: "Suspended/deleted target or inaccessible profile is 404. Any supplied Authorization header must be valid and current. FRIENDS visibility and graph rules begin in Phase 3."
+  "/api/v1/me/profile":
+    get:
+      operationId: "getOwnProfile"
+      summary: "Own profile with ETag"
+      security:
+        -
+          BearerAuth: []
+      responses:
+        '200':
+          description: "Own profile with ETag"
+          headers:
+            ETag:
+              schema:
+                type: "string"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Profile"
+        default:
+          "$ref": "#/components/responses/Problem"
+    patch:
+      operationId: "changeOwnProfile"
+      summary: "Change explicit profile fields; require current session/version"
+      security:
+        -
+          BearerAuth: []
+      responses:
+        '200':
+          description: "Change explicit profile fields; require current session/version"
+          headers:
+            ETag:
+              schema:
+                type: "string"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Profile"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+        -
+          name: "If-Match"
+          in: "header"
+          required: true
+          schema:
+            type: "string"
+            pattern: "^\"[0-9]{1,18}\"$"
+          description: "Strong quoted resource version. Missing is 428; stale is 412."
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/ProfileChange"
+  "/api/v1/me/preferences":
+    get:
+      operationId: "getOwnPreferences"
+      summary: "Own social preferences with ETag"
+      security:
+        -
+          BearerAuth: []
+      responses:
+        '200':
+          description: "Own social preferences with ETag"
+          headers:
+            ETag:
+              schema:
+                type: "string"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Preferences"
+        default:
+          "$ref": "#/components/responses/Problem"
+    patch:
+      operationId: "changeOwnPreferences"
+      summary: "Change typed locale, timezone and default audience"
+      security:
+        -
+          BearerAuth: []
+      responses:
+        '200':
+          description: "Change typed locale, timezone and default audience"
+          headers:
+            ETag:
+              schema:
+                type: "string"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/Preferences"
+        default:
+          "$ref": "#/components/responses/Problem"
+      parameters:
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+        -
+          name: "If-Match"
+          in: "header"
+          required: true
+          schema:
+            type: "string"
+            pattern: "^\"[0-9]{1,18}\"$"
+          description: "Strong quoted resource version. Missing is 428; stale is 412."
+      requestBody:
+        required: true
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/PreferenceChange"
 components:
+  securitySchemes:
+    BearerAuth:
+      type: "http"
+      scheme: "bearer"
+      bearerFormat: "JWT"
+    RefreshCookie:
+      type: "apiKey"
+      in: "cookie"
+      name: "refresh"
+      description: "Host-only Secure HttpOnly SameSite=Strict; Path=/api/v1/auth. Local localhost profile alone allows HTTP."
+  parameters:
+    Origin:
+      name: "Origin"
+      in: "header"
+      required: true
+      schema:
+        type: "string"
+        format: "uri"
+      description: "Exact configured trusted frontend origin; no wildcard credentials."
+    Csrf:
+      name: "X-XSRF-TOKEN"
+      in: "header"
+      required: true
+      schema:
+        type: "string"
+      description: "Get token and XSRF-TOKEN cookie from /auth/csrf; send cookie plus header with credentials."
   responses:
     Health:
-      description: Minimal operational health; Actuator status format, not a business error.
+      description: "Minimal Actuator status, no component details."
+      content:
+        "application/vnd.spring-boot.actuator.v3+json":
+          schema:
+            type: "object"
+            additionalProperties: false
+            required:
+              - "status"
+            properties:
+              status:
+                type: "string"
+                enum:
+                  - "UP"
+                  - "DOWN"
+                  - "OUT_OF_SERVICE"
+                  - "UNKNOWN"
+              groups:
+                type: "array"
+                items:
+                  type: "string"
+    Problem:
+      description: "Sanitized Problem Details. 400 invalid input; 401 invalid/missing proof/authentication; 403 denial/CSRF/Origin; 404 missing/inaccessible; 409 unique/lifecycle conflict; 412 stale version; 413 body >16 KiB; 428 missing version; 429 bounded throttle (+Retry-After); 503 dependency/provider/hash capacity unavailable."
       headers:
         X-Request-ID:
           schema:
-            type: string
-      content:
-        application/vnd.spring-boot.actuator.v3+json:
+            type: "string"
+        Retry-After:
           schema:
-            type: object
-            required: [status]
-            properties:
-              status:
-                type: string
-                enum: [UP, DOWN, OUT_OF_SERVICE, UNKNOWN]
-              groups:
-                type: array
-                items:
-                  type: string
+            type: "integer"
+      content:
+        "application/problem+json":
+          schema:
+            "$ref": "#/components/schemas/Problem"
   schemas:
     Problem:
-      type: object
-      required: [type, title, status, detail, instance, code, requestId]
+      type: "object"
+      required:
+        - "type"
+        - "title"
+        - "status"
+        - "detail"
+        - "instance"
+        - "code"
+        - "requestId"
       properties:
         type:
-          type: string
-          format: uri
+          type: "string"
+          format: "uri"
         title:
-          type: string
+          type: "string"
         status:
-          type: integer
+          type: "integer"
         detail:
-          type: string
+          type: "string"
         instance:
-          type: string
+          type: "string"
         code:
-          type: string
+          type: "string"
         requestId:
-          type: string
+          type: "string"
+        violations:
+          type: "array"
+          items:
+            type: "object"
+            additionalProperties: false
+            required:
+              - "field"
+              - "code"
+              - "message"
+            properties:
+              field:
+                type: "string"
+              code:
+                type: "string"
+              message:
+                type: "string"
+    Email:
+      type: "object"
+      additionalProperties: false
+      required:
+        - "email"
+      properties:
+        email:
+          type: "string"
+          maxLength: 320
+          format: "email"
+    RegistrationCompletion:
+      type: "object"
+      additionalProperties: false
+      required:
+        - "secret"
+      properties:
+        secret:
+          type: "string"
+          minLength: 43
+          maxLength: 43
+          pattern: "^[A-Za-z0-9_-]{43}$"
+          writeOnly: true
+        password:
+          type:
+            - "string"
+            - "null"
+          minLength: 15
+          maxLength: 128
+          writeOnly: true
+          description: "Unicode characters; common compromised values rejected; no composition rules."
+    Login:
+      type: "object"
+      additionalProperties: false
+      required:
+        - "email"
+        - "password"
+      properties:
+        email:
+          type: "string"
+          maxLength: 320
+        password:
+          type: "string"
+          maxLength: 128
+          writeOnly: true
+    Password:
+      type: "object"
+      additionalProperties: false
+      required:
+        - "password"
+      properties:
+        password:
+          type: "string"
+          minLength: 15
+          maxLength: 128
+          writeOnly: true
+          description: "Unicode characters; common compromised values rejected; no composition rules."
+    Proof:
+      type: "object"
+      additionalProperties: false
+      required:
+        - "secret"
+      properties:
+        secret:
+          type: "string"
+          minLength: 43
+          maxLength: 43
+          pattern: "^[A-Za-z0-9_-]{43}$"
+          writeOnly: true
+    PasswordResetCompletion:
+      type: "object"
+      additionalProperties: false
+      required:
+        - "secret"
+        - "password"
+      properties:
+        secret:
+          type: "string"
+          minLength: 43
+          maxLength: 43
+          pattern: "^[A-Za-z0-9_-]{43}$"
+          writeOnly: true
+        password:
+          type: "string"
+          minLength: 15
+          maxLength: 128
+          writeOnly: true
+          description: "Unicode characters; common compromised values rejected; no composition rules."
+    Reauthentication:
+      oneOf:
+        -
+          type: "object"
+          additionalProperties: false
+          required:
+            - "password"
+          properties:
+            password:
+              type: "string"
+              maxLength: 128
+              writeOnly: true
+        -
+          type: "object"
+          additionalProperties: false
+          required:
+            - "provider"
+          properties:
+            provider:
+              type: "string"
+              enum:
+                - "google"
+                - "facebook"
+    AuthorizationUrl:
+      type: "object"
+      additionalProperties: false
+      required:
+        - "authorizationUrl"
+      properties:
+        authorizationUrl:
+          type: "string"
+          format: "uri"
+    Csrf:
+      type: "object"
+      additionalProperties: false
+      required:
+        - "token"
+        - "headerName"
+      properties:
+        token:
+          type: "string"
+        headerName:
+          type: "string"
+          const: "X-XSRF-TOKEN"
+    Access:
+      type: "object"
+      additionalProperties: false
+      required:
+        - "accessToken"
+        - "tokenType"
+        - "expiresIn"
+        - "sessionId"
+      properties:
+        accessToken:
+          type: "string"
+          description: "RS256 JWT, five minutes, memory only; never persist in localStorage."
+        tokenType:
+          type: "string"
+          const: "Bearer"
+        expiresIn:
+          type: "integer"
+          const: 300
+        sessionId:
+          type: "string"
+          format: "uuid"
+    Account:
+      type: "object"
+      additionalProperties: false
+      required:
+        - "userId"
+        - "email"
+        - "status"
+        - "hasPassword"
+        - "version"
+      properties:
+        userId:
+          type: "string"
+          format: "uuid"
+        email:
+          type: "string"
+          format: "email"
+        status:
+          type: "string"
+          enum:
+            - "ACTIVE"
+            - "SUSPENDED"
+            - "DELETION_PENDING"
+            - "DELETED"
+            - "PENDING_VERIFICATION"
+        hasPassword:
+          type: "boolean"
+        version:
+          type: integer
+          minimum: 0
+    Session:
+      type: "object"
+      additionalProperties: false
+      required:
+        - "id"
+        - "authenticatedAt"
+        - "idleExpiresAt"
+        - "absoluteExpiresAt"
+        - "current"
+      properties:
+        id:
+          type: "string"
+          format: "uuid"
+        authenticatedAt:
+          type: "string"
+          format: "date-time"
+        idleExpiresAt:
+          type: "string"
+          format: "date-time"
+        absoluteExpiresAt:
+          type: "string"
+          format: "date-time"
+        current:
+          type: "boolean"
+    Sessions:
+      type: "object"
+      additionalProperties: false
+      required:
+        - "items"
+      properties:
+        items:
+          type: "array"
+          maxItems: 100
+          items:
+            "$ref": "#/components/schemas/Session"
+    Identity:
+      type: "object"
+      additionalProperties: false
+      required:
+        - "id"
+        - "provider"
+      properties:
+        id:
+          type: "string"
+          format: "uuid"
+        provider:
+          type: "string"
+          enum:
+            - "GOOGLE"
+            - "FACEBOOK"
+    Identities:
+      type: "object"
+      additionalProperties: false
+      required:
+        - "items"
+      properties:
+        items:
+          type: "array"
+          maxItems: 2
+          items:
+            "$ref": "#/components/schemas/Identity"
+    Profile:
+      type: "object"
+      additionalProperties: false
+      required:
+        - "userId"
+        - "handle"
+        - "displayName"
+        - "bio"
+        - "visibility"
+        - "version"
+      properties:
+        userId:
+          type: "string"
+          format: "uuid"
+        handle:
+          type: "string"
+        displayName:
+          type: "string"
+        bio:
+          type: "string"
+        visibility:
+          type: "string"
+          enum:
+            - "PUBLIC"
+            - "AUTHENTICATED"
+            - "PRIVATE"
+        version:
+          type: "integer"
+          minimum: 0
+    ProfileChange:
+      type: "object"
+      additionalProperties: false
+      required:
+        - "handle"
+        - "displayName"
+        - "bio"
+        - "visibility"
+      properties:
+        handle:
+          type: "string"
+          pattern: "^[a-z0-9_]{3,30}$"
+        displayName:
+          type: "string"
+          minLength: 1
+          maxLength: 80
+        bio:
+          type: "string"
+          maxLength: 1000
+        visibility:
+          type: "string"
+          enum:
+            - "PUBLIC"
+            - "AUTHENTICATED"
+            - "PRIVATE"
+    PreferenceChange:
+      type: "object"
+      additionalProperties: false
+      required:
+        - "locale"
+        - "timeZone"
+        - "defaultPostAudience"
+      properties:
+        locale:
+          type: "string"
+          maxLength: 35
+        timeZone:
+          type: "string"
+          maxLength: 64
+          description: "IANA timezone ID"
+        defaultPostAudience:
+          type: "string"
+          enum:
+            - "PUBLIC"
+            - "FOLLOWERS"
+            - "FRIENDS"
+            - "ONLY_ME"
+    Preferences:
+      type: "object"
+      additionalProperties: false
+      required:
+        - "locale"
+        - "timeZone"
+        - "defaultPostAudience"
+        - "version"
+      properties:
+        locale:
+          type: "string"
+        timeZone:
+          type: "string"
+        defaultPostAudience:
+          type: "string"
+          enum:
+            - "PUBLIC"
+            - "FOLLOWERS"
+            - "FRIENDS"
+            - "ONLY_ME"
+        version:
+          type: "integer"
+          minimum: 0

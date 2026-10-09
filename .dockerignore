@@ -5,6 +5,7 @@
 .codex
 .env
 .env.*
+.local
 target
 docs
 *.pem

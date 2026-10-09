@@ -6,7 +6,7 @@ Record the phase's actual migrations, module APIs, test commands/results, measur
 
 ## Phase 0 — Buildable architecture foundation
 
-Implementation status: see [Phase 0 completion evidence](phases/phase-0.md). Later phases remain unimplemented.
+Implementation status: [Phase 0](phases/phase-0.md) and [Phase 1](phases/phase-1.md) delivered locally. Phase 2 onward remain unimplemented; external provider readiness is separately gated.
 
 **Goal:** establish a reproducible repository that enforces the accepted design before business code exists.
 

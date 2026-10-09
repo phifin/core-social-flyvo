@@ -1,4 +1,7 @@
 spring:
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
   application:
     name: social-core
   autoconfigure:
@@ -10,7 +13,7 @@ spring:
       minimum-idle: 2
       connection-timeout: 5000
       validation-timeout: 2000
-      connection-init-sql: SET TIME ZONE 'UTC'
+      connection-init-sql: SET TIME ZONE 'UTC'; SET statement_timeout = '5s'; SET lock_timeout = '3s'
       data-source-properties:
         connectTimeout: 5
         socketTimeout: 5
@@ -34,6 +37,17 @@ spring:
       mode: never
   mvc:
     log-request-details: false
+  mail:
+    host: ${SMTP_HOST:localhost}
+    port: ${SMTP_PORT:1025}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 5000
+      mail.smtp.writetimeout: 5000
+      mail.smtp.starttls.enable: ${SMTP_STARTTLS:true}
+      mail.smtp.starttls.required: ${SMTP_STARTTLS:true}
 server:
   shutdown: graceful
   forward-headers-strategy: none
@@ -42,11 +56,30 @@ server:
     include-stacktrace: never
     include-binding-errors: never
 app:
+  auth:
+    issuer: ${AUTH_ISSUER:https://social-core.invalid}
+    audience: social-core-browser
+    frontend-origin: ${FRONTEND_ORIGIN:https://social-core.invalid}
+    signing-key-id: ${AUTH_SIGNING_KEY_ID:primary}
+    private-key-file: ${AUTH_PRIVATE_KEY_FILE:}
+    public-key-file: ${AUTH_PUBLIC_KEY_FILE:}
+    retained-public-keys: ${AUTH_RETAINED_PUBLIC_KEYS:}
+  security:
+    encryption-key-file: ${MAIL_ENCRYPTION_KEY_FILE:}
+    limiter-key-file: ${LIMITER_KEY_FILE:}
+    encryption-key-id: ${MAIL_ENCRYPTION_KEY_ID:primary}
+  mail:
+    from: ${MAIL_FROM:no-reply@social-core.invalid}
+  worker:
+    enabled: ${WORKER_ENABLED:true}
   database:
     url: ${DB_URL:}
     username: ${DB_USERNAME:}
     password: ${DB_PASSWORD:}
 management:
+  health:
+    mail:
+      enabled: false
   endpoints:
     web:
       exposure:
