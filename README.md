@@ -6,6 +6,8 @@ A reusable Java backend core for social networks and communities. The core has n
 
 ## Start here
 
+For sequential development/review threads, read the fixed [agent handoff](docs/agent-handoff.md) and [thread workflow](docs/thread-workflow.md).
+
 1. [Architecture and repository structure](docs/architecture.md): boundaries, dependency graph, transactions, conventions.
 2. [Domain model](docs/domain-model.md) and [database design](docs/database-design.md): ownership, lifecycles, constraints and query contracts.
 3. [Security](docs/security.md) and [API conventions](docs/api-conventions.md): authentication, privacy, permissions and resources.

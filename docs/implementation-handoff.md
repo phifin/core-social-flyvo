@@ -4,6 +4,8 @@ This blueprint is the architectural source of truth. Phase 0 and Phase 1 are imp
 
 ## Read first
 
+Read the current [thread handoff](agent-handoff.md) and [thread workflow](thread-workflow.md) before this reading sequence. The mailbox sets current scope and review state; accepted architecture/security documents remain authoritative.
+
 1. Root [AGENTS.md](../AGENTS.md), then [README](../README.md), inspect current code, git status and any deeper AGENTS files. Preserve unrelated/staged user changes. Check completed phase records; the blueprint may describe work not yet implemented.
 2. [Architecture](architecture.md) including dependency allowlist and SQL-view exception, then [ADR index](adr/README.md) and records relevant to the phase.
 3. [Domain model](domain-model.md), [security](security.md), [database design](database-design.md), [API conventions](api-conventions.md), and [testing strategy](testing-strategy.md).

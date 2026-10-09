@@ -4,6 +4,8 @@ This repository is being built phase by phase from an accepted blueprint. Docume
 
 ## Before changing code
 
+- Read `docs/agent-handoff.md` first for the active task, next owner and review findings; follow `docs/thread-workflow.md`. Conversation summaries do not supersede repository contracts.
+
 - Read `README.md`, `docs/implementation-handoff.md`, `docs/architecture.md`, the requested phase in `docs/roadmap.md`, relevant ADRs and subsystem docs. Read `docs/security.md` for any user-facing behavior.
 - Inspect existing code, git status and local instructions. Preserve user edits/staged changes. Do not create a parallel abstraction because you did not search for the existing one.
 - Work only on the requested phase/task and its necessary prerequisites. Do not implement future phases, scaffold speculative modules, or silently redesign accepted decisions.
@@ -50,3 +52,9 @@ The implementation definition of done and frozen/flexible decisions are in `docs
 - Inspect the index before staging; stage explicit owned paths/hunks only. Never include unrelated user/other-agent changes, discard them, or use blanket staging in a shared dirty checkout.
 - Do not commit failing or unverified implementation as completed work. Do not bypass hooks, amend commits, rewrite history, force-push or change Git identity automatically.
 - One writer per checkout/index; concurrent implementation needs separate worktrees/branches. Commit authorization does not authorize push or merge.
+
+## Sequential thread handoff
+
+- The user runs one thread at a time in this checkout. Use `docs/agent-handoff.md` as the fixed mailbox; no agent spawning or external messaging is implied.
+- Before returning, update the mailbox with actual code commit, checks, limitations and next owner. Preserve reviewer findings and respond to each ID; only the main reviewer marks them resolved or accepts a phase.
+- Commit the handoff documentation after the code commit so the mailbox can reference its real hash. Never invent a self-referential report commit hash. A review-only task may commit documentation with outstanding code findings clearly recorded.

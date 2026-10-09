@@ -1,6 +1,7 @@
 # Phase 1 — Secure accounts and durable authentication
 
-Date: 2026-10-09. Status: complete locally and verified.
+Date: 2026-10-09. Implementation status: complete locally and verified by developer.
+Review status: CHANGES_REQUESTED; main review found R1–R3 despite 59 existing tests passing again. See [current handoff](../agent-handoff.md) for fixes and review disposition.
 Scope stops at Phase 1. Live-provider/production readiness is separately blocked
 by the gates below; no push, deployment or external email/provider traffic.
 
