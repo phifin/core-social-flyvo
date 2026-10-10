@@ -74,7 +74,7 @@ Independent main reviewer alone accepts this phase.
 
 **Dependencies:** Phases 1–3. **Modules:** content (post/audience/revisions), media, profile avatar, community/graph/account APIs, moderation, platform workers. **Features:** personal/community posts, plain text/link, CUSTOM recipients, mentions/hashtags, edits/history, explicit audience edits, owner soft deletion, community remove/restore; full image upload/finalize/process/status/bind pipeline; avatar pipeline. Implement `ContentAccessPolicy`, SQL candidate/hydration building blocks and guarded content writes. A basic paginated post query supports verification before full home feed.
 
-**Database changes:** post/recipient/revision/media/mention/hashtag tables, media asset/variant/binding, profile avatar FK, relevant indexes and moderation action references. **Infrastructure:** S3 adapter, Compose MinIO with versioning/private buckets, bounded image processor and durable cleanup jobs; storage quotas and short-lived URL signing. No video/documents/CDN requirement.
+**Database changes:** post/recipient/revision/media/mention/hashtag tables, media asset/variant/binding, profile avatar FK, relevant indexes and moderation action references. **Infrastructure:** S3 adapter, Compose/Testcontainers PGSTY Silo pinned by [ADR-013](adr/013-local-object-storage-distribution.md) with versioning/private buckets, bounded image processor and durable cleanup jobs; storage quotas and short-lived URL signing. No video/documents/CDN requirement.
 
 **Tests required:** complete audience policy matrix including author after community departure; SQL/object policy parity; current audience applies to history/media; blocked access through every path; versioned edit conflicts; idempotent create; nonempty content invariant; post removal blocks URLs; malformed/oversized media; overwrite-after-finalize; attach/cleanup races; partial variant failure/lease fencing; no arbitrary key signing.
 
@@ -176,7 +176,7 @@ Independent main reviewer alone accepts this phase.
 | Outbox, durable jobs, audit, idempotency | P1 | Email/external effects must survive crashes and transaction rollback |
 | Spring scheduler + PostgreSQL leases | P1 | Small durable dispatcher; no separate job framework initially |
 | OAuth client/provider adapters | P1 | Required login/linking; no provider tokens in domain |
-| S3 SDK + MinIO locally + image processor | P4 | Real image lifecycle with validation/cleanup |
+| S3 SDK + PGSTY Silo locally (ADR-013) + image processor | P4 | Real image lifecycle with validation/cleanup |
 | SSE | P7 | One-way inbox invalidation; REST remains authoritative |
 | Redis | Before multi-instance public API, otherwise conditional | Shared rate limits; later SSE fan-out/candidate caching |
 | PostgreSQL full-text/GIN | P8 | Queryable search projection; pg_trgm only with measured need |

@@ -1,6 +1,6 @@
 # Architecture decision records
 
-All records below are **Accepted for implementation** as of 2026-10-08, not claims of deployed features. Preserve history; supersede a decision with a new numbered ADR when its tradeoff changes. Each ADR records context, decision, consequences and a revisit trigger. Detailed contracts remain in the linked subsystem documents; do not duplicate mutable endpoint/schema lists here.
+Records 001–012 are **Accepted for implementation** as of 2026-10-08; ADR-013 was accepted on 2026-10-10. These are not claims of deployed features. Preserve history; supersede a decision with a new numbered ADR when its tradeoff changes. Each ADR records context, decision, consequences and a revisit trigger. Detailed contracts remain in the linked subsystem documents; do not duplicate mutable endpoint/schema lists here.
 
 | ADR | Decision |
 |---|---|
@@ -16,12 +16,14 @@ All records below are **Accepted for implementation** as of 2026-10-08, not clai
 | [010](010-notifications-and-realtime.md) | Semantic persistent inbox, contribution aggregation, SSE hints |
 | [011](011-search-and-caching.md) | PostgreSQL search, source authorization, conditional Redis/engine |
 | [012](012-quality-and-operations.md) | Real-PostgreSQL tests, architecture gates, observability and release discipline |
+| [013](013-local-object-storage-distribution.md) | Pinned PGSTY Silo for local Compose/Testcontainers; supersedes only ADR-008's local distribution |
 
 Future ADRs are required before approved-follow workflows, SaaS tenancy, native-client credential transport, account merging, rich HTML/documents/video, nonchronological ranking, broker introduction, service extraction, stricter media revocation, or changes to retention/privacy guarantees. Not every new endpoint needs an ADR.
 
-## Proposed decisions
+## Local storage decision
 
 [ADR-013 — Maintained local object-storage distribution](013-local-object-storage-distribution.md)
 records a Phase 4 infrastructure blocker and a concrete local-storage replacement
-proposal. It is not accepted; ADR-008 and the current phase requirements remain
-authoritative pending the owner/main decision.
+decision accepted by main on 2026-10-10. Phase 4's real storage/security tests
+remain mandatory; acceptance of this ADR does not accept the implementation or
+choose a production provider.

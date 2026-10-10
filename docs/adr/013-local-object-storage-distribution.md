@@ -1,9 +1,11 @@
 # ADR-013 — Maintained local object-storage distribution
 
-Status: **Proposed**, 2026-10-10. Not accepted and not implemented.
+Status: **Accepted for implementation**, 2026-10-10, by main orchestrator under
+the user's request to decide the Phase 4 blocker. Runtime integration is not yet
+implemented or accepted.
 
-Scope: the Phase 4 Compose/Testcontainers storage distribution only. If accepted,
-this supersedes ADR-008's local MinIO distribution choice, not its media lifecycle
+Scope: the Phase 4 Compose/Testcontainers storage distribution only. This
+supersedes ADR-008's local MinIO distribution choice, not its media lifecycle
 or production S3 compatibility requirements.
 
 ## Context and observed blocker
@@ -33,11 +35,11 @@ frozen CE server plus a new mandatory security proxy and maintaining its coverag
 would be an additional operational/security decision, not merely retrying a pull.
 No vulnerable server was started and no source implementation was changed.
 
-## Proposed decision
+## Decision
 
 Use the maintained MinIO-derived **PGSTY Silo** distribution for local development
-and integration tests, subject to the verification gates below. Pin the same
-artifact in Compose and Testcontainers:
+and integration tests, with the verification gates below required for Phase 4
+acceptance. Pin the same artifact in Compose and Testcontainers:
 
 ```text
 docker.io/pgsty/silo:RELEASE.2026-09-16T00-00-00Z@sha256:635197cb9f36d01bee221d34d1c7d7960f6a95c48b0b6c01d99cd13bdae51a46
@@ -48,7 +50,9 @@ identifies source `2a4d51406b7ed87af5fe6fe0f801f3290f96eb3c` and the multi-platf
 digest above. Registry manifest lookup succeeded here and exposes amd64 manifest
 `sha256:39aab3c365848e32aca7b76c5b57f86d1cbca02d7b8f24e1fd1feff9fedddae5` and arm64
 manifest `sha256:1ff329e4507f742a8437f1773d43cf6adb0131477074dd45c770d1a1db19e99c`.
-This proves manifest availability, not a completed image pull or storage contract.
+The development proposal established manifest availability. Main's subsequent
+independent pull and provenance checks are recorded below; the storage contract
+still requires implementation tests.
 
 Silo is an independent fork, not upstream MinIO endorsement. Its
 [security ledger](https://silo.pgsty.com/about/security-advisories/) and tagged
@@ -70,9 +74,40 @@ Record the fork's artifact/source/license notices and recheck its supported rele
 line when upgrading. No fork SDK, broker, cache or additional business module is
 introduced.
 
-## Alternatives for the owner to select
+Use a single local storage node. Bind developer-facing ports to loopback and keep
+administrative credentials separate from application/worker credentials. Do not
+enable federation, site replication, external identity providers or distributed
+storage topology as part of this phase. The release documents distributed listing
+and purge limitations; those are outside this local topology. Test cleanup against
+actual version/delete-marker state, rather than treating a successful listing alone
+as proof of erasure. Local adoption does not select this topology for production.
 
-1. **Proposed:** approve the exact maintained fork above for local storage. This
+## Main decision evidence — 2026-10-10
+
+Main reviewed the official upstream advisories, the tagged Silo release and its
+security ledger independently. The ledger records inherited-path fixes and the
+release records operation-header/presign fixes, source and artifact identities.
+These are publisher evidence, not a repository exploit reproduction or complete
+security audit. They support choosing the distribution while retaining adversarial
+tests as an acceptance requirement.
+
+The exact pinned image above was pulled successfully on this checkout. Docker
+reported digest `635197cb9f36d01bee221d34d1c7d7960f6a95c48b0b6c01d99cd13bdae51a46`;
+image inspection confirmed linux/amd64, version RELEASE.2026-09-16T00-00-00Z,
+source revision `2a4d51406b7ed87af5fe6fe0f801f3290f96eb3c` and
+`AGPL-3.0-or-later` license metadata. Version/source labels match the release;
+labels/digests establish
+artifact identity, not the correctness of all runtime behavior. Preserve source
+and license notices when documenting the local artifact.
+
+Local evidence: `/tmp/social-core-phase4-storage-review-pull.log`. No storage
+service was started, no application/storage configuration was implemented and no
+Phase 4 storage test passed in this decision round. Decision blocker P4-B1 is
+resolved; development owns the actual security/compatibility gates.
+
+## Alternatives considered
+
+1. **Selected:** use the exact maintained fork above for local storage. This
    changes the distribution/provenance specified by the blueprint, retaining the
    S3/media/security contracts and a real local test server.
 2. Supply an accessible supported **MinIO AIStor** artifact and required operator
@@ -86,7 +121,7 @@ introduced.
 Changing to an unrelated S3-compatible server is another explicit decision, not an
 assumed fallback. Adding a mock storage adapter does not unblock Phase 4 acceptance.
 
-## Verification and consequences if accepted
+## Verification and consequences
 
 Before accepting Phase 4, demonstrate against the chosen real artifact:
 
@@ -102,12 +137,12 @@ Before accepting Phase 4, demonstrate against the chosen real artifact:
   Compose validation and operational recovery evidence. Record any unavailable
   production-provider checks as deployment gates, never local-test substitutes.
 
-After approval, update ADR-008's local-storage reference, media/testing/roadmap and
-operations wording when implementing the actual adapter and configuration. Until
-then those accepted contracts remain unchanged. The full Phase 4 content scope
+The decision references in ADR-008, media/testing/roadmap and operations are updated
+with this acceptance; executable adapter/configuration and operational evidence
+remain development work. The full Phase 4 content scope
 (posts, privacy, revisions, moderation, images and avatar) remains assigned.
 
 Revisit if the fork loses maintenance, a required security/compatibility test fails,
 or the owner selects a supported production storage provider with different local
-contract requirements. Main/user must record acceptance; development cannot
-self-accept this proposal or the phase.
+contract requirements. Main/user must approve a replacement decision; development
+cannot self-accept a failed storage gate or the phase.

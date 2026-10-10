@@ -1,6 +1,6 @@
 # Media lifecycle and object storage
 
-Images are in the first usable content phase. Use an S3-compatible object store, AWS SDK for Java v2 adapter, private quarantine and delivery prefixes/buckets, versioning enabled, server-side encryption and least-privilege credentials. Local Compose uses a pinned tested MinIO image in a `media` profile; validate exact presigning, checksums, versioning and delete behavior against the chosen production S3 implementation before launch. Do not store binaries in PostgreSQL or assume every S3-compatible server has identical behavior.
+Images are in the first usable content phase. Use an S3-compatible object store, AWS SDK for Java v2 adapter, private quarantine and delivery prefixes/buckets, versioning enabled, server-side encryption and least-privilege credentials. The Phase 4 local Compose/Testcontainers distribution is pinned PGSTY Silo, a MinIO-derived fork selected in [ADR-013](adr/013-local-object-storage-distribution.md); its runtime/security contract must be tested during implementation. Compose adds it in a `media` profile. Validate exact presigning, checksums, versioning and delete behavior against the chosen production S3 implementation before launch. Do not store binaries in PostgreSQL or assume every S3-compatible server has identical behavior.
 
 ## Upload sequence
 

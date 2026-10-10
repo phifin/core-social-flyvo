@@ -2,6 +2,11 @@
 
 Status: Accepted, 2026-10-08.
 
+Local storage distribution is superseded by
+[ADR-013](013-local-object-storage-distribution.md), accepted 2026-10-10:
+PGSTY Silo for Compose/Testcontainers. The original decision below is retained
+as history; the media lifecycle and production compatibility gates still apply.
+
 Context: media is an early real feature and untrusted uploads introduce storage, parsing, overwrite and privacy failure modes.
 
 Decision: presigned direct upload to private versioned quarantine, owner finalize, pin uploaded version, durable bounded processing, immutable re-encoded display/thumbnail variants, READY-only transactional binding to one context. Content/profile authorize short-lived access URLs. No raw database blobs, arbitrary URL import, public bucket or client-selected storage key. Local MinIO exercises the S3 adapter.
