@@ -36,6 +36,13 @@ Do not create every proposed class/table now. The schema is a credible target: t
 
 ## Execute one phase
 
+The user-authorized larger-package workflow in [thread workflow](thread-workflow.md)
+also permits an explicitly assigned pair of phases in one development chat. In that
+case execute their dependencies sequentially, keep separate phase evidence and
+internal verification gates, and stop after the last assigned phase. An unactivated
+package proposal does not authorize implementation. Main-only push authority is
+defined in [Git workflow](git-workflow.md); development still must not push.
+
 1. Inspect what actually exists; compare dependencies/acceptance criteria with completed phases. Fix a small missing prerequisite explicitly or report a material blocker. Never mark later-phase stubs complete.
 2. Write a brief work plan: vertical capabilities, owned tables/migrations, published API additions, privacy checks, concurrency guards and test matrix. For a large phase, break it into coherent internal slices; keep integration green after each slice.
 3. Agree with the documented contracts in code: define request/response and module API records; add migrations; implement aggregates/use cases/policies, infrastructure adapters, then thin controllers. Do not bypass policies to get an endpoint working temporarily.

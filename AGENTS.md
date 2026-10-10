@@ -51,12 +51,13 @@ The implementation definition of done and frozen/flexible decisions are in `docs
 - Read `docs/git-workflow.md`. Use Conventional Commits and commit completed, verified task-scoped changes before the final report. Never claim completion without reporting the commit hash or an exact commit blocker.
 - Inspect the index before staging; stage explicit owned paths/hunks only. Never include unrelated user/other-agent changes, discard them, or use blanket staging in a shared dirty checkout.
 - Do not commit failing or unverified implementation as completed work. Do not bypass hooks, amend commits, rewrite history, force-push or change Git identity automatically.
-- One writer per checkout/index; concurrent implementation needs separate worktrees/branches. Commit authorization does not authorize push or merge.
+- One writer per checkout/index; concurrent implementation needs separate worktrees/branches. Commit authorization does not authorize merge. The user's 2026-10-11 authorization permits only the main orchestrator to configure and push to `origin` (`https://github.com/phifin/core-social-flyvo.git`) at reviewed checkpoints under `docs/git-workflow.md`. Development threads must never push. No force-push, history rewrite, release or deployment is authorized.
 
 ## Sequential thread handoff
 
 - The main conversation is orchestrator/reviewer only: prepare prompts, identify an existing development chat or propose a named new one, and review delivered code. Do not implement subsequent phases or fixes in main. The user's one-time exception allows main to finish the already-started Phase 3 only; see `docs/thread-workflow.md`.
 
 - The user runs one thread at a time in this checkout. Use `docs/agent-handoff.md` as the fixed mailbox; no agent spawning or external messaging is implied.
+- Prefer explicitly planned work packages spanning two dependent phases or 2–3 cohesive capabilities/modules, with internal sequential gates, rather than frequent small handoffs. Main defines the exact scope and prerequisite gates; larger packages do not waive review, authorize unassigned phases or enable concurrent writers.
 - Before returning, update the mailbox with actual code commit, checks, limitations and next owner. Preserve reviewer findings and respond to each ID; only the main reviewer marks them resolved or accepts a phase.
 - Commit the handoff documentation after the code commit so the mailbox can reference its real hash. Never invent a self-referential report commit hash. A review-only task may commit documentation with outstanding code findings clearly recorded.

@@ -2,7 +2,29 @@
 
 ## Authorization and scope
 
-The repository owner authorizes coding agents to create local commits automatically after completing and verifying requested development work. This applies to future phases, fixes, refactoring and documentation tasks. No repeated permission is needed. A later explicit user instruction overrides this default. Push, remote creation, pull requests, merge, release and deployment are not automatically authorized.
+The repository owner authorizes coding agents to create local commits automatically after completing and verifying requested development work. This applies to future phases, fixes, refactoring and documentation tasks. No repeated permission is needed. A later explicit user instruction overrides this default. Pull requests, merge, release and deployment are not automatically authorized.
+
+### Main-only remote delivery — user authorization, 2026-10-11
+
+Only the main orchestrator/reviewer may configure `origin` and push to
+`https://github.com/phifin/core-social-flyvo.git`. Main decides when to push without
+another permission request. Development threads commit locally and hand off; they
+must never push, including after passing tests. This supersedes earlier generic
+"separate push authorization" text for main only, not other external actions.
+
+Main's default is a normal fast-forward push of accepted, verified checkpoints.
+Inspect destination refs, exact outgoing history, secret scan and verification
+before pushing; record the exact remote branch/hash and distinguish local tests
+from remote CI. Do not force-push, rewrite history, change Git identity or publish
+unrelated refs/tags. If remote has unexpected commits, stop and report divergence.
+Review approval is not production release approval. No deploy/release permission.
+
+On initial publication main may push an older accepted ancestor while newer code
+awaits review locally, explicitly stating which milestone is and is not remote.
+If authentication is unavailable, report the exact blocker; never put credentials
+in the URL, repository, logs or chat. Ask the user to authenticate locally and return
+to main for the push. This rule is agent policy, not a GitHub permission boundary;
+shared checkout credentials cannot technically distinguish chat threads.
 
 Before work, inspect branch, status and staged/unstaged changes. Preserve unrelated edits and the existing Git identity. Never invent an author identity; report missing identity as a commit blocker. Do not amend, reset, rebase, force-push or bypass hooks without explicit authorization.
 

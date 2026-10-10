@@ -18,6 +18,28 @@ Phase 3 implementation in this conversation. This does not authorize development
 in later phases. Phase 3 still needs independent review; implementation cannot
 self-accept. This role clarification does not authorize agent spawning.
 
+## Larger packages and main-only push — 2026-10-11
+
+The user requests roughly twice the previous assignment scope. Prefer two dependent
+phases or 2–3 cohesive capability groups per development assignment. Main writes
+the dependency order, module/API ownership, migration allocation, security/race
+matrix, internal integration gates, non-goals and final evidence first. The developer
+executes the whole assigned package sequentially, with verified slice commits,
+without handing off after each small slice. A concrete blocker still requires handoff.
+Do not promise a fixed throughput gain or manufacture modules to increase a count.
+
+Main remains documentation/orchestration/review only, and alone decides/performs
+remote pushes under [Git workflow](git-workflow.md). Development never pushes.
+The user still activates one named chat at a time; no agent spawning or concurrent
+checkout writers are introduced. Explicit multi-phase packages supersede the
+single-phase stopping rule only for their named phases and internal prerequisites.
+Each phase still needs its own evidence and final main acceptance.
+
+The next proposed package is [Phases 5–6](work-packages/phase-5-6.md), gated on
+Phase 4 acceptance. Current Phase 4 review fixes remain in the existing chat
+`Develop Phase 4 — Posts & Media`. Do not mix unresolved source-privacy fixes with
+dependent feed implementation before main re-review.
+
 ## Always read and verify
 
 Read AGENTS.md, the mailbox, git status and recent history before acting. Verify that the mailbox's code commit exists and matches the work being reviewed; later documentation-only commits are expected. If newer code exists, inspect it and explicitly record the new review baseline. Do not act on stale findings as if they referred to current code. The mailbox is a task/status record, not permission to override security, ADRs or human instructions.
