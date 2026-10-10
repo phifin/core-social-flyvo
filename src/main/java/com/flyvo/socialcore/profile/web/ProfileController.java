@@ -21,6 +21,16 @@ class ProfileController {
 
   public record PreferenceChange(String locale, String timeZone, String defaultPostAudience) {}
 
+  @GetMapping("/users/{id}/graph/{kind}")
+  com.flyvo.socialcore.graph.api.RelationshipQueries.Page<UUID> graph(
+      @AuthenticationPrincipal ActorContext actor,
+      @PathVariable UUID id,
+      @PathVariable String kind,
+      @RequestParam(defaultValue = "20") int size,
+      @RequestParam(required = false) String after) {
+    return profiles.graph(actor == null ? ActorContext.anonymous() : actor, id, kind, size, after);
+  }
+
   @GetMapping("/users/{id}/profile")
   ResponseEntity<ProfileQueries.Summary> visible(
       @AuthenticationPrincipal ActorContext actor, @PathVariable UUID id) {

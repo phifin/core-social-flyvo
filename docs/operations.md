@@ -2,6 +2,9 @@
 
 ## Deployment baseline
 
+Phase 3 graph uses the existing PostgreSQL worker and platform encryption key;
+request expiry, cursor lifetime, limits and recovery are in [graph operations](../ops/graph.md).
+
 Start with one HTTP + worker application process, managed PostgreSQL, private object storage when media begins, and an email transport when authentication begins. Local Docker Compose profiles provide postgres, SMTP sink (Mailpit), then MinIO. Compose is a development environment, not an implied production HA deployment. Use a non-root container, read-only filesystem where practical, bounded temporary directory for media, resource limits, pinned image digests and graceful shutdown.
 
 Production credentials are separate from local fixtures. App DB role has only runtime DML/view access, migration role owns DDL, worker storage permissions are scoped to required prefixes, public HTTP layer cannot list buckets. Credentials/keys come from a secret manager or mounted secrets; examples contain placeholders. TLS at trusted reverse proxy plus protected database/storage connections. Configure trusted proxy hops explicitly; never accept spoofed forwarded client IP for rate limiting.

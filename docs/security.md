@@ -123,6 +123,14 @@ Staff cannot sanction self, owner, or equal/higher effective role. Only owner ca
 
 ## Surfaces affected by privacy changes
 
+Phase 3 applies bilateral block and current FRIENDS to profile reads and permitted
+profile graph lists. Own graph lists recheck actor status and batch-filter inactive
+counterparts; blocks filter before pagination, except the actor's own block management
+list. Opaque authenticated-encrypted cursors conceal filtered IDs and bind current
+viewer/owner/list for 15 minutes. Neither cursor nor relationship facts grant access.
+Graph mutation guards serialize follow/request/accept against block; block removes
+both follows, friendship and pending requests atomically. See [graph](graph.md).
+
 Phase 2 implements community authority through exclusive transition guards and
 transaction-required shared write guards. Discovery cards grant no private access;
 member history requires current effective membership, request history requires

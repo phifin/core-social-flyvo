@@ -22,18 +22,21 @@ public class Profiles implements ProfileCommands, ProfileQueries {
   private final Clock clock;
   private final DurableWork work;
   private final tools.jackson.databind.ObjectMapper json;
+  private final com.flyvo.socialcore.graph.api.RelationshipQueries graph;
 
   public Profiles(
       ProfileRepository entities,
       AccountQueries accounts,
       Clock clock,
       DurableWork work,
-      tools.jackson.databind.ObjectMapper json) {
+      tools.jackson.databind.ObjectMapper json,
+      com.flyvo.socialcore.graph.api.RelationshipQueries graph) {
     this.entities = entities;
     this.accounts = accounts;
     this.clock = clock;
     this.work = work;
     this.json = json;
+    this.graph = graph;
   }
 
   @Transactional(propagation = Propagation.MANDATORY)
@@ -50,11 +53,24 @@ public class Profiles implements ProfileCommands, ProfileQueries {
       throw new Failure(404, "NOT_FOUND");
     if (actor.authenticated()) requireActor(actor);
     boolean own = id.equals(actor.userId());
+    var facts =
+        actor.authenticated() && !own
+            ? graph.facts(actor.userId(), java.util.List.of(id)).getFirst()
+            : null;
+    if (facts != null && facts.blocked()) throw new Failure(404, "NOT_FOUND");
     if (!own
         && !("PUBLIC".equals(profile.visibility())
-            || actor.authenticated() && "AUTHENTICATED".equals(profile.visibility())))
+            || actor.authenticated() && "AUTHENTICATED".equals(profile.visibility())
+            || facts != null && facts.friends() && "FRIENDS".equals(profile.visibility())))
       throw new Failure(404, "NOT_FOUND");
     return summary(profile);
+  }
+
+  @Transactional(readOnly = true)
+  public com.flyvo.socialcore.graph.api.RelationshipQueries.Page<UUID> graph(
+      ActorContext actor, UUID id, String kind, int size, String after) {
+    visible(actor, id);
+    return graph.visibleEdges(actor, id, kind, size, after);
   }
 
   @Transactional

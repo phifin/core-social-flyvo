@@ -180,6 +180,14 @@ content/
 
 ## Architecture enforcement
 
+Phase 3 graph owns JDBC relationship snapshots, explicit canonical shared/exclusive
+pair guards, retained event revisions and its expiry handler. Profile composes graph
+API facts and authorizes profile graph views before calling graph's narrow internal
+list contract; graph never depends on profile. Account provides bounded active-ID
+queries to avoid cross-module joins or N+1 filtering. No module DAG/view allowlist
+exclusions or infrastructure dependencies are introduced. [Graph](graph.md) records
+the lock hash, query boundaries and cursor refinement.
+
 Phase 2 adds community's owned JDBC snapshot repository for composite membership
 and admission rows, shared/exclusive row guards, deferred ownership and explicit
 versioned transitions in one transaction manager. This avoids parallel JPA/domain

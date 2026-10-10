@@ -37,6 +37,13 @@ public class Accounts implements AccountCommands, AccountQueries {
     return value == null ? null : facts(value);
   }
 
+  @Transactional(readOnly = true)
+  public java.util.Set<UUID> activeIds(java.util.List<UUID> ids) {
+    if (ids == null || ids.size() > 100 || ids.stream().anyMatch(java.util.Objects::isNull))
+      throw Failure.invalid();
+    return entities.activeIds(ids);
+  }
+
   @Transactional(propagation = Propagation.MANDATORY)
   public Account guard(UUID id, boolean exclusive) {
     var value = entities.guard(id, exclusive);

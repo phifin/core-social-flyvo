@@ -41,6 +41,14 @@ start returns a URL in JSON; callbacks redirect with a marker, never credentials
 
 ## Pagination
 
+Phase 3 graph lists use UUID-ascending keyset pages with `size` 1–100 and opaque
+`after` cursors (15 minutes, viewer/owner/list bound). The platform authenticated
+encryption primitive conceals the last scanned UUID when account filtering hides
+it. Continue until nextCursor is null even for empty/short filtered pages; no totals
+or cross-page snapshot. Friend-request creation uses domain pending-pair retry rules
+and returns 200 for new/existing pending resources; opposite-direction pending is
+409. Set-style graph PUT/DELETE is idempotent without ETag. See [graph](graph.md).
+
 Phase 2's implemented community routes are specified in OpenAPI and
 [community subsystem](community.md). Community ETag covers settings/ownership/archive
 and effective user transitions; membership ETag covers role/removal/leave/sanctions.

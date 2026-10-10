@@ -92,12 +92,21 @@ SKIP LOCKED, then deletes only still-expired rows. In-use/renewed keys survive;
 cleanup may lag without reducing a committed replay window. No migration is needed
 for this protocol fix; V0001–V0011 remain unchanged.
 
-No account/graph SQL views are introduced before their consuming phases. The
-community views expose exactly the published columns below, current source state,
+Phase 3 adds the account/graph views specified below; their only allowlisted SQL
+consumer remains the future content query adapter. The community views expose current source state,
 and stored membership role; effective OWNER derives from the community owner ID.
 See [community subsystem](community.md) for transition/guard and retry semantics.
 
 ## Social graph
+
+Phase 3 migrations V0012–V0014 implement the six graph tables below, graph/account
+published views and FRIENDS profile CHECK extension. All eleven earlier migrations
+remain unchanged. Pair revisions survive relationship deletion; native guarded JDBC
+transitions share the existing transaction manager. Account active filtering uses a
+bounded owner API, not cross-module SQL. Graph lists order by counterpart UUID or
+request UUID with outgoing/reverse indexes; they use encrypted scoped keyset cursors
+and at most 100 candidates per call. Additional mute target and pair high-user
+indexes support account lifecycle traversal. See [graph](graph.md).
 
 | Table | Columns | Constraints / indexes |
 |---|---|---|

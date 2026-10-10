@@ -18,11 +18,11 @@ This is the source of truth for lifecycle semantics. Database details are in [da
 
 Phase 1 implementation provides account suspension/deletion-request primitives,
 exactly one default profile and preference row at registration, and profile
-scopes PUBLIC/AUTHENTICATED/PRIVATE. FRIENDS profile scope waits for Phase 3;
+scopes PUBLIC/AUTHENTICATED/PRIVATE. Phase 3 adds FRIENDS with current graph policy;
 the neutral default post audience remains FRIENDS. No avatar column/media FK
 exists before Phase 4. Deletion currently denies access and persists its event;
-there is no erasure claim. Phase 2 must integrate the active-community ownership
-check before enabling its ownership model.
+there is no erasure claim. Phase 2 integrates the active-community ownership
+check with its ownership model.
 
 `Community` owns name, stable slug, description, visibility (`PUBLIC`, `PRIVATE`), join mode (`OPEN`, `REQUEST`, `INVITE_ONLY`), status (`ACTIVE`, `ARCHIVED`) and exactly one owner reference. Defaults: PRIVATE + INVITE_ONLY. Private communities are discoverable by minimal name/description cards to signed-in users so request-to-join works; member lists/posts remain private. Hidden communities are a future explicit product extension, not an ambiguous meaning of PRIVATE.
 
@@ -45,6 +45,9 @@ REMOVED, still requiring current-mode admission. Exact bounds, source events,
 idempotency and live suspension/expiry rules: [community subsystem](community.md).
 
 ## Social graph
+
+Phase 3 implements these relations, FRIENDS profiles, pair guards, durable expiry
+and bounded filtered lists. Exact API/retry/cursor semantics: [graph](graph.md).
 
 Use separate concepts/tables:
 

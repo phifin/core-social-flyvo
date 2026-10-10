@@ -41,6 +41,14 @@ Track JaCoCo coverage as a diagnostic, especially policy/state branches; avoid v
 
 ## Definition of tested
 
+Phase 3 GraphIT covers real PostgreSQL relationship lifecycles, denied actor/IDOR,
+FRIENDS and bilateral block policy, opposite/duplicate requests, follow/block races,
+both shared-guard/block orders, UUID ordering parity, no-op event counts/revisions,
+live expiry/replacement/duplicate jobs, rollback, bounded inactive/blocked lists,
+cursor tamper/scope/expiry, all HTTP commands/current session revocation, published
+view columns and indexed point lookup on 10,000 follows. FoundationIT adds upgrade
+from V0011 with checksums and retained profile. See [Phase 3 evidence](phases/phase-3.md).
+
 Phase 2 tests both visibility types/all modes through real HTTP and application
 transactions, hierarchy/self/equal/superior denial, IDOR, current revocation,
 mode changes, admission collision/live expiry, If-Match and logical idempotency.

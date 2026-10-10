@@ -920,8 +920,8 @@ class AuthenticationIT {
     mvc.perform(get("/api/v1/users/" + actor.userId() + "/profile"))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.email").doesNotExist());
-    assertThatThrownBy(() -> profiles.change(actor, 2, own.handle(), "Fixture Name", "", "FRIENDS"))
-        .isInstanceOf(Failure.class);
+    assertThat(profiles.change(actor, 2, own.handle(), "Fixture Name", "", "FRIENDS").visibility())
+        .isEqualTo("FRIENDS");
     mvc.perform(
             patch("/api/v1/me/profile")
                 .with(csrf().asHeader())
@@ -931,7 +931,7 @@ class AuthenticationIT {
                 .content("{}"))
         .andExpect(status().isPreconditionRequired());
     var pref = profiles.preferences(actor);
-    assertThatThrownBy(() -> profiles.change(actor, 2, own.handle(), "Fixture Name", "", null))
+    assertThatThrownBy(() -> profiles.change(actor, 3, own.handle(), "Fixture Name", "", null))
         .isInstanceOf(Failure.class)
         .extracting("status")
         .isEqualTo(400);

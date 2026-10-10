@@ -80,8 +80,32 @@ class SecurityConfiguration {
                         "/api/v1/auth/oauth/facebook/authorize",
                         "/api/v1/auth/oauth/google/callback",
                         "/api/v1/auth/oauth/facebook/callback",
-                        "/api/v1/users/*/profile")
+                        "/api/v1/users/*/profile",
+                        "/api/v1/users/*/graph/*")
                     .permitAll()
+                    .requestMatchers(
+                        HttpMethod.GET, "/api/v1/me/graph/*", "/api/v1/me/friend-requests")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.PUT,
+                        "/api/v1/me/following/*",
+                        "/api/v1/me/blocks/*",
+                        "/api/v1/me/mutes/*")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.DELETE,
+                        "/api/v1/me/following/*",
+                        "/api/v1/me/blocks/*",
+                        "/api/v1/me/mutes/*",
+                        "/api/v1/me/friends/*")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.POST,
+                        "/api/v1/friend-requests",
+                        "/api/v1/friend-requests/*/accept",
+                        "/api/v1/friend-requests/*/decline",
+                        "/api/v1/friend-requests/*/cancel")
+                    .authenticated()
                     .requestMatchers(HttpMethod.GET, "/api/v1/communities", "/api/v1/communities/*")
                     .permitAll()
                     .requestMatchers(

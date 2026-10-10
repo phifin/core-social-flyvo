@@ -11,5 +11,7 @@ public interface AccountQueries {
 
   Account find(UUID userId);
 
+  java.util.Set<UUID> activeIds(java.util.List<UUID> userIds);
+
   Account guard(UUID userId, boolean exclusive);
 }

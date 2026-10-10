@@ -23,6 +23,14 @@ Graph events use the stable `graph.pair_revision` ID and increment its sequence 
 
 ## Minimal worker implementation
 
+Phase 3 adds graph pair-revision events and FRIEND_REQUEST_EXPIRY jobs through the
+existing worker. Event aggregate ID/version belongs to a retained canonical pair;
+block's after-state captures removal of both follows/friendship/pending request.
+No-op commands emit nothing, and expiry duplicate/reclaimed work is harmless.
+Payloads are specified in [graph](graph.md); no future projection/notification consumer
+is enabled. Block/mute facts are internal, never user-facing notifications.
+Source/event/job writes share the originating transaction.
+
 Use Spring scheduling to poll PostgreSQL outbox deliveries and jobs; it schedules, PostgreSQL provides durability. One application can run worker + HTTP initially; configuration allows worker-only/API-only processes later. No Quartz/JobRunr dependency initially. Adopt a job framework only if actual workflow/dashboard/scheduling needs outweigh the existing small dispatcher; do not grow a home-built workflow language.
 
 Job/delivery states are PENDING -> RUNNING -> COMPLETED, with RUNNING -> RETRY -> RUNNING for transient failures or RUNNING -> DEAD for terminal/exhausted work. Each claim increments lease_generation; acknowledgement requires matching owner/generation and an unexpired lease. Expired RUNNING is reclaimable. Scheduled recurring jobs use a deterministic kind/scheduled-time dedup key. Prune completed records after retention; never silently delete unresolved DEAD deliveries just because their creation date is old. A processed outbox event is eligible for pruning only when every delivery is terminal under the documented operator/retention policy.

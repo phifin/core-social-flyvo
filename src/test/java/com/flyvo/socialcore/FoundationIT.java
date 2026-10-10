@@ -58,7 +58,7 @@ class FoundationIT {
                 "select count(*) from information_schema.schemata where schema_name = 'platform'",
                 Integer.class))
         .isEqualTo(1);
-    assertThat(flyway.info().applied()).hasSize(11);
+    assertThat(flyway.info().applied()).hasSize(14);
     flyway.validate();
     assertThat(flyway.migrate().migrationsExecuted).isZero();
     assertThat(entityManagerFactory.getProperties())
@@ -104,7 +104,7 @@ class FoundationIT {
     var checksum = phaseZero.info().applied()[0].getChecksum();
     var upgrade =
         Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
-    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(10);
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(13);
     assertThat(upgrade.info().applied()[0].getChecksum()).isEqualTo(checksum);
     upgrade.validate();
   }
@@ -162,7 +162,7 @@ class FoundationIT {
         id);
     var upgrade =
         Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
-    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(3);
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(6);
     upgrade.validate();
     assertThat(
             java.util.Arrays.stream(upgrade.info().applied())
@@ -174,6 +174,50 @@ class FoundationIT {
             jdbc.queryForObject(
                 "SELECT status FROM account.user_account WHERE id=?", String.class, id))
         .isEqualTo("ACTIVE");
+  }
+
+  @Test
+  void phaseTwoSchemaUpgradesWithoutRewritingMigrationsOrExistingProfiles() {
+    var name = "phase_two_upgrade_" + java.util.UUID.randomUUID().toString().replace("-", "");
+    new JdbcTemplate(dataSource).execute("CREATE DATABASE " + name);
+    String url = POSTGRES.getJdbcUrl().replace("/test?", "/" + name + "?");
+    var prior =
+        Flyway.configure()
+            .dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword())
+            .target("0011")
+            .load();
+    assertThat(prior.migrate().migrationsExecuted).isEqualTo(11);
+    var checksums =
+        java.util.Arrays.stream(prior.info().applied())
+            .map(org.flywaydb.core.api.MigrationInfo::getChecksum)
+            .toList();
+    var sql =
+        new JdbcTemplate(
+            new org.springframework.jdbc.datasource.DriverManagerDataSource(
+                url, POSTGRES.getUsername(), POSTGRES.getPassword()));
+    var id = java.util.UUID.randomUUID();
+    sql.update(
+        "INSERT INTO account.user_account(id,status,platform_role,created_at,updated_at) VALUES (?,'ACTIVE','USER',now(),now())",
+        id);
+    sql.update(
+        "INSERT INTO profile.profile(user_id,handle,handle_normalized,display_name,visibility,created_at,updated_at) VALUES (?,'fixture','fixture','Synthetic','PRIVATE',now(),now())",
+        id);
+    var upgrade =
+        Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(3);
+    upgrade.validate();
+    assertThat(
+            java.util.Arrays.stream(upgrade.info().applied())
+                .limit(11)
+                .map(org.flywaydb.core.api.MigrationInfo::getChecksum)
+                .toList())
+        .isEqualTo(checksums);
+    assertThat(
+            sql.queryForObject(
+                "SELECT visibility FROM profile.profile WHERE user_id=?", String.class, id))
+        .isEqualTo("PRIVATE");
+    assertThat(sql.update("UPDATE profile.profile SET visibility='FRIENDS' WHERE user_id=?", id))
+        .isEqualTo(1);
   }
 
   @Test

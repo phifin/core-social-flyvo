@@ -78,7 +78,7 @@ public class Profile {
         || bio == null
         || bio.length() > 1000
         || visibility == null
-        || !java.util.Set.of("PUBLIC", "AUTHENTICATED", "PRIVATE").contains(visibility))
+        || !java.util.Set.of("PUBLIC", "AUTHENTICATED", "FRIENDS", "PRIVATE").contains(visibility))
       throw new IllegalArgumentException("Invalid profile");
     this.handle = handle;
     handleNormalized = handle;

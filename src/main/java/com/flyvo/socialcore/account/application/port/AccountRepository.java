@@ -6,6 +6,8 @@ import java.util.UUID;
 public interface AccountRepository {
   UserAccount find(UUID id);
 
+  java.util.Set<UUID> activeIds(java.util.List<UUID> ids);
+
   UserAccount guard(UUID id, boolean exclusive);
 
   void add(UserAccount account);

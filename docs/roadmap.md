@@ -6,7 +6,7 @@ Record the phase's actual migrations, module APIs, test commands/results, measur
 
 ## Phase 0 — Buildable architecture foundation
 
-Implementation status: [Phase 0](phases/phase-0.md), [Phase 1](phases/phase-1.md) and [Phase 2](phases/phase-2.md) delivered locally. Phase 2 awaits main review; Phase 3 onward remain unimplemented. External provider/production readiness is separately gated.
+Implementation status: [Phase 0](phases/phase-0.md), [Phase 1](phases/phase-1.md), [Phase 2](phases/phase-2.md) and [Phase 3](phases/phase-3.md) delivered locally. Phase 3 awaits main review; Phase 4 onward remain unimplemented. External provider/production readiness is separately gated.
 
 **Goal:** establish a reproducible repository that enforces the accepted design before business code exists.
 
@@ -52,6 +52,9 @@ Main reviewer alone accepts this phase.
 **Edges:** PRIVATE+OPEN is allowed with content membership gate; expired PENDING row replaced under lock; owner account deletion requires transfer/archive; suspended member cannot act until expiry even if status still ACTIVE; unban does not silently rejoin. Invitation grants only MEMBER. Member-level moderation is delivered now, not postponed until search.
 
 ## Phase 3 — Social graph and reusable privacy facts
+
+Local implementation: [evidence](phases/phase-3.md), [graph contract](graph.md).
+Independent main reviewer alone accepts this phase.
 
 **Goal:** distinct follow/friend/block/mute behavior with current authorization facts other features can rely on.
 

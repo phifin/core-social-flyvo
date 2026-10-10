@@ -1,8 +1,8 @@
 openapi: "3.1.0"
 info:
-  title: "social-core accounts and communities"
-  version: "0.2.0"
-  description: "Implemented Phases 0–2. All unsafe API calls require CSRF cookie/header and exact trusted Origin, including Bearer calls. Every Bearer validates current PostgreSQL session/account; dependency outage is 503. Auth/API responses are no-store. Unsupported routes remain deny-by-default. Browser deployment is same-site TLS; graph/content and later phases remain unimplemented."
+  title: "social-core accounts, communities and graph"
+  version: "0.3.0"
+  description: "Implemented Phases 0–3. All unsafe API calls require CSRF cookie/header and exact trusted Origin, including Bearer calls. Every Bearer validates current PostgreSQL session/account; dependency outage is 503. Auth/API responses are no-store. Unsupported routes remain deny-by-default. Browser deployment is same-site TLS; content and later phases remain unimplemented."
 paths:
   "/actuator/health":
     get:
@@ -606,7 +606,7 @@ paths:
   "/api/v1/users/{id}/profile":
     get:
       operationId: "getVisibleProfile"
-      summary: "PUBLIC anonymous; AUTHENTICATED current actor; PRIVATE owner only"
+      summary: "PUBLIC anonymous; AUTHENTICATED current actor; FRIENDS current friendship; PRIVATE owner only"
       security: []
       responses:
         '200':
@@ -629,7 +629,7 @@ paths:
           schema:
             type: "string"
             format: "uuid"
-      description: "Suspended/deleted target or inaccessible profile is 404. Any supplied Authorization header must be valid and current. FRIENDS visibility and graph rules begin in Phase 3."
+      description: "Suspended/deleted target or inaccessible profile is 404. Any supplied Authorization header must be valid and current. Bilateral block denies signed-in profile reads even for PUBLIC; mute does not deny. FRIENDS requires current friendship, with owner access retained."
   "/api/v1/me/profile":
     get:
       operationId: "getOwnProfile"
@@ -1609,6 +1609,418 @@ paths:
           "application/json":
             "schema":
               "$ref": "#/components/schemas/MemberModerationAction"
+  "/api/v1/me/following/{user}":
+    "put":
+      "operationId": "putFollow"
+      "summary": "Follow another user; repeated same state is a no-op"
+      "security":
+        -
+          "BearerAuth": []
+      "parameters":
+        -
+          "name": "user"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      "responses":
+        "204":
+          "description": "Follow another user; repeated same state is a no-op"
+        "default":
+          "$ref": "#/components/responses/Problem"
+    "delete":
+      "operationId": "deleteFollow"
+      "summary": "Remove follow; idempotent, no relationships restored"
+      "security":
+        -
+          "BearerAuth": []
+      "parameters":
+        -
+          "name": "user"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      "responses":
+        "204":
+          "description": "Remove follow; idempotent, no relationships restored"
+        "default":
+          "$ref": "#/components/responses/Problem"
+  "/api/v1/me/blocks/{user}":
+    "put":
+      "operationId": "putBlock"
+      "summary": "Block another user; repeated same state is a no-op"
+      "security":
+        -
+          "BearerAuth": []
+      "parameters":
+        -
+          "name": "user"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      "responses":
+        "204":
+          "description": "Block another user; repeated same state is a no-op"
+        "default":
+          "$ref": "#/components/responses/Problem"
+    "delete":
+      "operationId": "deleteBlock"
+      "summary": "Remove block; idempotent, no relationships restored"
+      "security":
+        -
+          "BearerAuth": []
+      "parameters":
+        -
+          "name": "user"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      "responses":
+        "204":
+          "description": "Remove block; idempotent, no relationships restored"
+        "default":
+          "$ref": "#/components/responses/Problem"
+  "/api/v1/me/mutes/{user}":
+    "put":
+      "operationId": "putMute"
+      "summary": "Mute another user; repeated same state is a no-op"
+      "security":
+        -
+          "BearerAuth": []
+      "parameters":
+        -
+          "name": "user"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      "responses":
+        "204":
+          "description": "Mute another user; repeated same state is a no-op"
+        "default":
+          "$ref": "#/components/responses/Problem"
+    "delete":
+      "operationId": "deleteMute"
+      "summary": "Remove mute; idempotent, no relationships restored"
+      "security":
+        -
+          "BearerAuth": []
+      "parameters":
+        -
+          "name": "user"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      "responses":
+        "204":
+          "description": "Remove mute; idempotent, no relationships restored"
+        "default":
+          "$ref": "#/components/responses/Problem"
+  "/api/v1/me/friends/{user}":
+    "delete":
+      "operationId": "unfriend"
+      "summary": "Remove friendship, no implicit follow changes"
+      "security":
+        -
+          "BearerAuth": []
+      "parameters":
+        -
+          "name": "user"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      "responses":
+        "204":
+          "description": "Remove friendship, no implicit follow changes"
+        "default":
+          "$ref": "#/components/responses/Problem"
+  "/api/v1/me/graph/{kind}":
+    "get":
+      "operationId": "listOwnGraph"
+      "summary": "Own graph; active accounts and current bilateral blocks filtered, except own block management"
+      "security":
+        -
+          "BearerAuth": []
+      "parameters":
+        -
+          "name": "kind"
+          "in": "path"
+          "required": true
+          "schema":
+            "enum":
+              - "following"
+              - "followers"
+              - "friends"
+              - "blocks"
+              - "mutes"
+        -
+          "name": "size"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "integer"
+            "minimum": 1
+            "maximum": 100
+            "default": 20
+        -
+          "name": "after"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+            "maxLength": 256
+      "responses":
+        "200":
+          "description": "Own graph; active accounts and current bilateral blocks filtered, except own block management"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/GraphUserPage"
+        "default":
+          "$ref": "#/components/responses/Problem"
+  "/api/v1/users/{id}/graph/{kind}":
+    "get":
+      "operationId": "listVisibleProfileGraph"
+      "summary": "Require current profile visibility; blocks deny; no private block/mute lists"
+      "security":
+        - {}
+        -
+          "BearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "name": "kind"
+          "in": "path"
+          "required": true
+          "schema":
+            "enum":
+              - "following"
+              - "followers"
+              - "friends"
+        -
+          "name": "size"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "integer"
+            "minimum": 1
+            "maximum": 100
+            "default": 20
+        -
+          "name": "after"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+            "maxLength": 256
+      "responses":
+        "200":
+          "description": "Require current profile visibility; blocks deny; no private block/mute lists"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/GraphUserPage"
+        "default":
+          "$ref": "#/components/responses/Problem"
+  "/api/v1/friend-requests":
+    "post":
+      "operationId": "requestFriendship"
+      "summary": "Create pending request or return same-direction pending request; opposite direction conflicts"
+      "security":
+        -
+          "BearerAuth": []
+      "parameters":
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      "responses":
+        "200":
+          "description": "Create pending request or return same-direction pending request; opposite direction conflicts"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/FriendRequest"
+        "default":
+          "$ref": "#/components/responses/Problem"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/GraphTarget"
+  "/api/v1/friend-requests/{id}/accept":
+    "post":
+      "operationId": "acceptFriendRequest"
+      "summary": "Addressee accepts pending request; current actor and block checks on retries"
+      "security":
+        -
+          "BearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      "responses":
+        "200":
+          "description": "Addressee accepts pending request; current actor and block checks on retries"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/FriendRequest"
+        "default":
+          "$ref": "#/components/responses/Problem"
+  "/api/v1/friend-requests/{id}/decline":
+    "post":
+      "operationId": "declineFriendRequest"
+      "summary": "Addressee declines pending request; current actor and block checks on retries"
+      "security":
+        -
+          "BearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      "responses":
+        "200":
+          "description": "Addressee declines pending request; current actor and block checks on retries"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/FriendRequest"
+        "default":
+          "$ref": "#/components/responses/Problem"
+  "/api/v1/friend-requests/{id}/cancel":
+    "post":
+      "operationId": "cancelFriendRequest"
+      "summary": "Requester cancels pending request"
+      "security":
+        -
+          "BearerAuth": []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      "responses":
+        "200":
+          "description": "Requester cancels pending request"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/FriendRequest"
+        "default":
+          "$ref": "#/components/responses/Problem"
+  "/api/v1/me/friend-requests":
+    "get":
+      "operationId": "listFriendRequests"
+      "summary": "Own live pending requests; expired, blocked and inactive counterparts filtered"
+      "security":
+        -
+          "BearerAuth": []
+      "parameters":
+        -
+          "name": "direction"
+          "in": "query"
+          "required": false
+          "schema":
+            "enum":
+              - "incoming"
+              - "outgoing"
+            "default": "incoming"
+        -
+          "name": "size"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "integer"
+            "minimum": 1
+            "maximum": 100
+            "default": 20
+        -
+          "name": "after"
+          "in": "query"
+          "required": false
+          "schema":
+            "type": "string"
+            "maxLength": 256
+      "responses":
+        "200":
+          "description": "Own live pending requests; expired, blocked and inactive counterparts filtered"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/FriendRequestPage"
+        "default":
+          "$ref": "#/components/responses/Problem"
 components:
   securitySchemes:
     BearerAuth:
@@ -1689,6 +2101,83 @@ components:
           schema:
             "$ref": "#/components/schemas/Problem"
   schemas:
+    GraphTarget:
+      "type": "object"
+      "additionalProperties": false
+      "required":
+        - "userId"
+      "properties":
+        "userId":
+          "type": "string"
+          "format": "uuid"
+    FriendRequest:
+      "type": "object"
+      "additionalProperties": false
+      "required":
+        - "id"
+        - "requesterId"
+        - "addresseeId"
+        - "status"
+        - "expiresAt"
+        - "version"
+      "properties":
+        "id":
+          "type": "string"
+          "format": "uuid"
+        "requesterId":
+          "type": "string"
+          "format": "uuid"
+        "addresseeId":
+          "type": "string"
+          "format": "uuid"
+        "status":
+          "enum":
+            - "PENDING"
+            - "ACCEPTED"
+            - "DECLINED"
+            - "CANCELLED"
+            - "EXPIRED"
+        "expiresAt":
+          "type": "string"
+          "format": "date-time"
+        "version":
+          "type": "integer"
+          "minimum": 0
+    GraphUserPage:
+      "type": "object"
+      "additionalProperties": false
+      "required":
+        - "items"
+        - "nextCursor"
+      "properties":
+        "items":
+          "type": "array"
+          "maxItems": 100
+          "items":
+            "type": "string"
+            "format": "uuid"
+        "nextCursor":
+          "type":
+            - "string"
+            - "null"
+      "description": "UUID-ascending keyset page. Authenticated encrypted cursor binds viewer, owner and list for 15 minutes; send as after. Continue until nextCursor is null, even on an empty filtered page. No totals or snapshot promise."
+    FriendRequestPage:
+      "type": "object"
+      "additionalProperties": false
+      "required":
+        - "items"
+        - "nextCursor"
+      "properties":
+        "items":
+          "type": "array"
+          "maxItems": 100
+          "items":
+            "$ref": "#/components/schemas/FriendRequest"
+        "nextCursor":
+          "type":
+            - "string"
+            - "null"
+      "description": "Same cursor rules as GraphUserPage; ascending request UUID, current pending/expiry/account/block filtering."
     "Community":
       "type": "object"
       "additionalProperties": false
@@ -2274,6 +2763,7 @@ components:
           enum:
             - "PUBLIC"
             - "AUTHENTICATED"
+            - "FRIENDS"
             - "PRIVATE"
         version:
           type: "integer"
@@ -2302,6 +2792,7 @@ components:
           enum:
             - "PUBLIC"
             - "AUTHENTICATED"
+            - "FRIENDS"
             - "PRIVATE"
     PreferenceChange:
       type: "object"
