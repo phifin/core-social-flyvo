@@ -4,14 +4,16 @@
 
 - Task: phase-4-posts-and-secure-images
 - Round: 1
-- State: CHANGES_REQUESTED
-- Last writer: main reviewer, 2026-10-10 — requested checkpoint review
-- Next owner: development chat `Develop Phase 4 — Posts & Media`
-- Assignment: user requested checking completed review and continuing the next work.
+- State: READY_FOR_REVIEW
+- Last writer: development, 2026-10-11 — complete verified Phase 4 delivery
+- Next owner: main (orchestrator/reviewer)
+- Assignment: address P4-R1/P4-R2 from `44bcc99` and complete the full Phase 4 plan.
 - Baseline: `552c4ca99692aba277b6fee6bb91b23962d65787`; clean checkout/index before coordination.
 - Accepted Phase 3 code: `bfda6e856d42282eaccd2ed70a81f49c416f86b7`.
 - Phase 4 decision commit: `ab568554cf50cfa5c2024e84c90a16ed234a967c` (documentation only).
 - Phase 4 checkpoint code: `8fe7738e637e23dc72fe2d6c9845bbe1fe6c02e3` (prerequisites only, not full implementation).
+- Complete Phase 4 code: `12fce2f8715ff7e17920b3b1bcf6e39b9b3da311`.
+- Reviewed execution baseline: `44bcc99`; checkout/index were clean before this implementation.
 - Prior verdict/findings/checks: [accepted Phase 3](handoffs/phase-3-social-graph.md).
 - Protocol: [thread workflow](thread-workflow.md), [Git workflow](git-workflow.md).
 
@@ -111,6 +113,39 @@ accepted baseline); checkout/index were clean. Implement in these internal slice
    a separate mailbox commit with its actual code hash, READY_FOR_REVIEW and main
    as next owner. No self-acceptance, Phase 5, push or agents.
 
+## Current implementation report — full Phase 4, 2026-10-11
+
+Code/documentation/tests committed as
+`12fce2f8715ff7e17920b3b1bcf6e39b9b3da311` (`feat(content): deliver phase 4 posts and secure image lifecycle`).
+This supersedes the prerequisite-only checkpoint, not main's review findings or
+Phase 3 acceptance. All six implementation-plan slices are delivered for review.
+
+- Personal/community publication, CUSTOM and inherited scope, mentions/hashtags,
+  plain text/unfetched links, current ContentAccessPolicy and published-view SQL
+  candidates/batched hydrate/bounded encrypted-cursor query.
+- Versioned body/attachment and explicit audience edits, logical create idempotency,
+  immutable revisions/current history authorization, owner blind soft deletion,
+  bounded retention/redaction and scoped attributable remove/restore. Mandatory
+  moderation action/audit/outbox commits atomically; no author-body rewrite.
+- Real upload/finalize/pinned process/status/bind, quota/rate, credential-minimized
+  isolated static JPEG/PNG/WebP decoder, generation-pinned PNG variants, current
+  source-authorized <=60-second capabilities, durable cleanup/reconciliation and
+  versioned avatar replacement/release/profile-policy access.
+- Platform external prepare/effect/ack and expired final-lease recovery; stale/
+  partial/pre-READY crash outputs never become downloadable. Cleanup confirms all
+  versions/markers before accounting release. Restricted audited replay preserves
+  the existing job and monotonically increasing generation.
+- V0015–V0021 add owned schemas, avatar/typed moderation FKs and deferred/immutable
+  guards. Applied V0001–V0014, the module DAG and SQL-view allowlist are unchanged.
+  New dependency: pure Java TwelveMonkeys imageio-webp 3.15.3, needed for static WebP;
+  existing SDK v2 remains the storage seam. Implemented OpenAPI and subsystem/schema/
+  domain/operations/README/phase record are updated, including material refinements.
+
+Detailed evidence/limits: [Phase 4](phases/phase-4.md), [content](content.md),
+[media](media.md), [operations](../ops/media.md), [OpenAPI](api/openapi.yaml).
+No Phase 5, future feed/search/notification/video/document scaffolding, acceptance,
+push, external deployment, other thread or spawned agent.
+
 ## Reviewer findings and developer responses
 
 ### Checkpoint review verdict — round 1, 2026-10-10
@@ -176,8 +211,34 @@ listed in the development report below and must still be implemented.
 
 ### Developer responses
 
-Pending for P4-R1 and P4-R2. Append implementation/evidence and real fix commit for
-each ID; do not mark either resolved. Main verifies their disposition on re-review.
+Both fixes are verified in complete code `12fce2f8715ff7e17920b3b1bcf6e39b9b3da311`.
+Both findings remain OPEN pending main's independent review; development does not
+mark resolved or accept. The checkpoint did not reduce the scope: all Phase 4
+capabilities above are now delivered, with regression evidence below.
+
+- P4-R1 developer response (verified fix proposed; status remains OPEN): Compose
+  now mounts individual application key/runtime storage files, Silo admin/KMS files,
+  and bootstrap admin/API/worker files only. Existing secrets are neither read into
+  reports nor rotated/deleted. `ComposeSecretsIT` resolves actual Compose JSON and
+  mounts synthetic fixtures on the pinned Silo image under the shared developer UID;
+  it checks required paths readable and every unrelated secret path absent. PASS in
+  targeted and full real-infrastructure runs. Actual non-root Compose startup and
+  bootstrap replay pass; Silo required paths are readable and unrelated paths absent
+  without reading secret contents. All eight existing key file inode/size/mtime/mode
+  metadata remain unchanged. Silo stopped with data/keys retained. Fix code:
+  `12fce2f8715ff7e17920b3b1bcf6e39b9b3da311`.
+- P4-R2 developer response (verified fix proposed; status remains OPEN): real unsigned-trailer tests now
+  omit Authorization and supply valid scoped API access-key identity in query auth
+  with an invalid signature. Pinned Silo rejects that streaming authentication mode
+  as HTTP 400 `InvalidRequest` with its explicit unsupported-authorization message
+  (tagged `newUnsignedV4ChunkedReader` rejects presigned auth before consumption).
+  Header invalid signatures return 403 `SignatureDoesNotMatch`; SDK-signed identical
+  payload/header controls succeed. Both ordinary PUT and nonempty valid Snowball tar
+  cases assert no versions/extracted entry before the control. The Snowball prefix
+  is signed and allowed, avoiding an IAM-only false positive. Damaged presign keeps
+  all original required signed headers. PASS on real pinned storage in targeted
+  and full verify. Fix code: `12fce2f8715ff7e17920b3b1bcf6e39b9b3da311`.
+  No vulnerable server or weakened denial was used.
 
 ### Main prerequisite decision — P4-B1 RESOLVED, 2026-10-10
 
@@ -203,6 +264,70 @@ If a required test exposes a real incompatibility, report the precise failure;
 do not weaken a denial path or substitute untested storage to proceed.
 
 ## Checks and limitations
+
+### Final development verification — 2026-10-11
+
+Installed JDK 21 explicitly selected; the shell's default Java 8 was not changed.
+
+```bash
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 \
+PATH=/usr/lib/jvm/java-21-openjdk-amd64/bin:$PATH \
+  ./mvnw -B -ntp spotless:apply test \
+  -Dtest=OpenApiContractTest,ImageProcessorTest,PostPolicyTest,ArchitectureTest,PersistenceBoundaryTest \
+  failsafe:integration-test failsafe:verify \
+  -Dit.test=Phase4IT,StorageContractIT,ComposeSecretsIT,FoundationIT
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 \
+PATH=/usr/lib/jvm/java-21-openjdk-amd64/bin:$PATH ./mvnw -B -ntp verify
+```
+
+- PASS targeted: **68 tests** (18 unit/architecture/contract +50 integration),
+  zero failures/errors/skips. Additional non-default Compose Origin/OpenAPI
+  regression **2 pass**; final documentation OpenAPI parser/reference test **1 pass**.
+  Evidence `/tmp/social-core-p4-final-targeted.log`,
+  `/tmp/social-core-p4-compose-origin.log`, `/tmp/social-core-p4-final-openapi.log`.
+- PASS full verify: **174 tests**, 39 unit/architecture/contract and 135 integration,
+  zero failures/errors/skips. Real PostgreSQL 18.6, Mailpit, exact accepted Silo;
+  25 Phase4IT +12 storage +1 Compose +1 packaged decoder, all prior suites retained.
+  Evidence `/tmp/social-core-p4-full-verify.log`. Architecture/persistence tests
+  have no new exclusions or foreign-base-table bypass. Full upgrade/fresh tests
+  validate twenty-one migrations and preserve fourteen accepted checksums/profile.
+- Named real lock waits/races cover leave/block versus publication (both orders),
+  quota, ten-image rollback/reuse and attach/cleanup. Real storage fault tests cover
+  partial/stale output, crash after both writes before READY rollback, expired tenth
+  lease/audited same-job replay, overwrite/pinned processing, invalid media,
+  purpose/avatar/privacy/retention, deletion accounting and reconciliation alerts.
+- Actual candidate EXPLAIN on 12,000 skewed rows (10% selected author) uses
+  post_author/LIMIT, ~1.5 ms on final local run (not an SLA). Hydrate's bounded JDBC
+  query count is independent of one versus one hundred posts. SQL/object/current API
+  parity uses actual published relationship/community/account views.
+- PASS final formatting/Enforcer/dependency convergence, OpenAPI YAML/no duplicate
+  keys/local refs/operation IDs, changed-document local link paths, shell syntax,
+  app/media resolved Compose and staged whitespace. No applied migration edited.
+- PASS actual Compose startup/bootstrap/replay with developer non-root UID/GID,
+  required/unrelated secret path checks without content access; eight existing
+  secret file metadata unchanged, no rotation/deletion. Silo stopped, data retained.
+  Evidence `/tmp/social-core-p4-compose-start.log`, `...-init.log`, `...-replay.log`.
+- PASS Docker application build and packaged WebP child smoke as UID 10001:10001
+  under read-only root, bounded tmpfs/1 GiB/two CPUs, dropped capabilities and
+  no-new-privileges: PACKAGED_DECODER_OK. `/tmp/social-core-p4-image-build.log`.
+  This does not claim a whole application deployment or production sandbox.
+- PASS staged patch Gitleaks 8.28.0 (pinned existing CI image, stdin/redacted): zero
+  leaks, `/tmp/social-core-p4-staged-secrets.log`. No real personal data/secret
+  contents are committed or printed. Only owned paths staged; mailbox excluded
+  from code commit and committed afterward with the actual hash.
+
+No new proven implementation/infrastructure blocker. Earlier fixture/compiler/
+boundary-budget iteration failures were fixed before final gates; no skip-to-green.
+Production S3/IAM/KMS/signature/checksum/version/delete smoke, TLS/runtime secret
+isolation, strict ingress/volume/reusable-PUT overwrite budgeting, stronger decoder
+OS/egress isolation, security review/restore/alert/legal-retention remain explicit
+deployment gates, not claimed run. Bucket 10 GiB quota is asynchronously scanned,
+not a synchronous physical cap. Both output variants are PNG; EXIF orientation is
+stripped. Existing capabilities/bytes cannot be immediately revoked. Removal image
+hold is thirty days; late restore cannot revive purged bytes. No public draft-preview,
+repair, evidence/report endpoint or future-phase behavior.
+
+The review/checkpoint reports below are historical and do not describe this delivery.
 
 ### Independent checkpoint review checks — 2026-10-10
 
@@ -360,20 +485,16 @@ Production S3 compatibility and earlier provider/production gates remain externa
 
 ## Next action and role boundary
 
-Return to the existing `Develop Phase 4 — Posts & Media` chat. First address P4-R1
-and P4-R2 with regression evidence, then continue the assigned remaining full plan:
-owned schemas/owner API guards, publication/read/history/audience/moderation,
-quota/assets/binding, fenced processing/finalize/cleanup and avatar. Set IN_PROGRESS
-and preserve the findings and developer responses. Verified slice commits are
-allowed, but a prerequisite checkpoint does not fulfill the full assignment.
+Main reviews complete code `12fce2f8715ff7e17920b3b1bcf6e39b9b3da311`, not just
+the prerequisite checkpoint. Independently verify P4-R1/P4-R2 evidence and the full
+posts/privacy/revisions/basic moderation/images/avatar scope, schema/owner boundaries,
+HTTP/current-source policy and real storage/concurrency/recovery gates. Main alone
+may mark findings resolved or accept; new findings keep stable IDs and route back
+to the existing development chat. Do not implement fixes in main or start Phase 5.
 
-Do not request approval for the already-decided storage distribution. Continue
-until the assigned capabilities, tests and docs are complete, or report a new
-concrete blocker with evidence. Then commit verified code and a separate
-READY_FOR_REVIEW mailbox with real code hash and main as next owner. No Phase 5.
-
-The original main resume assignment remains preserved below; it is not a claim
-that the requested full implementation has been completed.
+The original main resume assignment is preserved as historical context below.
+All requested Phase 4 implementation work is now handed off for review; acceptance
+and external production readiness are not implied.
 
 > Read AGENTS.md and docs/agent-handoff.md. Main resolved P4-B1 and accepted ADR-013
 > at ab568554cf50cfa5c2024e84c90a16ed234a967c. Resume Phase 4: set IN_PROGRESS and
