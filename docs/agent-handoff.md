@@ -4,9 +4,9 @@
 
 - Task: phase-3-social-graph
 - Round: 1
-- State: READY_FOR_REVIEW
-- Last writer: main acting as development under the user's Phase 3 exception
-- Next owner: main reviewer (independent review chat for this implementation)
+- State: ACCEPTED
+- Last writer: independent main reviewer, 2026-10-10
+- Next owner: main/user — await explicit assignment; no development task active
 - User assigned Phase 3 on 2026-10-10.
 - Baseline: `73bb08d4442a92c800d0e20c1d8835963f0c5966`; clean checkout/index.
 - Code commit: `bfda6e856d42282eaccd2ed70a81f49c416f86b7`.
@@ -29,13 +29,68 @@ cursors reuse platform encryption; no future consumer or module scaffold.
 Detailed scope/refinements/evidence: [Phase 3](phases/phase-3.md),
 [graph](graph.md), [operations](../ops/graph.md).
 
-## Reviewer findings
+## Reviewer verdict and findings — round 1
 
-No Phase 3 review yet. Prior findings retained in archive, not reopened.
-No finding IDs require developer responses yet. This implementation report is not
-a reviewer verdict and does not accept the phase.
+**ACCEPTED** for Phase 3 at `bfda6e856d42282eaccd2ed70a81f49c416f86b7`,
+independently reviewed on 2026-10-10. Review checkout HEAD was `7e014bc`;
+its changes after the code commit only affect AGENTS.md, this mailbox and
+thread-workflow.md. The checkout/index was clean. No executable changes were
+made during review. No actionable defect was found; no open Phase 3 finding IDs
+or required developer responses. Prior Phase 2 findings remain in their archive.
 
-## Checks and limitations
+Code inspection covered the complete Phase 3 executable diff against `73bb08d`:
+
+- Graph mutations share the canonical pair guard; user commands acquire sorted
+  shared account guards first and recheck active accounts/current pair state.
+  Block removes conflicting relations atomically; reverse blocks are independent
+  and unblocking restores nothing.
+- Request roles, opposite-direction conflict, terminal retry without regrant,
+  expiry/replacement and UUID-keyed expiry jobs match the graph contract.
+  Retained pair revisions order after-state events across deletion/recreation;
+  no-op commands emit none. Source, job, audit and event writes remain atomic.
+- Profile FRIENDS and bilateral blocks compose current owner APIs. Public graph
+  routes pass through profile policy; internal visibleEdges explicitly requires
+  caller authorization. Lists filter blocks before LIMIT, batch-check account
+  status and bind encrypted cursors to viewer/owner/kind.
+- V0012–V0014 preserve earlier migrations. Constraints, published views,
+  architecture boundaries, HTTP security mappings and OpenAPI match this phase.
+  No new dependency, future-phase implementation or architecture exclusion found.
+
+This verdict combines inspection with the gates below; it does not claim every
+possible interleaving or production workload was tested.
+
+## Independent review checks and limitations
+
+Commands ran on unchanged executable code with
+`JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64`:
+
+```bash
+./mvnw -B -ntp test '-Dtest=ArchitectureTest,PersistenceBoundaryTest' \
+  failsafe:integration-test failsafe:verify \
+  '-Dit.test=GraphIT,FoundationIT,AuthenticationIT'
+./mvnw -B -ntp spotless:check verify
+docker compose config --quiet
+/tmp/social-core-phase3-openapi.PI97MQ/bin/openapi-spec-validator docs/api/openapi.yaml
+```
+
+- Targeted: PASS, 65 tests (8 architecture + 57 integration), zero failures/errors/
+  skips. GraphIT 16, FoundationIT 11, AuthenticationIT 30.
+- Full: PASS, 124 tests (29 unit/architecture + 95 integration), zero failures/
+  errors/skips. Real pinned PostgreSQL 18.6 Testcontainers, including migration/
+  upgrade, privacy, concurrency, worker and prior-phase regressions. Spotless
+  check, Enforcer and dependency convergence passed; no formatter writes.
+- OpenAPI 3.1 and Compose configuration: PASS. Review documentation checked for
+  local link targets and whitespace before commit.
+- Review logs: `/tmp/phase3-review-targeted.log` and
+  `/tmp/phase3-review-verify.log`; temporary evidence, not tracked artifacts.
+- Docker image build and Gitleaks results below are historical implementation
+  evidence, not rerun review gates. Container HTTP smoke, remote CI, live providers
+  and production readiness were not verified in this round. MockMvc covers HTTP
+  boundaries; the 10,000-edge test checks follow point lookup, not production
+  capacity or query plans for every graph list.
+- No code/tests/migrations changed, no push/deploy and no Phase 4 work.
+
+## Historical implementation checks and limitations
 
 - Java 21 full `./mvnw -B -ntp spotless:apply verify`: PASS, 124 tests
   (29 unit/architecture + 95 real integration), zero failures/errors/skips.
@@ -60,15 +115,9 @@ No chat creation or agent spawning is implied; the user switches chats manually.
 
 ## Next action
 
-Ask the user to open a new chat named `Review Phase 3 — Social Graph` for independent
-review, since this conversation implemented Phase 3. Suggested prompt:
-
-> Read AGENTS.md, docs/agent-handoff.md and docs/thread-workflow.md. Act as the main
-> reviewer for Phase 3 at bfda6e856d42282eaccd2ed70a81f49c416f86b7. Review contracts,
-> actual code and evidence; run appropriate checks. Do not implement fixes or start
-> Phase 4. Record stable findings and verdict in the mailbox, commit review docs,
-> and report the exact next owner. Preserve the orchestrator-only role boundary.
-
-After review, this orchestrator routes fixes to a development chat if needed and
-reviews delivered fixes. Phase 4 requires user assignment and a development prompt,
-not direct implementation here. Do not self-accept this implementation or push.
+Next owner is main/user. Phase 3 requires no fix round; await the user's next
+assignment. Do not start Phase 4 automatically. If assigned later, main prepares
+a scoped prompt and proposes a development chat (for example,
+`Develop Phase 4 — Media`); the user switches chats manually. Archive this accepted
+mailbox only when initializing that new task. Main remains orchestrator/reviewer,
+not the implementer. No agent spawning, external messaging or push is authorized.

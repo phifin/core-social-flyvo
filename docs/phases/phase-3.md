@@ -1,9 +1,15 @@
 # Phase 3 — Social graph
 
-Implemented locally on 2026-10-10; independent main review pending. Baseline
+Implemented locally and accepted by independent main review on 2026-10-10. Baseline
 `73bb08d4442a92c800d0e20c1d8835963f0c5966`; Phase 2 acceptance is preserved in
 [the archived mailbox](../handoffs/phase-2-communities.md). Actual code commit is
 recorded in the subsequent [handoff](../agent-handoff.md), not self-referenced here.
+
+Independent round 1 accepted code `bfda6e856d42282eaccd2ed70a81f49c416f86b7`
+with no open findings. Reviewer reran the targeted 65-test gate and full 124-test
+`spotless:check verify` gate, both with zero failures/errors/skips, plus OpenAPI
+and Compose validation. See the mailbox for inspection scope and limitations;
+the verification section below preserves the original implementation evidence.
 
 ## Delivered scope
 

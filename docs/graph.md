@@ -1,6 +1,6 @@
 # Social graph — Phase 3
 
-Local implementation awaits independent main review. Read with [domain](domain-model.md),
+Local implementation accepted after independent main review on 2026-10-10. Read with [domain](domain-model.md),
 [security](security.md), [schema](database-design.md), [ADR-006](adr/006-social-graph-and-interactions.md)
 and [OpenAPI](api/openapi.yaml). Content/feed/notification consumers remain later phases.
 
