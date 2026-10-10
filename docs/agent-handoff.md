@@ -3,14 +3,17 @@
 ## Routing
 
 - Task: phase-2-communities
-- Round: 1
-- State: CHANGES_REQUESTED
-- Last writer: main reviewer
-- Next owner: development — address Phase 2 R1–R2 below
+- Round: 2 — development response to first main review
+- State: READY_FOR_REVIEW
+- Last writer: development
+- Next owner: main reviewer — re-review Phase 2 R1–R2 proposed fixes
 - User assignment: 2026-10-10; explicitly authorized Phase 2 implementation.
 - Baseline HEAD: `306465b635a2f4a0f6c676aa1b1a2105a4aed140` on `master`.
 - Accepted Phase 1 code: `7aa6b47510f0c51cd959b54b0d46827a7266dba0`.
-- Phase 2 code commit: `f1cde63f06a10f93ac8fa6391c0f678af9600ab1`.
+- Original Phase 2 code commit: `f1cde63f06a10f93ac8fa6391c0f678af9600ab1`.
+- Current Phase 2 fix commit: `1663507a7c00e2fb472192c84e1a82bf2a17bac6`.
+- Repair baseline: `b008fba6314082f80750c67163a8ec4080d5dc3c` (mailbox-only review),
+  clean worktree/index on `master`; reviewed production code still `f1cde63`.
 - Initial worktree/index: clean; history and accepted review independently inspected.
 - Prior mailbox: [accepted Phase 1 review](handoffs/phase-1-review-fixes.md).
 - Protocol: [thread workflow](thread-workflow.md), [Git workflow](git-workflow.md).
@@ -36,6 +39,12 @@ Exact semantics: [community subsystem](community.md),
 [OpenAPI](api/openapi.yaml), [operations](../ops/community.md).
 52 task-owned files committed, no dependency introduction or future module scaffold.
 No subagents, external contact, push, merge or deployment.
+
+Round 2 changes only R1–R2 and necessary tests/contracts: atomic idempotency claim,
+concurrency-safe bounded prune and source-specific event status, with eight new
+permanent PostgreSQL regressions. Fourteen task-owned fix files committed; no
+migration/dependency/HTTP shape change or Phase 3. This separate mailbox commit
+contains no further executable changes.
 
 ## Reviewer verdict and findings
 
@@ -117,7 +126,66 @@ directory. No old finding was reopened or independently marked resolved by devel
 - Disposition: OPEN. Development should append a PROPOSED_FIXED response with
   code hash, regression names/results and limitations; main reviewer closes it.
 
+## Developer responses — round 2, 2026-10-10
+
+### R1 — PROPOSED_FIXED (reviewer disposition remains OPEN)
+
+- Fix commit: `1663507a7c00e2fb472192c84e1a82bf2a17bac6`.
+- ResourceIdempotency.claim now inserts/locks/renews/returns with one PostgreSQL
+  UPSERT/RETURNING, eliminating the cleanup-sensitive INSERT/SELECT sequence.
+  At/past expiry it renews hash/expiry and clears the old reference; live replay
+  preserves every logical field and original expiry. Mutation/reference remain
+  atomic under this key's row lock; current authority and body mismatch remain
+  enforced. Live replay performs a logically unchanged UPDATE to obtain the row
+  atomically, a deliberate PostgreSQL implementation choice, not cached authority.
+- DurableWorkStore.prune locks at most 500 expired candidates with FOR UPDATE
+  SKIP LOCKED in deterministic expiry/key order; DELETE also checks current expiry.
+  It skips in-use/renewing records and still removes genuinely expired unused keys.
+- Reproduced before production edits: `pruneSkipsRenewingIdempotencyAndPreservesReplayWindow`
+  fails with renewed record count 0; `idempotencyClaimSurvivesCleanupAtStatementBoundary`
+  raises EmptyResultDataAccessException. Both are application failures on real
+  PostgreSQL, not mocked persistence or infrastructure errors. Both pass after fix.
+- Additional permanent regressions: `claimWaitsForCleanupDeletionThenCreatesOneReplayableResource`,
+  `pruneDeletesOnlyExpiredUnusedKeysInBatchesOfFiveHundred`, and
+  `renewedAdmissionKeysReplayTerminalReferencesWithoutExtraEventsOrJobs`.
+  Latches/real statement instrumentation/pg_blocking_pids establish renewal-first,
+  cleanup-at-boundary and cleanup-first interleavings; no sleeps/fake SQL results.
+  Assert retained UUID, same-body replay, changed-body 409, exact expiry boundary,
+  unchanged live expiry, no extra resources/events/jobs and terminal admission replay.
+- Results: all five R1 regressions pass in targeted and full suites below.
+  No schema rewrite/new infrastructure; contended cleanup can safely lag.
+
+### R2 — PROPOSED_FIXED (reviewer disposition remains OPEN)
+
+- Fix commit: `1663507a7c00e2fb472192c84e1a82bf2a17bac6`.
+- CommunityAccess now has explicit community/membership/admission producer helpers.
+  Lifecycle events read committed post-transition community status (ARCHIVED on
+  archive); membership events read subject membership status, admission events
+  retain invitation/request status. Envelope uses current community version.
+  Actor membership no longer decides the meaning of the event's status.
+- Producer record JavaDoc and [event contract](events-and-jobs.md) explicitly define
+  each status/sourceId/subject and envelope/membership version. V1 payload shape
+  unchanged; no future consumer implemented.
+- `lifecycleEventsDescribeCommittedCommunityStateAndArchiveRetryIsSilent`
+  reproduced ACTIVE instead of ARCHIVED before production edits, then passes.
+  It asserts persisted create/settings/archive status/source/version and archive
+  retry emits no duplicate event. Additional regressions:
+  `membershipAndAdmissionEventsKeepTheirOwnSourceStatusesAndVersions` and
+  `rollbackKeepsSourceAndCorrectLifecycleMembershipAdmissionEventsAtomic`.
+  They check join/role/leave/suspend/ban/unban/owner transfer, invite/create/accept,
+  request/create/approve, membership source metadata and rollback of source/event/
+  idempotency/job together. Existing mandatory audit failure regression still passes.
+- Results: all three R2 regressions pass in targeted and full suites below.
+  Historical outbox payloads are not rewritten; no consumer is enabled and future
+  projections must backfill/reconcile authoritative source before rollout.
+
 ## Developer refinements
+
+Development resumed R1–R2 on 2026-10-10 at `b008fba` on `master`, clean
+worktree/index. That review commit changed only the mailbox; the reviewed executable
+baseline was `f1cde63`. Original findings/dispositions above remain untouched.
+Regression reproduction precedes fixes; scope is idempotency cleanup/claim and
+source-correct community events only, with no Phase 3 or schema redesign.
 
 - Archive question resolved by the repository's documented precedence: the
   detailed domain contract explicitly permits owner leave after archive; general
@@ -133,7 +201,7 @@ directory. No old finding was reopened or independently marked resolved by devel
   Stable slug bounds, 365-day suspension ceiling and bounded offset lists are
   documented in subsystem/schema/OpenAPI. No superseding ADR needed.
 
-## Actual checks — development, 2026-10-10
+## Actual checks — initial development, 2026-10-10
 
 Java 21 used via `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64`; Docker available.
 Commands and detailed named coverage are in the phase record.
@@ -166,6 +234,33 @@ Commands and detailed named coverage are in the phase record.
 - After code commit only this mailbox changes; appropriate link/diff checks are
   run for the documentation handoff, without a redundant executable suite.
 
+## Actual checks — R1–R2 repair round, 2026-10-10
+
+- Before fixes: completed three-test PostgreSQL reproduction, 2 assertion failures
+  (renewed record deleted / archive payload ACTIVE), 1 application empty-row error,
+  zero skips. An interrupted earlier attempt produced no results and was rerun.
+  After fixes those same three pass; no production fix preceded reproduction.
+- Targeted `./mvnw -B -ntp spotless:apply test
+  '-Dtest=CommunityPolicyTest,ArchitectureTest,PersistenceBoundaryTest'
+  failsafe:integration-test failsafe:verify '-Dit.test=CommunityIT,FoundationIT'`:
+  BUILD SUCCESS, **11 unit/architecture + 44 integration = 55 tests**, zero
+  failures/errors/skips. CommunityIT now 34 (eight added regressions), FoundationIT 10.
+- `./mvnw -B -ntp verify`: BUILD SUCCESS, **29 unit/architecture + 78 integration
+  = 107 tests**, zero failures/errors/skips. Java 21, PostgreSQL 18.6/Mailpit/provider
+  tests, formatting, Enforcer/dependency convergence and architecture checks ran.
+  Migration/owner/view contracts and prior Phase 1 security regressions pass unchanged.
+- Local Markdown links/working and staged whitespace checks pass; exact staged
+  source snapshot scanned by pinned Gitleaks 8.28.0, no leaks. Ignored keys/build
+  artifacts excluded. Only evidence text was added after that scan, no new code.
+- Exact commands/results/limitations: [repair evidence](phases/phase-2.md).
+  Logs `/tmp/social-core-phase2-r1-r2-red.log`, `-green-initial.log`, `-targeted.log`,
+  `-verify.log`, `-gitleaks.log` are temporary local artifacts, not committed.
+- Docker build/isolated HTTP smoke/OpenAPI validator and remote CI were not rerun
+  in this repair round; no image configuration/HTTP/spec shape change. Prior results
+  above remain attributed to initial implementation, not claimed as fresh checks.
+- After fix commit only this mailbox changes; link/diff checks run for its separate
+  documentation commit. No acceptance, external messaging, push, deploy or Phase 3.
+
 ## Limitations and external gates
 
 No known local implementation/test/commit blocker. Main review remains required.
@@ -178,11 +273,10 @@ repair. No public launch or production-readiness claim.
 
 ## Exact next action
 
-Development addresses R1–R2 only and necessary regression/documentation updates.
-Preserve these findings and append per-ID responses. Run targeted tests and full
-verify, commit verified fixes, then commit mailbox separately referencing the real
-fix hash. Set READY_FOR_REVIEW and next owner main reviewer, not ACCEPTED.
-Do not start Phase 3, push or deploy from this handoff.
+Main reviewer re-reviews `1663507a7c00e2fb472192c84e1a82bf2a17bac6` against preserved
+R1–R2 and the PROPOSED_FIXED responses, independently checks PostgreSQL regressions/
+verify and updates original dispositions/verdict. Development has not closed either
+finding or accepted Phase 2. Current state READY_FOR_REVIEW; no Phase 3, push or deploy.
 
 ## Main review checks and limitations — 2026-10-10
 
