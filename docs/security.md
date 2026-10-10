@@ -105,7 +105,7 @@ Edits/delete additionally require ownership, except moderation endpoints with ex
 
 ## Community permission matrix
 
-All roles must have effective ACTIVE, unsuspended membership; archived communities deny writes. Higher roles include lower permissions unless excluded below.
+All roles must have effective ACTIVE, unsuspended membership; archived communities deny writes except the domain's explicit self-leave allowance (including retained owner). Higher roles include lower permissions unless excluded below.
 
 | Action | MEMBER | MODERATOR | ADMIN | OWNER |
 |---|---|---|---|---|
@@ -122,6 +122,16 @@ All roles must have effective ACTIVE, unsuspended membership; archived communiti
 Staff cannot sanction self, owner, or equal/higher effective role. Only owner can act on ADMIN; ADMIN can act on MODERATOR. Platform ADMIN uses separate audited endpoints to suspend accounts and handle otherwise unmoderatable owner abuse. Bootstrap platform admins out of band; no public endpoint grants platform roles. Before public deployment require operator access controls and MFA at the administrative gateway; ordinary consumer MFA is a later feature.
 
 ## Surfaces affected by privacy changes
+
+Phase 2 implements community authority through exclusive transition guards and
+transaction-required shared write guards. Discovery cards grant no private access;
+member history requires current effective membership, request history requires
+ADMIN/OWNER, invitation response requires invitee or scoped staff. Membership
+sanctions commit with attributable moderation.action/scoped audit/outbox; reason
+and snapshots are private and absent from public responses/events. No ordinary
+platform ADMIN bypass or grant endpoint is added. Account closure takes its
+exclusive account guard before checking active community ownership, serialized
+against creation/transfer's shared owner account guard. See [community](community.md).
 
 | Surface | Rule |
 |---|---|

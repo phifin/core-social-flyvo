@@ -2,7 +2,7 @@
 
 A reusable Java backend core for social networks and communities. The core has no family, university, alumni, employer, or other application-specific domain concepts.
 
-**Current status: Phase 1 accounts, authentication, basic profiles and durable email implemented.** Communities and later social features remain planned. The application is `social-core`, root package `com.flyvo.socialcore`; the checkout may remain `fly-social`. See [Phase 0](docs/phases/phase-0.md) and [Phase 1 evidence](docs/phases/phase-1.md). Architecture documents describe the target; phase records describe delivery.
+**Current status: Phase 2 communities, membership and scoped authority implemented locally; awaiting main review.** Phase 1 is accepted. Graph and later social features remain planned. The application is `social-core`, root package `com.flyvo.socialcore`; the checkout may remain `fly-social`. See [Phase 0](docs/phases/phase-0.md), [Phase 1](docs/phases/phase-1.md), [Phase 2 evidence](docs/phases/phase-2.md) and [community contract](docs/community.md). Architecture documents describe the target; phase records describe delivery.
 
 ## Start here
 
@@ -74,7 +74,7 @@ GitHub Actions runs the same verify gate, validates Compose, builds the image af
 | `GET /actuator/health` | Aggregate status only; no database/component details |
 | `GET /actuator/health/liveness` | Process availability, independent of database health |
 | `GET /actuator/health/readiness` | Application availability plus PostgreSQL connectivity; database loss returns 503 |
-| Implemented Phase 1 routes | Explicit auth/privacy rules in OpenAPI; current PostgreSQL session/account checks |
+| Implemented Phase 1/2 routes | Explicit auth/privacy/scoped-role rules in OpenAPI; current PostgreSQL account/session/community checks |
 | Unsupported GET requests | 401 without authentication, 403 with it; deny by default |
 | Unsafe methods without CSRF proof | 403 Problem Details |
 
@@ -82,7 +82,9 @@ Health probes and explicitly implemented auth/onboarding and visible-profile rou
 
 Responses carry `X-Request-ID`; safe incoming IDs up to 64 ASCII characters are retained and invalid IDs are replaced. Structured JSON logs include requestId from MDC during request handling. Errors expose stable code/requestId and sanitized details, not rejected values or exception messages. JDBC connect/read timeouts are five seconds, pool acquisition five seconds, and readiness is intentionally separate from liveness.
 
-Flyway `V0001` is unchanged; `V0002`–`V0008` add owned account, identity, profile and durable-work state. Hibernate validates account/profile mappings; identity/worker adapters use parameterized JDBC under the same local transaction manager. OSIV and auto-DDL remain off. Production must separate migration/runtime roles before launch. No community, graph, media, Redis or broker is introduced.
+Flyway `V0001`–`V0008` remain unchanged; `V0009`–`V0011` add communities, memberships/admission, append-only member moderation, published community views and resource-reference idempotency. Hibernate validates account/profile mappings; community/identity/worker adapters use parameterized JDBC under the same local transaction manager. OSIV and auto-DDL remain off. Production must separate migration/runtime roles before launch. No graph, media, Redis or broker is introduced.
+
+Community flow: create PRIVATE/INVITE_ONLY by default, or choose visibility and OPEN/REQUEST/INVITE_ONLY. Staff manage invitations/requests; join grants MEMBER only. OWNER transfers atomically to an effective member or archives before leaving/closing an account. Use community ETag for settings/transfer/archive and target membership ETag for roles/removal/sanctions. Invitation expiry is enforced live and durably scheduled with the existing worker. [Community operations](ops/community.md) describes retry, bounds and launch gates.
 
 ## Troubleshooting
 

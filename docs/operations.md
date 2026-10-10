@@ -28,6 +28,10 @@ Micrometer metrics: request rate/latency/errors by route, connection pool satura
 
 ## Failure and recovery contracts
 
+Phase 2 bounds, DB job replay/fencing, private sanction records and current-owner
+closure checks are covered by [community operations](../ops/community.md).
+No new external infrastructure/dependency or deployment authorization is added.
+
 | Failure | Expected behavior |
 |---|---|
 | PostgreSQL unavailable | Protected reads/writes fail closed 503; no cached permission bypass; readiness false |

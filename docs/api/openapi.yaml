@@ -1,8 +1,8 @@
 openapi: "3.1.0"
 info:
-  title: "social-core accounts and authentication"
-  version: "0.1.0"
-  description: "Implemented Phase 0/1 only. All unsafe API calls require CSRF cookie/header and exact trusted Origin, including Bearer calls. Every Bearer validates current PostgreSQL session/account; dependency outage is 503. Auth/API responses are no-store. Unsupported routes remain deny-by-default. Browser deployment is same-site TLS; native clients and Phase 2+ are not implemented."
+  title: "social-core accounts and communities"
+  version: "0.2.0"
+  description: "Implemented Phases 0–2. All unsafe API calls require CSRF cookie/header and exact trusted Origin, including Bearer calls. Every Bearer validates current PostgreSQL session/account; dependency outage is 503. Auth/API responses are no-store. Unsupported routes remain deny-by-default. Browser deployment is same-site TLS; graph/content and later phases remain unimplemented."
 paths:
   "/actuator/health":
     get:
@@ -746,6 +746,869 @@ paths:
           "application/json":
             schema:
               "$ref": "#/components/schemas/PreferenceChange"
+  "/api/v1/communities":
+    "get":
+      "operationId": "discoverCommunities"
+      "summary": "Public cards anonymously; public/private cards for signed-in users"
+      "description": "Cards omit ownerId and joinMode. No member list or exact total is exposed."
+      "security":
+        []
+      "parameters":
+        -
+          "name": "size"
+          "in": "query"
+          "schema":
+            "type": "integer"
+            "minimum": 1
+            "maximum": 100
+            "default": 20
+        -
+          "name": "offset"
+          "in": "query"
+          "schema":
+            "type": "integer"
+            "minimum": 0
+            "maximum": 10000
+            "default": 0
+      "responses":
+        "200":
+          "description": "Public cards anonymously; public/private cards for signed-in users"
+          "headers":
+            "ETag":
+              "schema":
+                "type": "string"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "required":
+                  - "items"
+                "properties":
+                  "items":
+                    "type": "array"
+                    "items":
+                      "$ref": "#/components/schemas/Community"
+                  "nextCursor":
+                    "type": "null"
+                    "description": "Small bounded lists use explicit offset, no cursor or total. Advance offset by items.length; a short/empty page ends traversal."
+        "default":
+          "$ref": "#/components/responses/Problem"
+    "post":
+      "operationId": "createCommunity"
+      "summary": "Create an ACTIVE community and its sole effective OWNER"
+      "description": "Defaults PRIVATE + INVITE_ONLY. Stable lowercase slug. No actor/owner/role/status input. Optional Idempotency-Key retains logical reference for 24 hours; replays recheck current access."
+      "security":
+        -
+          "BearerAuth":
+            []
+      "parameters":
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+        -
+          "$ref": "#/components/parameters/IdempotencyKey"
+      "responses":
+        "201":
+          "description": "Create an ACTIVE community and its sole effective OWNER"
+          "headers":
+            "ETag":
+              "schema":
+                "type": "string"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Community"
+        "default":
+          "$ref": "#/components/responses/Problem"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/CommunityCreate"
+  "/api/v1/communities/{id}":
+    "get":
+      "operationId": "readCommunity"
+      "summary": "Read public settings or a minimal private discovery card"
+      "description": "Anonymous PRIVATE read is 404. Signed-in outsider gets card with ownerId/joinMode null. Effective members can read private settings; banned/suspended viewers get only discovery card. Invalid supplied Bearer remains 401. ETag reflects community transition version."
+      "security":
+        []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+      "responses":
+        "200":
+          "description": "Read public settings or a minimal private discovery card"
+          "headers":
+            "ETag":
+              "schema":
+                "type": "string"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Community"
+        "default":
+          "$ref": "#/components/responses/Problem"
+    "patch":
+      "operationId": "changeCommunity"
+      "summary": "ADMIN/OWNER changes settings under exclusive guard"
+      "description": "Omitted/null fields stay unchanged. Slug is immutable. Join mode changes never approve pending requests. ARCHIVED returns 409."
+      "security":
+        -
+          "BearerAuth":
+            []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+        -
+          "$ref": "#/components/parameters/IfMatch"
+      "responses":
+        "200":
+          "description": "ADMIN/OWNER changes settings under exclusive guard"
+          "headers":
+            "ETag":
+              "schema":
+                "type": "string"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Community"
+        "default":
+          "$ref": "#/components/responses/Problem"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/CommunitySettings"
+  "/api/v1/communities/{id}/archive":
+    "post":
+      "operationId": "archiveCommunity"
+      "summary": "OWNER archives; preserve authorized history"
+      "description": "Archive blocks join, invites, request review, settings, roles, sanctions and transfer. Domain-defined self-leave remains allowed. Ownership no longer blocks account closure."
+      "security":
+        -
+          "BearerAuth":
+            []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+        -
+          "$ref": "#/components/parameters/IfMatch"
+      "responses":
+        "200":
+          "description": "OWNER archives; preserve authorized history"
+          "headers":
+            "ETag":
+              "schema":
+                "type": "string"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Community"
+        "default":
+          "$ref": "#/components/responses/Problem"
+  "/api/v1/communities/{id}/ownership-transfers":
+    "post":
+      "operationId": "transferCommunityOwner"
+      "summary": "Transfer to a current effective ACTIVE account/member"
+      "description": "OWNER only. Atomically replace owner pointer and demote previous owner to ADMIN. No self-transfer, suspended or inactive successor. Guard successor account before community."
+      "security":
+        -
+          "BearerAuth":
+            []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+        -
+          "$ref": "#/components/parameters/IfMatch"
+      "responses":
+        "200":
+          "description": "Transfer to a current effective ACTIVE account/member"
+          "headers":
+            "ETag":
+              "schema":
+                "type": "string"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Community"
+        "default":
+          "$ref": "#/components/responses/Problem"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/CommunityUser"
+  "/api/v1/communities/{id}/members":
+    "get":
+      "operationId": "listCommunityMembers"
+      "summary": "Current effective members read retained membership history"
+      "description": "Nonmember/suspended/banned viewer gets 404 even in PUBLIC community. Stable userId ordering, size<=100, offset<=10000, no total. Minimal IDs/role/lifecycle only, no profile or email."
+      "security":
+        -
+          "BearerAuth":
+            []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "name": "size"
+          "in": "query"
+          "schema":
+            "type": "integer"
+            "minimum": 1
+            "maximum": 100
+            "default": 20
+        -
+          "name": "offset"
+          "in": "query"
+          "schema":
+            "type": "integer"
+            "minimum": 0
+            "maximum": 10000
+            "default": 0
+      "responses":
+        "200":
+          "description": "Current effective members read retained membership history"
+          "headers":
+            "ETag":
+              "schema":
+                "type": "string"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "required":
+                  - "items"
+                "properties":
+                  "items":
+                    "type": "array"
+                    "items":
+                      "$ref": "#/components/schemas/Membership"
+                  "nextCursor":
+                    "type": "null"
+                    "description": "Small bounded lists use explicit offset, no cursor or total. Advance offset by items.length; a short/empty page ends traversal."
+        "default":
+          "$ref": "#/components/responses/Problem"
+  "/api/v1/communities/{id}/members/me":
+    "put":
+      "operationId": "joinOpenCommunity"
+      "summary": "Idempotently join/reactivate under the current OPEN mode"
+      "description": "PRIVATE+OPEN supported. Invitation/request paths never bypass current ban/suspension. Effective existing membership is a no-op preserving role/events; rejoin reuses row with MEMBER role and incremented version."
+      "security":
+        -
+          "BearerAuth":
+            []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      "responses":
+        "200":
+          "description": "Idempotently join/reactivate under the current OPEN mode"
+          "headers":
+            "ETag":
+              "schema":
+                "type": "string"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Membership"
+        "default":
+          "$ref": "#/components/responses/Problem"
+    "delete":
+      "operationId": "leaveCommunity"
+      "summary": "Self leave; ACTIVE owner must first transfer/archive"
+      "description": "If-Match is membership version, obtainable from member list/join. Self-leave is the only archived membership command. Suspended members cannot act."
+      "security":
+        -
+          "BearerAuth":
+            []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+        -
+          "$ref": "#/components/parameters/IfMatch"
+      "responses":
+        "204":
+          "description": "Self leave; ACTIVE owner must first transfer/archive"
+        "default":
+          "$ref": "#/components/responses/Problem"
+  "/api/v1/communities/{id}/members/{user}":
+    "delete":
+      "operationId": "removeCommunityMember"
+      "summary": "Scoped staff removes a lower-role ACTIVE member"
+      "description": "If-Match is target membership version. MODERATOR can remove MEMBER, ADMIN can remove MODERATOR, OWNER can remove ADMIN. Deny self/equal/superior/owner. ARCHIVED denies."
+      "security":
+        -
+          "BearerAuth":
+            []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "name": "user"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+        -
+          "$ref": "#/components/parameters/IfMatch"
+      "responses":
+        "204":
+          "description": "Scoped staff removes a lower-role ACTIVE member"
+        "default":
+          "$ref": "#/components/responses/Problem"
+  "/api/v1/communities/{id}/members/{user}/role":
+    "patch":
+      "operationId": "changeCommunityRole"
+      "summary": "ADMIN/OWNER changes a lower member role"
+      "description": "ADMIN may promote/demote MEMBER/MODERATOR. Only OWNER grants/removes ADMIN. Deny self and equal/higher effective role; OWNER never stored in membership. Target must be effective. If-Match is target membership version."
+      "security":
+        -
+          "BearerAuth":
+            []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "name": "user"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+        -
+          "$ref": "#/components/parameters/IfMatch"
+      "responses":
+        "200":
+          "description": "ADMIN/OWNER changes a lower member role"
+          "headers":
+            "ETag":
+              "schema":
+                "type": "string"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/Membership"
+        "default":
+          "$ref": "#/components/responses/Problem"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/CommunityRole"
+  "/api/v1/communities/{id}/invitations":
+    "post":
+      "operationId": "inviteCommunityMember"
+      "summary": "ADMIN/OWNER invites an existing active user for seven days"
+      "description": "Only MEMBER is granted. Duplicate live pending invitation returns original ID; expired pending row is resolved before replacement under lock. New invite cancels older pending request. Optional 24h Idempotency-Key rechecks current staff authority and body (409 on mismatch)."
+      "security":
+        -
+          "BearerAuth":
+            []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+        -
+          "$ref": "#/components/parameters/IdempotencyKey"
+      "responses":
+        "201":
+          "description": "ADMIN/OWNER invites an existing active user for seven days"
+          "headers":
+            "ETag":
+              "schema":
+                "type": "string"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/CommunityInvitation"
+        "default":
+          "$ref": "#/components/responses/Problem"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/CommunityUser"
+  "/api/v1/me/community-invitations":
+    "get":
+      "operationId": "listOwnCommunityInvitations"
+      "summary": "Own live pending invitations; expiry enforced without cleanup"
+      "description": "Stable createdAt/id descending, bounded offset, no total. Only IDs/status/version; no private member details."
+      "security":
+        -
+          "BearerAuth":
+            []
+      "parameters":
+        -
+          "name": "size"
+          "in": "query"
+          "schema":
+            "type": "integer"
+            "minimum": 1
+            "maximum": 100
+            "default": 20
+        -
+          "name": "offset"
+          "in": "query"
+          "schema":
+            "type": "integer"
+            "minimum": 0
+            "maximum": 10000
+            "default": 0
+      "responses":
+        "200":
+          "description": "Own live pending invitations; expiry enforced without cleanup"
+          "headers":
+            "ETag":
+              "schema":
+                "type": "string"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "required":
+                  - "items"
+                "properties":
+                  "items":
+                    "type": "array"
+                    "items":
+                      "$ref": "#/components/schemas/CommunityInvitation"
+                  "nextCursor":
+                    "type": "null"
+                    "description": "Small bounded lists use explicit offset, no cursor or total. Advance offset by items.length; a short/empty page ends traversal."
+        "default":
+          "$ref": "#/components/responses/Problem"
+  "/api/v1/community-invitations/{id}/accept":
+    "post":
+      "operationId": "acceptCommunityInvitation"
+      "summary": "Only invitee accepts invitation"
+      "description": "Purpose-specific transition under owning community guard. Repeat same terminal result is idempotent after current authorization. Expiry at expiresAt denies acceptance, ban/suspension cannot be bypassed. Current join mode does not invalidate a live explicit invitation. ARCHIVED denies."
+      "security":
+        -
+          "BearerAuth":
+            []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      "responses":
+        "200":
+          "description": "Only invitee accepts invitation"
+          "headers":
+            "ETag":
+              "schema":
+                "type": "string"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/CommunityInvitation"
+        "default":
+          "$ref": "#/components/responses/Problem"
+  "/api/v1/community-invitations/{id}/decline":
+    "post":
+      "operationId": "declineCommunityInvitation"
+      "summary": "Only invitee declines invitation"
+      "description": "Purpose-specific transition under owning community guard. Repeat same terminal result is idempotent after current authorization. Expiry at expiresAt denies acceptance, ban/suspension cannot be bypassed. Current join mode does not invalidate a live explicit invitation. ARCHIVED denies."
+      "security":
+        -
+          "BearerAuth":
+            []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      "responses":
+        "200":
+          "description": "Only invitee declines invitation"
+          "headers":
+            "ETag":
+              "schema":
+                "type": "string"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/CommunityInvitation"
+        "default":
+          "$ref": "#/components/responses/Problem"
+  "/api/v1/community-invitations/{id}/revoke":
+    "post":
+      "operationId": "revokeCommunityInvitation"
+      "summary": "Scoped ADMIN/OWNER revokes invitation"
+      "description": "Purpose-specific transition under owning community guard. Repeat same terminal result is idempotent after current authorization. Expiry at expiresAt denies acceptance, ban/suspension cannot be bypassed. Current join mode does not invalidate a live explicit invitation. ARCHIVED denies."
+      "security":
+        -
+          "BearerAuth":
+            []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      "responses":
+        "200":
+          "description": "Scoped ADMIN/OWNER revokes invitation"
+          "headers":
+            "ETag":
+              "schema":
+                "type": "string"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/CommunityInvitation"
+        "default":
+          "$ref": "#/components/responses/Problem"
+  "/api/v1/communities/{id}/join-requests":
+    "post":
+      "operationId": "requestCommunityJoin"
+      "summary": "Request under current REQUEST mode"
+      "description": "Duplicate pending request returns original ID. A new request revokes/marks expired the older pending invitation; no simultaneous pending paths. Banned/suspended or already effective members denied."
+      "security":
+        -
+          "BearerAuth":
+            []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+        -
+          "$ref": "#/components/parameters/IdempotencyKey"
+      "responses":
+        "201":
+          "description": "Request under current REQUEST mode"
+          "headers":
+            "ETag":
+              "schema":
+                "type": "string"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/CommunityJoinRequest"
+        "default":
+          "$ref": "#/components/responses/Problem"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/CommunityRequestMessage"
+    "get":
+      "operationId": "listCommunityJoinRequests"
+      "summary": "Scoped ADMIN/OWNER reviews retained requests"
+      "description": "Stable createdAt/id descending; bounded offset, no total. Private request message only within authorized staff scope. ARCHIVED history remains readable."
+      "security":
+        -
+          "BearerAuth":
+            []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "name": "size"
+          "in": "query"
+          "schema":
+            "type": "integer"
+            "minimum": 1
+            "maximum": 100
+            "default": 20
+        -
+          "name": "offset"
+          "in": "query"
+          "schema":
+            "type": "integer"
+            "minimum": 0
+            "maximum": 10000
+            "default": 0
+      "responses":
+        "200":
+          "description": "Scoped ADMIN/OWNER reviews retained requests"
+          "headers":
+            "ETag":
+              "schema":
+                "type": "string"
+          "content":
+            "application/json":
+              "schema":
+                "type": "object"
+                "required":
+                  - "items"
+                "properties":
+                  "items":
+                    "type": "array"
+                    "items":
+                      "$ref": "#/components/schemas/CommunityJoinRequest"
+                  "nextCursor":
+                    "type": "null"
+                    "description": "Small bounded lists use explicit offset, no cursor or total. Advance offset by items.length; a short/empty page ends traversal."
+        "default":
+          "$ref": "#/components/responses/Problem"
+  "/api/v1/join-requests/{id}/approve":
+    "post":
+      "operationId": "approveCommunityJoinRequest"
+      "summary": "Scoped ADMIN/OWNER approves request"
+      "description": "Purpose-specific transition, idempotent same outcome after current authority check. Outstanding requests remain reviewable after mode changes. Approval + effective membership commit together; ban/inactive account prevents approval. ARCHIVED denies."
+      "security":
+        -
+          "BearerAuth":
+            []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      "responses":
+        "200":
+          "description": "Scoped ADMIN/OWNER approves request"
+          "headers":
+            "ETag":
+              "schema":
+                "type": "string"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/CommunityJoinRequest"
+        "default":
+          "$ref": "#/components/responses/Problem"
+  "/api/v1/join-requests/{id}/reject":
+    "post":
+      "operationId": "rejectCommunityJoinRequest"
+      "summary": "Scoped ADMIN/OWNER rejects request"
+      "description": "Purpose-specific transition, idempotent same outcome after current authority check. Outstanding requests remain reviewable after mode changes. Approval + effective membership commit together; ban/inactive account prevents approval. ARCHIVED denies."
+      "security":
+        -
+          "BearerAuth":
+            []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      "responses":
+        "200":
+          "description": "Scoped ADMIN/OWNER rejects request"
+          "headers":
+            "ETag":
+              "schema":
+                "type": "string"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/CommunityJoinRequest"
+        "default":
+          "$ref": "#/components/responses/Problem"
+  "/api/v1/join-requests/{id}/cancel":
+    "post":
+      "operationId": "cancelCommunityJoinRequest"
+      "summary": "Requester cancels own pending request"
+      "description": "Purpose-specific transition, idempotent same outcome after current authority check. Outstanding requests remain reviewable after mode changes. Approval + effective membership commit together; ban/inactive account prevents approval. ARCHIVED denies."
+      "security":
+        -
+          "BearerAuth":
+            []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+      "responses":
+        "200":
+          "description": "Requester cancels own pending request"
+          "headers":
+            "ETag":
+              "schema":
+                "type": "string"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/CommunityJoinRequest"
+        "default":
+          "$ref": "#/components/responses/Problem"
+  "/api/v1/communities/{id}/moderation/actions":
+    "post":
+      "operationId": "moderateCommunityMember"
+      "summary": "Attributable suspend/ban/unban with current staff hierarchy"
+      "description": "If-Match is target membership version. Action + membership + audit + outbox commit or roll back together. No self/equal/superior/owner sanction. Suspension until 1 second..365 days in future; expiry is checked live. Unban yields REMOVED/MEMBER, never joins. Reason is private, 1..2000 characters. ARCHIVED denies."
+      "security":
+        -
+          "BearerAuth":
+            []
+      "parameters":
+        -
+          "name": "id"
+          "in": "path"
+          "required": true
+          "schema":
+            "type": "string"
+            "format": "uuid"
+        -
+          "$ref": "#/components/parameters/Origin"
+        -
+          "$ref": "#/components/parameters/Csrf"
+        -
+          "$ref": "#/components/parameters/IfMatch"
+      "responses":
+        "200":
+          "description": "Attributable suspend/ban/unban with current staff hierarchy"
+          "headers":
+            "ETag":
+              "schema":
+                "type": "string"
+          "content":
+            "application/json":
+              "schema":
+                "$ref": "#/components/schemas/MemberModerationResult"
+        "default":
+          "$ref": "#/components/responses/Problem"
+      "requestBody":
+        "required": true
+        "content":
+          "application/json":
+            "schema":
+              "$ref": "#/components/schemas/MemberModerationAction"
 components:
   securitySchemes:
     BearerAuth:
@@ -758,6 +1621,23 @@ components:
       name: "refresh"
       description: "Host-only Secure HttpOnly SameSite=Strict; Path=/api/v1/auth. Local localhost profile alone allows HTTP."
   parameters:
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^"[0-9]{1,18}"$'
+      description: Strong quoted community or target membership version; missing is 428, stale is 412.
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+      description: Optional printable ASCII key; actor and route scoped for 24 hours; logical references only.
     Origin:
       name: "Origin"
       in: "header"
@@ -809,6 +1689,282 @@ components:
           schema:
             "$ref": "#/components/schemas/Problem"
   schemas:
+    "Community":
+      "type": "object"
+      "additionalProperties": false
+      "required":
+        - "id"
+        - "slug"
+        - "name"
+        - "description"
+        - "visibility"
+        - "status"
+        - "version"
+      "properties":
+        "id":
+          "type": "string"
+          "format": "uuid"
+        "slug":
+          "type": "string"
+          "maxLength": 80
+        "name":
+          "type": "string"
+          "maxLength": 120
+        "description":
+          "type": "string"
+          "maxLength": 4000
+        "visibility":
+          "enum":
+            - "PUBLIC"
+            - "PRIVATE"
+        "joinMode":
+          "enum":
+            - "OPEN"
+            - "REQUEST"
+            - "INVITE_ONLY"
+            - null
+        "status":
+          "enum":
+            - "ACTIVE"
+            - "ARCHIVED"
+        "ownerId":
+          "type":
+            - "string"
+            - "null"
+          "format": "uuid"
+        "version":
+          "type": "integer"
+          "minimum": 0
+    "CommunityCreate":
+      "type": "object"
+      "additionalProperties": false
+      "required":
+        - "slug"
+        - "name"
+      "properties":
+        "slug":
+          "type": "string"
+          "pattern": "^[a-z0-9][a-z0-9-]{2,79}$"
+        "name":
+          "type": "string"
+          "minLength": 1
+          "maxLength": 120
+        "description":
+          "type": "string"
+          "maxLength": 4000
+        "visibility":
+          "enum":
+            - "PUBLIC"
+            - "PRIVATE"
+          "default": "PRIVATE"
+        "joinMode":
+          "enum":
+            - "OPEN"
+            - "REQUEST"
+            - "INVITE_ONLY"
+          "default": "INVITE_ONLY"
+    "CommunitySettings":
+      "type": "object"
+      "additionalProperties": false
+      "required":
+        []
+      "properties":
+        "name":
+          "type":
+            - "string"
+            - "null"
+          "minLength": 1
+          "maxLength": 120
+        "description":
+          "type":
+            - "string"
+            - "null"
+          "maxLength": 4000
+        "visibility":
+          "enum":
+            - "PUBLIC"
+            - "PRIVATE"
+            - null
+        "joinMode":
+          "enum":
+            - "OPEN"
+            - "REQUEST"
+            - "INVITE_ONLY"
+            - null
+    "CommunityUser":
+      "type": "object"
+      "additionalProperties": false
+      "required":
+        - "userId"
+      "properties":
+        "userId":
+          "type": "string"
+          "format": "uuid"
+    "CommunityRole":
+      "type": "object"
+      "additionalProperties": false
+      "required":
+        - "role"
+      "properties":
+        "role":
+          "enum":
+            - "MEMBER"
+            - "MODERATOR"
+            - "ADMIN"
+    "Membership":
+      "type": "object"
+      "additionalProperties": false
+      "required":
+        - "communityId"
+        - "userId"
+        - "role"
+        - "status"
+        - "version"
+      "properties":
+        "communityId":
+          "type": "string"
+          "format": "uuid"
+        "userId":
+          "type": "string"
+          "format": "uuid"
+        "role":
+          "enum":
+            - "OWNER"
+            - "ADMIN"
+            - "MODERATOR"
+            - "MEMBER"
+        "status":
+          "enum":
+            - "ACTIVE"
+            - "LEFT"
+            - "REMOVED"
+            - "BANNED"
+        "suspendedUntil":
+          "type":
+            - "string"
+            - "null"
+          "format": "date-time"
+        "version":
+          "type": "integer"
+          "minimum": 0
+    "CommunityInvitation":
+      "type": "object"
+      "additionalProperties": false
+      "required":
+        - "id"
+        - "communityId"
+        - "inviteeId"
+        - "inviterId"
+        - "status"
+        - "expiresAt"
+        - "version"
+      "properties":
+        "id":
+          "type": "string"
+          "format": "uuid"
+        "communityId":
+          "type": "string"
+          "format": "uuid"
+        "inviteeId":
+          "type": "string"
+          "format": "uuid"
+        "inviterId":
+          "type": "string"
+          "format": "uuid"
+        "status":
+          "enum":
+            - "PENDING"
+            - "ACCEPTED"
+            - "DECLINED"
+            - "REVOKED"
+            - "EXPIRED"
+        "expiresAt":
+          "type": "string"
+          "format": "date-time"
+        "version":
+          "type": "integer"
+          "minimum": 0
+    "CommunityJoinRequest":
+      "type": "object"
+      "additionalProperties": false
+      "required":
+        - "id"
+        - "communityId"
+        - "userId"
+        - "status"
+        - "version"
+      "properties":
+        "id":
+          "type": "string"
+          "format": "uuid"
+        "communityId":
+          "type": "string"
+          "format": "uuid"
+        "userId":
+          "type": "string"
+          "format": "uuid"
+        "status":
+          "enum":
+            - "PENDING"
+            - "APPROVED"
+            - "REJECTED"
+            - "CANCELLED"
+        "message":
+          "type":
+            - "string"
+            - "null"
+          "maxLength": 1000
+        "version":
+          "type": "integer"
+          "minimum": 0
+    "CommunityRequestMessage":
+      "type": "object"
+      "additionalProperties": false
+      "required":
+        []
+      "properties":
+        "message":
+          "type":
+            - "string"
+            - "null"
+          "maxLength": 1000
+    "MemberModerationAction":
+      "type": "object"
+      "additionalProperties": false
+      "required":
+        - "userId"
+        - "action"
+        - "reason"
+      "properties":
+        "userId":
+          "type": "string"
+          "format": "uuid"
+        "action":
+          "enum":
+            - "SUSPEND_MEMBER"
+            - "BAN_MEMBER"
+            - "UNBAN_MEMBER"
+        "reason":
+          "type": "string"
+          "minLength": 1
+          "maxLength": 2000
+        "suspendedUntil":
+          "type":
+            - "string"
+            - "null"
+          "format": "date-time"
+    "MemberModerationResult":
+      "type": "object"
+      "additionalProperties": false
+      "required":
+        - "id"
+        - "membership"
+      "properties":
+        "id":
+          "type": "string"
+          "format": "uuid"
+        "membership":
+          "$ref": "#/components/schemas/Membership"
     Problem:
       type: "object"
       required:

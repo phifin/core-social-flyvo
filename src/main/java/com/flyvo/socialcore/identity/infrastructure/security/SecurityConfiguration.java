@@ -29,7 +29,12 @@ class SecurityConfiguration {
     cors.setAllowedMethods(java.util.List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
     cors.setAllowedHeaders(
         java.util.List.of(
-            "Authorization", "Content-Type", "X-XSRF-TOKEN", "If-Match", "X-Request-ID"));
+            "Authorization",
+            "Content-Type",
+            "X-XSRF-TOKEN",
+            "If-Match",
+            "Idempotency-Key",
+            "X-Request-ID"));
     cors.setExposedHeaders(java.util.List.of("ETag", "X-Request-ID"));
     cors.setAllowCredentials(true);
     var source = new org.springframework.web.cors.UrlBasedCorsConfigurationSource();
@@ -77,6 +82,41 @@ class SecurityConfiguration {
                         "/api/v1/auth/oauth/facebook/callback",
                         "/api/v1/users/*/profile")
                     .permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/v1/communities", "/api/v1/communities/*")
+                    .permitAll()
+                    .requestMatchers(
+                        HttpMethod.GET,
+                        "/api/v1/communities/*/members",
+                        "/api/v1/communities/*/join-requests",
+                        "/api/v1/me/community-invitations")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.POST,
+                        "/api/v1/communities",
+                        "/api/v1/communities/*/archive",
+                        "/api/v1/communities/*/ownership-transfers",
+                        "/api/v1/communities/*/invitations",
+                        "/api/v1/communities/*/join-requests",
+                        "/api/v1/communities/*/moderation/actions",
+                        "/api/v1/community-invitations/*/accept",
+                        "/api/v1/community-invitations/*/decline",
+                        "/api/v1/community-invitations/*/revoke",
+                        "/api/v1/join-requests/*/approve",
+                        "/api/v1/join-requests/*/reject",
+                        "/api/v1/join-requests/*/cancel")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.PUT, "/api/v1/communities/*/members/me")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.PATCH,
+                        "/api/v1/communities/*",
+                        "/api/v1/communities/*/members/*/role")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.DELETE,
+                        "/api/v1/communities/*/members/me",
+                        "/api/v1/communities/*/members/*")
+                    .authenticated()
                     .requestMatchers(
                         HttpMethod.POST,
                         "/api/v1/auth/registrations",

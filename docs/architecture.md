@@ -180,6 +180,17 @@ content/
 
 ## Architecture enforcement
 
+Phase 2 adds community's owned JDBC snapshot repository for composite membership
+and admission rows, shared/exclusive row guards, deferred ownership and explicit
+versioned transitions in one transaction manager. This avoids parallel JPA/domain
+representations for guarded native transitions. Moderation calls only community
+APIs; its own append-only action adapter never reads community base tables.
+Identity's sole community dependency is its guarded account-closure blocker.
+Published community views remain restricted to the documented future content
+query adapter; no new consumer/import exclusion is added. Database-only JobHandler
+is a platform technical boundary used by community invite expiry, not a domain
+policy callback. [Community subsystem](community.md) documents the exact surface.
+
 Phase 1 uses JPA aggregates/repository ports for account/profile and an owned
 JDBC repository port for identity snapshots and guarded SQL writes. All join
 the same transaction manager. SecurityConfiguration and its bearer adapter

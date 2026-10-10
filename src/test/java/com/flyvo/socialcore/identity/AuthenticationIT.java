@@ -1221,6 +1221,7 @@ class AuthenticationIT {
             jobs,
             mail,
             Clock.systemUTC(),
+            List.of(),
             new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
     worker.runOnce();
     assertThat(

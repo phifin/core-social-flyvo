@@ -6,7 +6,7 @@ Record the phase's actual migrations, module APIs, test commands/results, measur
 
 ## Phase 0 — Buildable architecture foundation
 
-Implementation status: [Phase 0](phases/phase-0.md) and [Phase 1](phases/phase-1.md) delivered locally. Phase 2 onward remain unimplemented; external provider readiness is separately gated.
+Implementation status: [Phase 0](phases/phase-0.md), [Phase 1](phases/phase-1.md) and [Phase 2](phases/phase-2.md) delivered locally. Phase 2 awaits main review; Phase 3 onward remain unimplemented. External provider/production readiness is separately gated.
 
 **Goal:** establish a reproducible repository that enforces the accepted design before business code exists.
 
@@ -35,6 +35,9 @@ Implementation status: [Phase 0](phases/phase-0.md) and [Phase 1](phases/phase-1
 **Edges:** missing Facebook email, changed Google email, expired callback, existing OAuth-only email during local registration, lost refresh response forces re-login, failure response must not roll back revocation, unknown emails resist enumeration. Required provider validation is verified against current official docs before provider enablement; unavailable credentials do not justify fake production success.
 
 ## Phase 2 — Communities, membership and scoped authority
+
+Local implementation: [evidence](phases/phase-2.md), [subsystem contract](community.md).
+Main reviewer alone accepts this phase.
 
 **Goal:** public/private groups with working membership lifecycle and enforceable staff hierarchy.
 

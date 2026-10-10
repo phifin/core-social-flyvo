@@ -65,6 +65,30 @@ bound-provider reauthentication clears it; refresh rotation cannot clear it.
 
 Deferred FK resolves owner/member creation order. A deferred constraint trigger on community/membership verifies, at commit, that every ACTIVE community's owner membership is ACTIVE and unsuspended. Archive permits retention of a former owner. Trigger is narrow and tested; all membership/ownership commands also lock the community row and enforce this invariant for useful errors. Invitation-versus-request mutual exclusion and expiry are application invariants under the same community guard; cannot be a time-dependent CHECK/index predicate. Expire a stale PENDING row before inserting a replacement.
 
+### Phase 2 concrete community schema
+
+`V0009` implements community/membership/invitation/request tables and both
+community_api v1 views. JDBC snapshots use explicit version increments under
+the owning row guard, without a duplicate JPA model. Community version sequences
+all user command transitions; membership/admission rows keep their own versions.
+Stable slug is 3–80 lowercase ASCII characters. All FKs use scalar UUIDs; indexes
+cover ownership closure, membership lookup/lists, invitation inbox/expiry and request
+review. The deferred effective-owner trigger locks its community before checking
+current owner membership, including raw SQL commit-time violations. Archive retains
+the owner FK but permits self-leave per the detailed domain exception.
+
+`V0010` adds moderation.action for member sanctions only: no report table/FK until
+Phase 5. Reason and before/after snapshots are private; append-only trigger and
+scoped audit supplement restricted runtime roles. `V0011` adds platform resource
+idempotency (actor/route/key hash, request hash, logical response UUID, 24h expiry),
+without cached bodies/secrets or a redundant response-status column. Scheduled
+invitation expiry reuses platform.job; no community-specific job queue/table.
+
+No account/graph SQL views are introduced before their consuming phases. The
+community views expose exactly the published columns below, current source state,
+and stored membership role; effective OWNER derives from the community owner ID.
+See [community subsystem](community.md) for transition/guard and retry semantics.
+
 ## Social graph
 
 | Table | Columns | Constraints / indexes |

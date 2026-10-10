@@ -41,6 +41,25 @@ Email jobs containing verification/reset links require recoverable secrets for d
 
 ## Notification semantics (Phase 7)
 
+Phase 2 schedules each seven-day invitation expiry as a deduplicated DB-only job.
+The existing worker handles at most one registered DB job in addition to mail and
+delivery per tick. Mail claims only MAIL; registered handlers claim their own kinds.
+Claim commits separately; DB handler and fenced acknowledgement share a transaction,
+so handler failure/lease loss rolls back source effects. Duplicate/reclaimed expiry
+is idempotent, bounded at ten attempts and retains DEAD state. Expiry checks remain
+live even without cleanup. Optional resource idempotency stores only logical UUIDs,
+not response bodies. See [community operations](../ops/community.md).
+
+CommunityCreated/Updated, MemberJoinedCommunity, MembershipChanged and admission
+created/resolved facts use publisher-owned CommunityTransition v1 payloads:
+communityId/userId/sourceId/status/role/suspendedUntil/membershipVersion. Community
+version is monotonic across user transitions. Admission sourceId is invitation or
+request UUID; membership changes reference community scope. ModerationActionApplied
+contains actionId/communityId/userId/action. Names, private request messages and
+sanction reasons are excluded. There are no future projection/notification consumers
+enabled; jobs do not require outbox delivery rows. Cleanup expiry itself is not a
+new social activity event and authorization cannot rely on delayed consumers.
+
 Phase 1 appends `UserRegistered`, `AccountStatusChanged`,
 `AccountDeletionRequested` and `ProfileUpdated` to the outbox. There are no
 production projection consumers yet: delivery rows are created only for

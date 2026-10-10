@@ -58,7 +58,7 @@ class FoundationIT {
                 "select count(*) from information_schema.schemata where schema_name = 'platform'",
                 Integer.class))
         .isEqualTo(1);
-    assertThat(flyway.info().applied()).hasSize(8);
+    assertThat(flyway.info().applied()).hasSize(11);
     flyway.validate();
     assertThat(flyway.migrate().migrationsExecuted).isZero();
     assertThat(entityManagerFactory.getProperties())
@@ -104,7 +104,7 @@ class FoundationIT {
     var checksum = phaseZero.info().applied()[0].getChecksum();
     var upgrade =
         Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
-    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(7);
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(10);
     assertThat(upgrade.info().applied()[0].getChecksum()).isEqualTo(checksum);
     upgrade.validate();
   }
@@ -135,6 +135,45 @@ class FoundationIT {
         .atMost(java.time.Duration.ofSeconds(10))
         .untilAsserted(
             () -> mvc.perform(get("/actuator/health/readiness")).andExpect(status().isOk()));
+  }
+
+  @Test
+  void phaseOneSchemaUpgradesWithAllEightChecksumsAndExistingAccountPreserved() {
+    var name = "phase_one_upgrade_" + java.util.UUID.randomUUID().toString().replace("-", "");
+    new JdbcTemplate(dataSource).execute("CREATE DATABASE " + name);
+    String url = POSTGRES.getJdbcUrl().replace("/test?", "/" + name + "?");
+    var prior =
+        Flyway.configure()
+            .dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword())
+            .target("0008")
+            .load();
+    assertThat(prior.migrate().migrationsExecuted).isEqualTo(8);
+    var checksums =
+        java.util.Arrays.stream(prior.info().applied())
+            .map(org.flywaydb.core.api.MigrationInfo::getChecksum)
+            .toList();
+    var ds =
+        new org.springframework.jdbc.datasource.DriverManagerDataSource(
+            url, POSTGRES.getUsername(), POSTGRES.getPassword());
+    var jdbc = new JdbcTemplate(ds);
+    var id = java.util.UUID.randomUUID();
+    jdbc.update(
+        "INSERT INTO account.user_account(id,status,platform_role,created_at,updated_at) VALUES (?,'ACTIVE','USER',now(),now())",
+        id);
+    var upgrade =
+        Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(3);
+    upgrade.validate();
+    assertThat(
+            java.util.Arrays.stream(upgrade.info().applied())
+                .limit(8)
+                .map(org.flywaydb.core.api.MigrationInfo::getChecksum)
+                .toList())
+        .isEqualTo(checksums);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT status FROM account.user_account WHERE id=?", String.class, id))
+        .isEqualTo("ACTIVE");
   }
 
   @Test

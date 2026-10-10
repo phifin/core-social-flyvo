@@ -41,6 +41,17 @@ Track JaCoCo coverage as a diagnostic, especially policy/state branches; avoid v
 
 ## Definition of tested
 
+Phase 2 tests both visibility types/all modes through real HTTP and application
+transactions, hierarchy/self/equal/superior denial, IDOR, current revocation,
+mode changes, admission collision/live expiry, If-Match and logical idempotency.
+PostgreSQL barriers/latches exercise duplicate joins/accepts, request/invite,
+transfer vs leave/removal/closure, creation vs closure and both shared-write guard
+orders against revocation. Commit-time owner FK/trigger, audit rollback, registered
+DB job crash/reclaim/fenced rollback/retry-to-DEAD and Phase 1 schema upgrade are
+checked without skips. Community published-view columns and SQL/object visibility
+parity are checked; a synthetic 10,000-member query plan uses membership_pkey.
+Exact commands/results and measurement limits are in [Phase 2](phases/phase-2.md).
+
 Phase 1 adds real PostgreSQL + Mailpit tests, a JDK local HTTP provider server
 (no live-provider CI calls or additional mock-server dependency), signed JWT/JWKS
 fixtures, separate-transaction/barrier races and an instrumented password-hashing

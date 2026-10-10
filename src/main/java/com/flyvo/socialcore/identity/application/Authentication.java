@@ -40,6 +40,7 @@ public class Authentication {
   private final String dummy;
   private final Set<String> common;
   private final SessionQueries sessions;
+  private final com.flyvo.socialcore.community.api.MembershipQueries communities;
 
   public Authentication(
       IdentityRepository store,
@@ -53,7 +54,8 @@ public class Authentication {
       Clock clock,
       org.springframework.transaction.PlatformTransactionManager manager,
       ObjectMapper json,
-      SessionQueries sessions)
+      SessionQueries sessions,
+      com.flyvo.socialcore.community.api.MembershipQueries communities)
       throws java.io.IOException {
     this.store = store;
     this.commands = commands;
@@ -67,6 +69,7 @@ public class Authentication {
     tx = new TransactionTemplate(manager);
     this.json = json;
     this.sessions = sessions;
+    this.communities = communities;
     dummy = passwords.encode(secrets.randomToken());
     try (var stream =
         new org.springframework.core.io.ClassPathResource("security/common-passwords.txt")
@@ -511,6 +514,8 @@ public class Authentication {
           current(actor, true, true);
           if (accounts.find(actor.userId()).version() != expectedVersion)
             throw new Failure(412, "STALE_VERSION");
+          if (communities.ownsActiveCommunity(actor.userId()))
+            throw new Failure(409, "COMMUNITY_OWNERSHIP_BLOCKS_DELETION");
           commands.requestDeletion(actor.userId());
           store.revokeAll(actor.userId(), null, "ACCOUNT_DELETION", clock.instant());
         });

@@ -46,6 +46,85 @@ public class DurableWorkStore implements DurableWork {
   }
 
   @Transactional(propagation = Propagation.MANDATORY)
+  public void job(String kind, String key, String payload, Instant due) {
+    jdbc.update(
+        "INSERT INTO platform.job(id,kind,dedup_key,payload,status,available_at,created_at) VALUES (?,?,?,?::jsonb,'PENDING',?,?) ON CONFLICT(kind,dedup_key) DO NOTHING",
+        UUID.randomUUID(),
+        kind,
+        key,
+        json.writeValueAsString(java.util.Map.of("data", payload)),
+        time(due),
+        time(clock.instant()));
+  }
+
+  public boolean consumeJob(
+      UUID owner, java.util.List<com.flyvo.socialcore.platform.api.JobHandler> handlers) {
+    if (handlers.isEmpty()) return true;
+    record Job(UUID id, String kind, String payload, long generation, int attempts) {}
+    var kinds = handlers.stream().map(com.flyvo.socialcore.platform.api.JobHandler::kind).toList();
+    var claim =
+        tx.execute(
+            status -> {
+              var args = new java.util.ArrayList<Object>(kinds);
+              args.add(time(clock.instant()));
+              args.add(time(clock.instant()));
+              var rows =
+                  jdbc.query(
+                      "SELECT id,kind,payload->>'data',lease_generation,attempts FROM platform.job WHERE kind IN ("
+                          + String.join(",", java.util.Collections.nCopies(kinds.size(), "?"))
+                          + ") AND ((status IN ('PENDING','RETRY') AND available_at<=?) OR (status='RUNNING' AND lease_until<=?)) AND attempts<10 ORDER BY available_at,id LIMIT 1 FOR UPDATE SKIP LOCKED",
+                      (rs, n) ->
+                          new Job(
+                              rs.getObject(1, UUID.class),
+                              rs.getString(2),
+                              rs.getString(3),
+                              rs.getLong(4) + 1,
+                              rs.getInt(5) + 1),
+                      args.toArray());
+              if (rows.isEmpty()) return null;
+              var job = rows.getFirst();
+              jdbc.update(
+                  "UPDATE platform.job SET status='RUNNING',attempts=attempts+1,lease_owner=?,lease_until=?,lease_generation=lease_generation+1 WHERE id=?",
+                  owner,
+                  time(clock.instant().plusSeconds(60)),
+                  job.id());
+              return job;
+            });
+    if (claim == null) return true;
+    try {
+      tx.executeWithoutResult(
+          status -> {
+            var rows =
+                jdbc.queryForList(
+                    "SELECT id FROM platform.job WHERE id=? AND status='RUNNING' AND lease_owner=? AND lease_generation=? AND lease_until>? FOR UPDATE",
+                    claim.id(),
+                    owner,
+                    claim.generation(),
+                    time(clock.instant()));
+            if (rows.isEmpty()) return;
+            handlers.stream()
+                .filter(h -> h.kind().equals(claim.kind()))
+                .findFirst()
+                .orElseThrow()
+                .apply(claim.payload());
+            if (jdbc.update(
+                    "UPDATE platform.job SET status='COMPLETED',completed_at=?,lease_owner=NULL,lease_until=NULL WHERE id=? AND lease_generation=? AND lease_until>?",
+                    time(clock.instant()),
+                    claim.id(),
+                    claim.generation(),
+                    time(clock.instant()))
+                != 1) throw new IllegalStateException("JOB_LEASE_EXPIRED");
+          });
+    } catch (RuntimeException failure) {
+      finish(
+          new Claim(claim.id(), owner, claim.generation(), claim.attempts(), null, null),
+          "JOB_HANDLER_FAILED");
+      return false;
+    }
+    return true;
+  }
+
+  @Transactional(propagation = Propagation.MANDATORY)
   public void mail(
       String dedupKey, String address, String template, String secret, Instant expiresAt) {
     var id = UUID.randomUUID();
@@ -71,13 +150,26 @@ public class DurableWorkStore implements DurableWork {
   @Transactional(propagation = Propagation.MANDATORY)
   public void audit(
       UUID actor, String action, String targetType, UUID target, String outcome, String reason) {
+    auditScoped(actor, action, targetType, target, null, outcome, reason);
+  }
+
+  @Transactional(propagation = Propagation.MANDATORY)
+  public void auditScoped(
+      UUID actor,
+      String action,
+      String targetType,
+      UUID target,
+      UUID scope,
+      String outcome,
+      String reason) {
     jdbc.update(
-        "INSERT INTO platform.audit_entry(id,actor_id,action,target_type,target_id,outcome,reason_code,request_id,created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO platform.audit_entry(id,actor_id,action,target_type,target_id,scope_id,outcome,reason_code,request_id,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
         UUID.randomUUID(),
         actor,
         action,
         targetType,
         target,
+        scope,
         outcome,
         reason,
         correlation(),
@@ -136,7 +228,7 @@ public class DurableWorkStore implements DurableWork {
           var now = time(clock.instant());
           var ids =
               jdbc.query(
-                  "SELECT id FROM platform.job WHERE ((status IN ('PENDING','RETRY') AND available_at<=?) OR (status='RUNNING' AND lease_until<=?)) AND attempts<10 ORDER BY available_at,id LIMIT 1 FOR UPDATE SKIP LOCKED",
+                  "SELECT id FROM platform.job WHERE kind='MAIL' AND ((status IN ('PENDING','RETRY') AND available_at<=?) OR (status='RUNNING' AND lease_until<=?)) AND attempts<10 ORDER BY available_at,id LIMIT 1 FOR UPDATE SKIP LOCKED",
                   (rs, n) -> rs.getObject(1, UUID.class),
                   now,
                   now);
@@ -287,6 +379,9 @@ public class DurableWorkStore implements DurableWork {
     tx.executeWithoutResult(
         status -> {
           var now = time(clock.instant());
+          jdbc.update(
+              "DELETE FROM platform.idempotency_record WHERE (actor_id,route_key,key_hash) IN (SELECT actor_id,route_key,key_hash FROM platform.idempotency_record WHERE expires_at<=? ORDER BY expires_at LIMIT 500)",
+              now);
           jdbc.update(
               "UPDATE platform.job SET status='DEAD',last_error_code='ATTEMPTS_EXHAUSTED',lease_owner=NULL,lease_until=NULL WHERE id IN (SELECT id FROM platform.job WHERE status='RUNNING' AND lease_until<=? AND attempts>=10 ORDER BY lease_until,id LIMIT 500)",
               now);

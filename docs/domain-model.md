@@ -36,6 +36,14 @@ Effective roles are OWNER, ADMIN, MODERATOR, MEMBER. Persist OWNER only as `comm
 
 `JoinRequest` is PENDING, APPROVED, REJECTED or CANCELLED. A pending request cannot coexist with a pending invitation for the same pair: the guarded command resolves the older path explicitly. Approval creates/reactivates membership in the same transaction. Existing membership produces an idempotent result without duplicate events. Changes to join mode do not auto-approve outstanding requests; administrators may approve/reject them. Expired invitations never grant access even before cleanup runs.
 
+Phase 2 implements these lifecycles and the identity closure ownership check.
+Archive permits self-leave (including retained owner) as the explicit exception
+to read-only behavior; all joins/settings/admission/role/sanction/transfer commands
+are denied. New invite cancels older request; new request revokes/marks expired
+older invite, preserving terminal history. Unban resets role to MEMBER and status
+REMOVED, still requiring current-mode admission. Exact bounds, source events,
+idempotency and live suspension/expiry rules: [community subsystem](community.md).
+
 ## Social graph
 
 Use separate concepts/tables:

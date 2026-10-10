@@ -41,6 +41,15 @@ start returns a URL in JSON; callbacks redirect with a marker, never credentials
 
 ## Pagination
 
+Phase 2's implemented community routes are specified in OpenAPI and
+[community subsystem](community.md). Community ETag covers settings/ownership/archive
+and effective user transitions; membership ETag covers role/removal/leave/sanctions.
+Purpose-specific admission responses are idempotent without an ETag after current
+actor/scope checks. Community/invitation/request creation accepts optional
+Idempotency-Key with 24-hour logical-reference retention and changed-body 409.
+Small community/member/request/invitation lists use bounded explicit size/offset,
+no totals, nextCursor null; they do not claim signed keyset or snapshot pagination.
+
 Feeds/timelines/posts/notifications/comments use signed opaque keyset cursors, default limit 20, max 100 (feed max 50). Cursor includes version, query scope/filter hash, viewer binding, ordering fields, asOf cutoff and expiry; HMAC validates integrity, not secrecy. Do not put sensitive email/content in cursors. A changed viewer/filter rejects with 400; expired feed cursor asks client to refresh. No client-controlled SQL sort fields beyond an allowlist.
 
 Chronological feeds sort `(publishedAt DESC,id DESC)`; comments sort `(createdAt ASC,id ASC)` independently for roots and replies. New rows after `asOf` wait until refresh. Filtering may produce short or empty pages with a non-null nextCursor; advance by last scanned candidate, not last returned visible item. `nextCursor=null` means the candidate range is exhausted, not merely this batch was empty. No exact total for filtered feeds/search. Small administration/member lists may use page/size (size <=100, maximum offset 10,000) with a stable tie-break and privileged total only when safe.
