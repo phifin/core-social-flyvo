@@ -4,13 +4,14 @@
 
 - Task: phase-4-posts-and-secure-images
 - Round: 1
-- State: READY_FOR_IMPLEMENTATION
-- Last writer: main orchestrator, 2026-10-10 — storage decision recorded
-- Next owner: development chat `Develop Phase 4 — Posts & Media` — resume assigned task
+- State: IN_PROGRESS
+- Last writer: development chat `Develop Phase 4 — Posts & Media`, 2026-10-10 — verified prerequisite checkpoint
+- Next owner: development chat `Develop Phase 4 — Posts & Media`
 - Assignment: user requested checking completed review and continuing the next work.
 - Baseline: `552c4ca99692aba277b6fee6bb91b23962d65787`; clean checkout/index before coordination.
 - Accepted Phase 3 code: `bfda6e856d42282eaccd2ed70a81f49c416f86b7`.
 - Phase 4 decision commit: `ab568554cf50cfa5c2024e84c90a16ed234a967c` (documentation only).
+- Phase 4 checkpoint code: `8fe7738e637e23dc72fe2d6c9845bbe1fe6c02e3` (prerequisites only, not full implementation).
 - Prior verdict/findings/checks: [accepted Phase 3](handoffs/phase-3-social-graph.md).
 - Protocol: [thread workflow](thread-workflow.md), [Git workflow](git-workflow.md).
 
@@ -64,6 +65,14 @@ proposed ADR change.
 
 ### Concrete development plan (round 1)
 
+Resume baseline: `0193bd4`, clean checkout/index; main's accepted ADR-013 decision
+is `ab568554cf50cfa5c2024e84c90a16ed234a967c`. P4-B1 is resolved. Execute the full
+six-slice plan below, starting with real storage/security prerequisites. Use the
+exact accepted Silo image/digest in both Compose and Testcontainers (not upstream
+MinIO). Verify private/versioned/encrypted buckets, separate runtime credentials,
+CORS, checksum/presign denial and complete version/marker cleanup before dependent
+implementation. No Phase 4 acceptance is implied by this resumed state.
+
 Execution baseline is `af6082b` (assignment-only documentation after the recorded
 accepted baseline); checkout/index were clean. Implement in these internal slices:
 
@@ -83,7 +92,7 @@ accepted baseline); checkout/index were clean. Implement in these internal slice
    candidates/hydration consume only the published views. Expose a bounded post
    query, not a Phase 6 home-feed implementation.
 4. Implement real S3 presign/HEAD/versioned GET/variant PUT/delete adapter and
-   private versioned local MinIO with encryption/CORS/lifecycle controls. Reserve
+   private versioned local Silo with encryption/CORS/lifecycle controls. Reserve
    quota under per-owner guards, finalize outside locks then CAS, bound image
    decoding/re-encoding, generation-specific outputs, retryable cleanup and
    reconciliation. Bind all ten images atomically; retain released revision media
@@ -92,7 +101,7 @@ accepted baseline); checkout/index were clean. Implement in these internal slice
 5. Verify domain and HTTP denial/invalid-state paths, generated SQL/object audience
    parity, PostgreSQL empty/upgrade migrations and meaningful query plans. Use
    separate committed transactions and barriers for membership/block vs writes,
-   ten-image rollback/reuse, quota and attach/cleanup races. Real MinIO tests cover
+   ten-image rollback/reuse, quota and attach/cleanup races. Real Silo tests cover
    presign/checksum/versioning, post-finalize overwrite, stale generations, partial
    output failure, malformed/oversized/static WebP images, metadata stripping,
    avatar replacement and all-version cleanup. Verify required worker recovery.
@@ -131,6 +140,60 @@ If a required test exposes a real incompatibility, report the precise failure;
 do not weaken a denial path or substitute untested storage to proceed.
 
 ## Checks and limitations
+
+### Current development checkpoint — 2026-10-10
+
+Verified code checkpoint: `8fe7738e637e23dc72fe2d6c9845bbe1fe6c02e3`.
+This is **not completed Phase 4** and is not READY_FOR_REVIEW. State stays
+IN_PROGRESS, next owner development. No new unresolved external blocker; no
+distribution approval is pending. The user's full completion request remains
+unfinished, and there is no permission to treat these prerequisites as the phase.
+
+Delivered: exact ADR-013 Silo Compose/Testcontainers artifact; shared private,
+versioned, SSE-S3 bootstrap with exact CORS, lifecycle and admin/API/worker policies;
+persistent ignored local keys/data; AWS SDK v2 storage port/adapter with pinned
+reads, checksum/size signing, immutable variant retry, <=60-second capabilities,
+bounded version/marker purge and active-transaction network guard. Also pure
+PostAudience/PostBody invariants and canonical ordinary read/history policy, tested
+across personal/community/current-denial combinations. These are not wired to
+business use cases, persistence, owner APIs, SQL queries or public HTTP endpoints.
+
+Actual real-storage compatibility difference: Silo's pinned policy library maps
+GetObjectVersion implicitly to GetObject, so the first delivery policy allowed
+unversioned GET. Outside-prefix denial still worked. Required non-null s3:versionid
+context fixes the local policy; denial, pinned GET and real URL expiry now pass.
+No denial assertion was disabled. A guessed internal replication-header rejection
+was replaced after source review with proof encrypted bytes remain intact when
+untrusted replication metadata is ignored. Details/provenance: [storage operations](../ops/media.md).
+
+Checks on final checkpoint source, with installed JDK 21 explicitly selected:
+
+- Fresh baseline full verify: 124 pass, zero failures/errors/skips.
+- Targeted StorageContractIT: 12 real Silo tests pass, using Compose bootstrap and
+  policy files. Includes signature/checksum/unsigned operation header denials,
+  unsigned-trailer/Snowball invalid-signature paths, versioning/overwrite/pinned
+  bytes, private/encrypted storage, CORS, credential scope, version-only delivery,
+  capability expiry, all-version/marker deletion and SDK adapter retries/guards.
+- Targeted PostPolicyTest + architecture/persistence boundaries: 14 tests pass.
+  Pure policy loops are not SQL/object parity or concurrency evidence.
+- Final `./mvnw -B -ntp spotless:apply verify`: **142 pass**, 35 unit/architecture
+  and 107 integration (95 existing PostgreSQL/Mailpit + 12 Silo), no failure/error/skip.
+  Local log: `/tmp/social-core-phase4-checkpoint-verify.log`.
+- Actual Compose non-root/read-only startup, shared bootstrap and replay pass;
+  Compose config, shell/JSON syntax, local Markdown file links and staged whitespace
+  pass. The local Silo service is stopped; generated ignored keys/data are retained.
+  Tests clean their own isolated containers. No push, deployment or agents.
+- Source/test iteration failures were fixed before the final gate: imports/lambda,
+  immutable-list null lookup, UTF-16 constructor validation placement and missing
+  sed in the selected image. No failing implementation is committed as complete.
+
+No new migration or OpenAPI endpoint exists. Required post persistence/publication,
+privacy mutations/revisions/retention, SQL candidates/hydration/parity and cursor API,
+basic attributable remove/restore, quota/asset/binding lifecycle, external fenced
+worker/decoder/finalize, cleanup/reconciliation and avatar pipeline remain
+unimplemented. Their PostgreSQL/HTTP/race/fault/hostile-image acceptance tests are
+unrun, not skipped-to-green. See [Phase 4 checkpoint](phases/phase-4.md).
+Production S3 compatibility remains an external deployment gate. Phase 5 is untouched.
 
 ### Historical development report — prerequisite blocker P4-B1 (before main decision)
 
@@ -204,8 +267,14 @@ Production S3 compatibility and earlier provider/production gates remain externa
 
 ## Next action and role boundary
 
-User returns to the existing development chat `Develop Phase 4 — Posts & Media`
-and sends the resume prompt below. No new development chat is needed.
+Continue the remaining full plan in the same development chat, starting with
+owned schemas/owner API guards and post/media business lifecycles. The checkpoint
+does not route Phase 4 to main review. Only after all required capabilities/tests
+and documentation are delivered should development commit verified code, then a
+separate READY_FOR_REVIEW mailbox with its real hash and next owner main.
+
+The original main resume assignment remains preserved below; it is not a claim
+that the requested full implementation has been completed.
 
 > Read AGENTS.md and docs/agent-handoff.md. Main resolved P4-B1 and accepted ADR-013
 > at ab568554cf50cfa5c2024e84c90a16ed234a967c. Resume Phase 4: set IN_PROGRESS and
