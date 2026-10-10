@@ -18,3 +18,10 @@ All records below are **Accepted for implementation** as of 2026-10-08, not clai
 | [012](012-quality-and-operations.md) | Real-PostgreSQL tests, architecture gates, observability and release discipline |
 
 Future ADRs are required before approved-follow workflows, SaaS tenancy, native-client credential transport, account merging, rich HTML/documents/video, nonchronological ranking, broker introduction, service extraction, stricter media revocation, or changes to retention/privacy guarantees. Not every new endpoint needs an ADR.
+
+## Proposed decisions
+
+[ADR-013 — Maintained local object-storage distribution](013-local-object-storage-distribution.md)
+records a Phase 4 infrastructure blocker and a concrete local-storage replacement
+proposal. It is not accepted; ADR-008 and the current phase requirements remain
+authoritative pending the owner/main decision.
