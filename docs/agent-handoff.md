@@ -4,8 +4,8 @@
 
 - Task: phase-4-posts-and-secure-images
 - Round: 1
-- State: IN_PROGRESS
-- Last writer: development chat `Develop Phase 4 — Posts & Media`, 2026-10-10 — verified prerequisite checkpoint
+- State: CHANGES_REQUESTED
+- Last writer: main reviewer, 2026-10-10 — requested checkpoint review
 - Next owner: development chat `Develop Phase 4 — Posts & Media`
 - Assignment: user requested checking completed review and continuing the next work.
 - Baseline: `552c4ca99692aba277b6fee6bb91b23962d65787`; clean checkout/index before coordination.
@@ -113,8 +113,71 @@ accepted baseline); checkout/index were clean. Implement in these internal slice
 
 ## Reviewer findings and developer responses
 
-No Phase 4 implementation/review yet. No finding IDs or required responses.
-Phase 3 was independently ACCEPTED without open findings; preserved in archive.
+### Checkpoint review verdict — round 1, 2026-10-10
+
+CHANGES_REQUESTED on prerequisite code `8fe7738e637e23dc72fe2d6c9845bbe1fe6c02e3`.
+Review HEAD `5bf1b80` adds only handoff documentation; checkout/index were clean.
+The user requested this review while development was IN_PROGRESS. This reviews
+the delivered checkpoint, not a completed Phase 4. Phase 3 acceptance is unchanged.
+
+Reviewed all checkpoint executable changes: SDK port/adapter, content values/read
+policy, Compose/bootstrap/credential policies, dependency additions and tests.
+Two actionable findings follow. Remaining Phase 4 capabilities are separately
+listed in the development report below and must still be implemented.
+
+#### P4-R1 — P2 — Limit each service's secret mounts
+
+- Status: OPEN. Evidence: configuration/code inspection, not an exploit reproduction.
+- Anchors: [Silo mount](../docker-compose.yml#L67),
+  [bootstrap mount](../docker-compose.yml#L93),
+  [application mount](../docker-compose.yml#L42),
+  [new secret generation](../ops/local/generate-keys.sh#L20).
+- Both new storage services mount the entire `.local/secrets` directory. With
+  the documented shared developer UID, they can read the application's JWT signing
+  private key, mail encryption key and limiter key. The same directory now contains
+  storage admin/KMS secrets, which also become readable by the existing application
+  container through its broad mount. Read-only mounts prevent writes, not reads.
+  This defeats ADR-013's admin/runtime separation and the operations claim that
+  application credentials exclude storage administration.
+- Required outcome: mount only explicitly required files (or narrowly separated
+  secret directories) per service. Silo needs its admin/KMS secrets; bootstrap needs
+  admin/API/worker credentials; the application needs its application keys and only
+  the runtime storage credentials actually used. Preserve existing key material,
+  UID behavior and startup/bootstrap replay; do not rotate/delete user secrets.
+- Regression expectation: verify the resolved mount allowlist and prove unrelated
+  secret paths are absent/inaccessible with synthetic fixtures or non-content
+  checks. Never print real secret values. Startup and bootstrap replay must pass.
+
+#### P4-R2 — P2 — Exercise the query-credential unsigned-trailer bypass
+
+- Status: OPEN. Evidence: test/code inspection against the advisory cited by ADR-013;
+  no claim the pinned Silo build is exploitable.
+- Anchors: [unsigned-trailer test](../src/test/java/com/flyvo/socialcore/media/StorageContractIT.java#L274),
+  [Authorization header](../src/test/java/com/flyvo/socialcore/media/StorageContractIT.java#L280),
+  [presign tampering test](../src/test/java/com/flyvo/socialcore/media/StorageContractIT.java#L205).
+- Both branches of the unsigned-trailer test always set `Authorization` and never
+  supply query-string credentials. The
+  [upstream bypass](https://github.com/minio/minio/security/advisories/GHSA-hv4r-mvr4-25vw)
+  specifically omitted that header and supplied `X-Amz-Credential` in the query;
+  header presence selected signature verification even in the vulnerable ordinary
+  PUT branch. Thus the test can pass while missing the exact prerequisite defect.
+  The separate damaged-presign test also drops the original required signed headers,
+  so its 4xx can reflect missing headers rather than rejection of the changed signature.
+- Required outcome: add the no-Authorization/query-credential unsigned-trailer case
+  on the pinned real server with a well-formed payload and valid scoped access-key
+  identifier but invalid signature. Retain a fully formed positive control and vary
+  only signature/authentication as appropriate. Preserve all other signed headers
+  in the damaged-presign case. Keep the Snowball/header cases; use a nonempty valid
+  archive and check extracted destination absence where asserting extraction denial.
+- Regression expectation: assert authentication rejection and absence of both
+  created object versions and unintended extracted objects, without logging signed
+  URLs/credentials. Record the actual denial paths covered; no vulnerable image is
+  required. These checks are mandatory before claiming ADR-013 security coverage.
+
+### Developer responses
+
+Pending for P4-R1 and P4-R2. Append implementation/evidence and real fix commit for
+each ID; do not mark either resolved. Main verifies their disposition on re-review.
 
 ### Main prerequisite decision — P4-B1 RESOLVED, 2026-10-10
 
@@ -141,7 +204,37 @@ do not weaken a denial path or substitute untested storage to proceed.
 
 ## Checks and limitations
 
-### Current development checkpoint — 2026-10-10
+### Independent checkpoint review checks — 2026-10-10
+
+On unchanged code with installed Java 21 explicitly selected:
+
+```bash
+./mvnw -B -ntp spotless:check test \
+  '-Dtest=PostPolicyTest,ArchitectureTest,PersistenceBoundaryTest' \
+  failsafe:integration-test failsafe:verify '-Dit.test=StorageContractIT'
+docker compose --profile media config --quiet
+bash -n ops/local/generate-keys.sh
+sh -n ops/local/storage/start.sh ops/local/storage/init.sh
+```
+
+- PASS: 26 tests (14 unit/architecture + 12 real Silo integration), no failures,
+  errors or skips; formatting/Enforcer/dependency convergence passed. Temporary
+  evidence: `/tmp/social-core-phase4-checkpoint-review.log`.
+- Compose configuration and shell syntax checks pass. Review documentation local
+  link paths and whitespace checked before commit.
+- No application source/test/configuration changed during review. No secret
+  contents read or printed. No push/deployment or other chat/agent started.
+- Full 142-test verify and actual Compose startup/replay are historical development
+  evidence, not rerun review checks. The scoped tests do not cover the missing
+  authentication variant in P4-R2 or secret mount isolation in P4-R1.
+- This checkpoint has no post/media/avatar public endpoints or migrations. Full
+  Phase 4 privacy/SQL parity/HTTP/concurrency/decoder/lifecycle gates remain unrun.
+  There is no new external blocker or pending architecture choice.
+
+### Reported development checkpoint — 2026-10-10, before main review
+
+Preserved from `5bf1b80`; the routing/verdict above supersedes its earlier state
+and next-owner description. Its delivered/remaining scope and checks remain evidence.
 
 Verified code checkpoint: `8fe7738e637e23dc72fe2d6c9845bbe1fe6c02e3`.
 This is **not completed Phase 4** and is not READY_FOR_REVIEW. State stays
@@ -267,11 +360,17 @@ Production S3 compatibility and earlier provider/production gates remain externa
 
 ## Next action and role boundary
 
-Continue the remaining full plan in the same development chat, starting with
-owned schemas/owner API guards and post/media business lifecycles. The checkpoint
-does not route Phase 4 to main review. Only after all required capabilities/tests
-and documentation are delivered should development commit verified code, then a
-separate READY_FOR_REVIEW mailbox with its real hash and next owner main.
+Return to the existing `Develop Phase 4 — Posts & Media` chat. First address P4-R1
+and P4-R2 with regression evidence, then continue the assigned remaining full plan:
+owned schemas/owner API guards, publication/read/history/audience/moderation,
+quota/assets/binding, fenced processing/finalize/cleanup and avatar. Set IN_PROGRESS
+and preserve the findings and developer responses. Verified slice commits are
+allowed, but a prerequisite checkpoint does not fulfill the full assignment.
+
+Do not request approval for the already-decided storage distribution. Continue
+until the assigned capabilities, tests and docs are complete, or report a new
+concrete blocker with evidence. Then commit verified code and a separate
+READY_FOR_REVIEW mailbox with real code hash and main as next owner. No Phase 5.
 
 The original main resume assignment remains preserved below; it is not a claim
 that the requested full implementation has been completed.
