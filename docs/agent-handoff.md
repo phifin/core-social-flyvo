@@ -1,123 +1,82 @@
-# Agent handoff — Phase 3
+# Agent handoff — Phase 4
 
 ## Routing
 
-- Task: phase-3-social-graph
+- Task: phase-4-posts-and-secure-images
 - Round: 1
-- State: ACCEPTED
-- Last writer: independent main reviewer, 2026-10-10
-- Next owner: main/user — await explicit assignment; no development task active
-- User assigned Phase 3 on 2026-10-10.
-- Baseline: `73bb08d4442a92c800d0e20c1d8835963f0c5966`; clean checkout/index.
-- Code commit: `bfda6e856d42282eaccd2ed70a81f49c416f86b7`.
-- Accepted Phase 2 code: `1663507a7c00e2fb472192c84e1a82bf2a17bac6`.
-- Prior findings/evidence: [accepted Phase 2](handoffs/phase-2-communities.md).
+- State: READY_FOR_IMPLEMENTATION
+- Last writer: main orchestrator, 2026-10-10
+- Next owner: development chat `Develop Phase 4 — Posts & Media` (user opens manually)
+- Assignment: user requested checking completed review and continuing the next work.
+- Baseline: `552c4ca99692aba277b6fee6bb91b23962d65787`; clean checkout/index before coordination.
+- Accepted Phase 3 code: `bfda6e856d42282eaccd2ed70a81f49c416f86b7`.
+- Prior verdict/findings/checks: [accepted Phase 3](handoffs/phase-3-social-graph.md).
 - Protocol: [thread workflow](thread-workflow.md), [Git workflow](git-workflow.md).
 
-## Scope and implementation report
+## Scope and implementation instructions
 
-Phase 3 only: distinct follow, friend request/friendship, block and mute;
-canonical pair guards and durable revisions/events; scheduled request expiry;
-bounded graph lists/current account filtering; FRIENDS profile and bilateral
-block policy; account/graph published views. No content/feed/notification consumer.
+Implement Phase 4 exactly as specified in [roadmap](roadmap.md#phase-4--publishable-posts-with-secure-image-attachments):
+personal/community posts, audiences including CUSTOM, mentions/hashtags, revisions
+and explicit audience edits, owner soft deletion and basic community remove/restore;
+secure image upload/finalize/process/status/bind and avatar lifecycle. Include
+ContentAccessPolicy, SQL candidate/hydration building blocks, guarded writes and a
+basic paginated post query. This is not a media-only task.
 
-Delivered owned schema/API/persistence, graph commands and query policies, profile
-integration/HTTP contracts and PostgreSQL state/concurrency/privacy/upgrade tests.
-Uses existing worker/outbox and account guard order. No new dependencies.
-Migrations V0012–V0014 only; prior migrations unchanged. Opaque bounded keyset
-cursors reuse platform encryption; no future consumer or module scaffold.
-Detailed scope/refinements/evidence: [Phase 3](phases/phase-3.md),
-[graph](graph.md), [operations](../ops/graph.md).
+Read AGENTS.md, README.md, implementation-handoff.md, architecture.md, security.md,
+domain-model.md, database-design.md, media.md, events-and-jobs.md, API conventions,
+testing strategy, and applicable ADRs (especially 002, 003, 005, 008, 009) before
+implementation. Inspect existing module APIs/guards/worker jobs and dependency
+introduction matrix. Follow the authoritative contracts rather than this summary
+where more detailed requirements apply.
 
-## Reviewer verdict and findings — round 1
+Required infrastructure is the specified S3 adapter, pinned Compose MinIO with
+private/versioned storage, bounded image processor, quotas and durable cleanup.
+No network/storage calls under business locks, arbitrary key signing, unpinned
+quarantine reads or public original files. Owner content/profile policy authorizes
+variant issuance; media does not call those modules. Keep existing module DAG.
+Explain new dependencies and verify storage behavior against real local storage.
+Production S3 compatibility remains a distinct deployment gate when not exercised.
 
-**ACCEPTED** for Phase 3 at `bfda6e856d42282eaccd2ed70a81f49c416f86b7`,
-independently reviewed on 2026-10-10. Review checkout HEAD was `7e014bc`;
-its changes after the code commit only affect AGENTS.md, this mailbox and
-thread-workflow.md. The checkout/index was clean. No executable changes were
-made during review. No actionable defect was found; no open Phase 3 finding IDs
-or required developer responses. Prior Phase 2 findings remain in their archive.
+No Phase 5 comments/reactions/reports workflow, full home feed, search,
+notifications, video/documents/CDN or speculative future modules. Do not silently
+change product/security/architecture decisions; raise conflicts with a concrete
+proposed ADR change.
 
-Code inspection covered the complete Phase 3 executable diff against `73bb08d`:
+## Development plan and delivery
 
-- Graph mutations share the canonical pair guard; user commands acquire sorted
-  shared account guards first and recheck active accounts/current pair state.
-  Block removes conflicting relations atomically; reverse blocks are independent
-  and unblocking restores nothing.
-- Request roles, opposite-direction conflict, terminal retry without regrant,
-  expiry/replacement and UUID-keyed expiry jobs match the graph contract.
-  Retained pair revisions order after-state events across deletion/recreation;
-  no-op commands emit none. Source, job, audit and event writes remain atomic.
-- Profile FRIENDS and bilateral blocks compose current owner APIs. Public graph
-  routes pass through profile policy; internal visibleEdges explicitly requires
-  caller authorization. Lists filter blocks before LIMIT, batch-check account
-  status and bind encrypted cursors to viewer/owner/kind.
-- V0012–V0014 preserve earlier migrations. Constraints, published views,
-  architecture boundaries, HTTP security mappings and OpenAPI match this phase.
-  No new dependency, future-phase implementation or architecture exclusion found.
+1. Verify baseline/index, set IN_PROGRESS, inspect contracts and record a concrete
+   scoped implementation plan before edits. Only this development chat writes code.
+2. Implement coherent, reviewable slices; preserve existing migrations, add new
+   Flyway migrations and use owner APIs/published allowlisted views only.
+3. Test all Phase 4 acceptance/edge cases, especially audience SQL/object parity,
+   current history/media authorization, blocked users/community departure,
+   version/idempotency conflicts, atomic ten-image binding and concurrent reuse,
+   overwrite-after-finalize, stale generation fencing, partial output failure,
+   attach/cleanup races, quotas, avatar replacement and metadata stripping.
+4. Run targeted real PostgreSQL/storage checks, formatting and full ./mvnw verify;
+   report actual operational checks and remaining external gates honestly.
+5. Update implemented OpenAPI, schema/domain/subsystem/operations docs and
+   docs/phases/phase-4.md. Commit verified task-owned work using git-workflow.md.
+6. Set READY_FOR_REVIEW with real code commit, checks, limitations and next owner
+   main in this mailbox; commit handoff separately. Do not self-accept or push.
 
-This verdict combines inspection with the gates below; it does not claim every
-possible interleaving or production workload was tested.
+## Reviewer findings and developer responses
 
-## Independent review checks and limitations
+No Phase 4 implementation/review yet. No finding IDs or required responses.
+Phase 3 was independently ACCEPTED without open findings; preserved in archive.
 
-Commands ran on unchanged executable code with
-`JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64`:
+## Checks and limitations
 
-```bash
-./mvnw -B -ntp test '-Dtest=ArchitectureTest,PersistenceBoundaryTest' \
-  failsafe:integration-test failsafe:verify \
-  '-Dit.test=GraphIT,FoundationIT,AuthenticationIT'
-./mvnw -B -ntp spotless:check verify
-docker compose config --quiet
-/tmp/social-core-phase3-openapi.PI97MQ/bin/openapi-spec-validator docs/api/openapi.yaml
-```
+This is documentation-only orchestration, not Phase 4 implementation.
+Confirmed Phase 3 acceptance at baseline and no newer executable changes after
+its accepted code. Reviewer reported 124 passing tests; historical evidence, not
+rerun in this coordination turn. No Phase 4 tests or readiness claim yet.
+External provider/production gates remain. No push, deployment or agent spawning.
 
-- Targeted: PASS, 65 tests (8 architecture + 57 integration), zero failures/errors/
-  skips. GraphIT 16, FoundationIT 11, AuthenticationIT 30.
-- Full: PASS, 124 tests (29 unit/architecture + 95 integration), zero failures/
-  errors/skips. Real pinned PostgreSQL 18.6 Testcontainers, including migration/
-  upgrade, privacy, concurrency, worker and prior-phase regressions. Spotless
-  check, Enforcer and dependency convergence passed; no formatter writes.
-- OpenAPI 3.1 and Compose configuration: PASS. Review documentation checked for
-  local link targets and whitespace before commit.
-- Review logs: `/tmp/phase3-review-targeted.log` and
-  `/tmp/phase3-review-verify.log`; temporary evidence, not tracked artifacts.
-- Docker image build and Gitleaks results below are historical implementation
-  evidence, not rerun review gates. Container HTTP smoke, remote CI, live providers
-  and production readiness were not verified in this round. MockMvc covers HTTP
-  boundaries; the 10,000-edge test checks follow point lookup, not production
-  capacity or query plans for every graph list.
-- No code/tests/migrations changed, no push/deploy and no Phase 4 work.
+## Next action and role boundary
 
-## Historical implementation checks and limitations
-
-- Java 21 full `./mvnw -B -ntp spotless:apply verify`: PASS, 124 tests
-  (29 unit/architecture + 95 real integration), zero failures/errors/skips.
-- Targeted architecture/graph/foundation/auth gate: 64 pass before the last graph
-  query-plan test; final full verify includes that test (GraphIT 16).
-- OpenAPI 3.1 validation, Compose config, Docker `social-core:phase3` build,
-  Markdown local links and whitespace checks: PASS.
-- Pinned Gitleaks scan of staged index-exported source: no leaks.
-- Initial test/format assertion failures corrected and final gates rerun; details
-  and temporary log paths in the phase record. No remaining local check blocker.
-- Container HTTP smoke and remote CI not rerun; API boundary tests use MockMvc.
-  Provider/production gates remain as documented for earlier phases. No push.
-
-## User-confirmed role boundary
-
-On 2026-10-10 the user confirmed this main conversation is orchestrator/reviewer
-only for subsequent phases: prepare prompts, identify an existing development
-chat or propose a named new one, and review code. Do not directly implement future
-phases or review fixes here. The user explicitly allowed finishing already-started
-Phase 3 as a one-time exception. Persisted in AGENTS.md and thread-workflow.md.
-No chat creation or agent spawning is implied; the user switches chats manually.
-
-## Next action
-
-Next owner is main/user. Phase 3 requires no fix round; await the user's next
-assignment. Do not start Phase 4 automatically. If assigned later, main prepares
-a scoped prompt and proposes a development chat (for example,
-`Develop Phase 4 — Media`); the user switches chats manually. Archive this accepted
-mailbox only when initializing that new task. Main remains orchestrator/reviewer,
-not the implementer. No agent spawning, external messaging or push is authorized.
+User opens the named development chat and asks it to implement this mailbox.
+Main conversation remains orchestrator/reviewer only: prepare prompts, name/reuse
+development chats and review delivered code. It must not implement Phase 4 or
+fixes itself. Return to main after development commits and sets READY_FOR_REVIEW.
+Run one chat at a time in this checkout.
