@@ -25,31 +25,32 @@ class ResourceIdempotency implements Idempotency {
     if (key == null) return null;
     validate(key);
     var now = DurableWorkStore.time(clock.instant());
-    jdbc.update(
-        "INSERT INTO platform.idempotency_record(actor_id,route_key,key_hash,request_hash,expires_at,created_at) VALUES (?,?,?,?,?,?) ON CONFLICT DO NOTHING",
-        actor,
-        route,
-        secrets.hash(key),
-        secrets.hash(request),
-        DurableWorkStore.time(clock.instant().plusSeconds(86400)),
-        now);
+    // One statement locks/inserts/renews and returns the current record. A separate
+    // INSERT/SELECT can lose an expired conflicting row to cleanup between statements.
+    // Live replays preserve every logical field, including the original expiry.
     var row =
         jdbc.queryForMap(
-            "SELECT request_hash,response_reference,expires_at FROM platform.idempotency_record WHERE actor_id=? AND route_key=? AND key_hash=? FOR UPDATE",
+            """
+            INSERT INTO platform.idempotency_record AS current_record
+              (actor_id,route_key,key_hash,request_hash,expires_at,created_at)
+            VALUES (?,?,?,?,?,?)
+            ON CONFLICT (actor_id,route_key,key_hash) DO UPDATE SET
+              request_hash=CASE WHEN current_record.expires_at<=EXCLUDED.created_at
+                THEN EXCLUDED.request_hash ELSE current_record.request_hash END,
+              response_reference=CASE WHEN current_record.expires_at<=EXCLUDED.created_at
+                THEN NULL ELSE current_record.response_reference END,
+              created_at=CASE WHEN current_record.expires_at<=EXCLUDED.created_at
+                THEN EXCLUDED.created_at ELSE current_record.created_at END,
+              expires_at=CASE WHEN current_record.expires_at<=EXCLUDED.created_at
+                THEN EXCLUDED.expires_at ELSE current_record.expires_at END
+            RETURNING request_hash,response_reference
+            """,
             actor,
             route,
-            secrets.hash(key));
-    if (!clock.instant().isBefore(((java.sql.Timestamp) row.get("expires_at")).toInstant())) {
-      jdbc.update(
-          "UPDATE platform.idempotency_record SET request_hash=?,response_reference=NULL,created_at=?,expires_at=? WHERE actor_id=? AND route_key=? AND key_hash=?",
-          secrets.hash(request),
-          now,
-          DurableWorkStore.time(clock.instant().plusSeconds(86400)),
-          actor,
-          route,
-          secrets.hash(key));
-      return null;
-    }
+            secrets.hash(key),
+            secrets.hash(request),
+            DurableWorkStore.time(now.toInstant().plusSeconds(86400)),
+            now);
     if (!Arrays.equals((byte[]) row.get("request_hash"), secrets.hash(request)))
       throw new Failure(409, "IDEMPOTENCY_CONFLICT");
     return (UUID) row.get("response_reference");

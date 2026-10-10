@@ -23,7 +23,10 @@ Restart claims due PENDING/RETRY or expired RUNNING leases. Lease loss during a 
 handler rolls back its effect/acknowledgement; a newer generation can reclaim.
 Fenced status updates require owner/generation/unexpired lease. Ten failures
 reach DEAD and remain for operator review. COMPLETED jobs prune after 30 days.
-Idempotency cleanup is bounded to 500 expired records per prune tick.
+Idempotency cleanup is bounded to 500 expired records per prune tick. It locks
+candidates with SKIP LOCKED and checks current expiry on delete, so in-use/renewed
+keys survive cleanup. Claim inserts/locks/renews in one UPSERT/RETURNING; live retries
+do not extend the 24-hour window. Contended rows can wait for a later cleanup tick.
 
 For a DEAD expiry job, first inspect its source invitation via restricted operator
 tools. Already terminal/replaced invitations need no repair. For a still-PENDING,

@@ -86,7 +86,7 @@ class CommunityIT {
   @Autowired Authentication auth;
   @Autowired AccountCommands accountCommands;
   @Autowired AccountQueries accounts;
-  @Autowired JdbcTemplate jdbc;
+  @MockitoSpyBean JdbcTemplate jdbc;
   @Autowired AccessTokens tokens;
   @Autowired MockMvc mvc;
   @Autowired tools.jackson.databind.ObjectMapper json;
@@ -173,6 +173,413 @@ class CommunityIT {
         action,
         "Synthetic policy reason",
         until);
+  }
+
+  @Test
+  void pruneSkipsRenewingIdempotencyAndPreservesReplayWindow() throws Exception {
+    var owner = user();
+    communities.create(owner, "old-" + UUID.randomUUID(), "Old", "", "PRIVATE", "OPEN", "key");
+    clock.now = clock.now.plusSeconds(86401);
+    String slug = "renewed-" + UUID.randomUUID();
+    var renewed = new CountDownLatch(1);
+    var release = new CountDownLatch(1);
+    var pid = new java.util.concurrent.atomic.AtomicInteger();
+    var pool = Executors.newFixedThreadPool(2);
+    try {
+      var renewal =
+          pool.submit(
+              () ->
+                  tx.execute(
+                      s -> {
+                        var c =
+                            communities.create(owner, slug, "New", "", "PRIVATE", "OPEN", "key");
+                        renewed.countDown();
+                        await(release);
+                        return c;
+                      }));
+      assertThat(renewed.await(5, TimeUnit.SECONDS)).isTrue();
+      var pruning =
+          pool.submit(
+              () ->
+                  tx.executeWithoutResult(
+                      s -> {
+                        pid.set(jdbc.queryForObject("SELECT pg_backend_pid()", Integer.class));
+                        work.prune();
+                      }));
+      // Before the fix this observes the real DELETE lock wait; after the fix cleanup skips it.
+      boolean blocked = waitForCompletionOrLock(pruning, pid);
+      release.countDown();
+      var c = renewal.get(10, TimeUnit.SECONDS);
+      pruning.get(10, TimeUnit.SECONDS);
+      assertThat(
+              count(
+                  "SELECT count(*) FROM platform.idempotency_record WHERE actor_id=? AND response_reference=? AND expires_at>?",
+                  owner.userId(),
+                  c.id(),
+                  clock.instant().atOffset(ZoneOffset.UTC)))
+          .isEqualTo(1);
+      assertThat(blocked).as("cleanup must skip an in-use row, not wait for its renewal").isFalse();
+      assertThat(communities.create(owner, slug, "New", "", "PRIVATE", "OPEN", "key").id())
+          .isEqualTo(c.id());
+      failure(
+          () -> communities.create(owner, slug, "Different", "", "PRIVATE", "OPEN", "key"), 409);
+      assertThat(count("SELECT count(*) FROM community.community WHERE slug_normalized=?", slug))
+          .isEqualTo(1);
+      assertThat(count("SELECT count(*) FROM platform.outbox_event WHERE aggregate_id=?", c.id()))
+          .isEqualTo(1);
+      assertThat(
+              count(
+                  "SELECT count(*) FROM platform.job WHERE payload::text LIKE ?",
+                  "%" + c.id() + "%"))
+          .isZero();
+      assertThat(
+              jdbc.queryForObject(
+                  "SELECT expires_at FROM platform.idempotency_record WHERE actor_id=?",
+                  Instant.class,
+                  owner.userId()))
+          .isEqualTo(clock.instant().plusSeconds(86400));
+    } finally {
+      release.countDown();
+      pool.shutdownNow();
+    }
+  }
+
+  @Test
+  void idempotencyClaimSurvivesCleanupAtStatementBoundary() throws Exception {
+    var owner = user();
+    communities.create(owner, "old-" + UUID.randomUUID(), "Old", "", "PRIVATE", "OPEN", "gap-key");
+    clock.now = clock.now.plusSeconds(86401);
+    String slug = "claimed-" + UUID.randomUUID();
+    var entered = new CountDownLatch(1);
+    var release = new CountDownLatch(1);
+    var once = new java.util.concurrent.atomic.AtomicBoolean();
+    var pool = Executors.newSingleThreadExecutor();
+    // Instrument statement completion only: all SQL, transactions and locks remain real.
+    org.mockito.stubbing.Answer<Object> pause =
+        call -> {
+          Object result = call.callRealMethod();
+          if (((String) call.getArgument(0)).startsWith("INSERT INTO platform.idempotency_record")
+              && once.compareAndSet(false, true)) {
+            entered.countDown();
+            await(release);
+          }
+          return result;
+        };
+    doAnswer(pause).when(jdbc).update(anyString(), any(Object[].class));
+    doAnswer(pause).when(jdbc).queryForMap(anyString(), any(Object[].class));
+    try {
+      var claiming =
+          pool.submit(
+              () -> communities.create(owner, slug, "New", "", "PRIVATE", "OPEN", "gap-key"));
+      assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+      work.prune();
+      release.countDown();
+      var c = claiming.get(10, TimeUnit.SECONDS);
+      assertThat(communities.create(owner, slug, "New", "", "PRIVATE", "OPEN", "gap-key").id())
+          .isEqualTo(c.id());
+      failure(
+          () -> communities.create(owner, slug, "Changed", "", "PRIVATE", "OPEN", "gap-key"), 409);
+      assertThat(
+              count(
+                  "SELECT count(*) FROM platform.idempotency_record WHERE actor_id=? AND response_reference=?",
+                  owner.userId(),
+                  c.id()))
+          .isEqualTo(1);
+      assertThat(count("SELECT count(*) FROM platform.outbox_event WHERE aggregate_id=?", c.id()))
+          .isEqualTo(1);
+    } finally {
+      release.countDown();
+      pool.shutdownNow();
+      reset(jdbc);
+    }
+  }
+
+  @Test
+  void lifecycleEventsDescribeCommittedCommunityStateAndArchiveRetryIsSilent() {
+    var owner = user();
+    var c = community(owner, "PRIVATE", "OPEN");
+    event(c.id(), "CommunityCreated", c.id(), owner.userId(), "ACTIVE", c.version());
+    c = communities.settings(owner, c.id(), cv(c.id()), "Renamed", null, null, null);
+    event(c.id(), "CommunityUpdated", c.id(), owner.userId(), "ACTIVE", c.version());
+    c = communities.archive(owner, c.id(), c.version());
+    assertThat(c.status()).isEqualTo("ARCHIVED");
+    event(c.id(), "CommunityUpdated", c.id(), owner.userId(), "ARCHIVED", c.version());
+    assertThat(communities.archive(owner, c.id(), c.version())).isEqualTo(c);
+    assertThat(count("SELECT count(*) FROM platform.outbox_event WHERE aggregate_id=?", c.id()))
+        .isEqualTo(3);
+  }
+
+  @Test
+  void claimWaitsForCleanupDeletionThenCreatesOneReplayableResource() throws Exception {
+    var owner = user();
+    communities.create(
+        owner, "old-" + UUID.randomUUID(), "Old", "", "PRIVATE", "OPEN", "deleted-key");
+    clock.now = clock.now.plusSeconds(86401);
+    var deleted = new CountDownLatch(1);
+    var release = new CountDownLatch(1);
+    var pid = new java.util.concurrent.atomic.AtomicInteger();
+    var pool = Executors.newFixedThreadPool(2);
+    String slug = "after-prune-" + UUID.randomUUID();
+    try {
+      var pruning =
+          pool.submit(
+              () ->
+                  tx.executeWithoutResult(
+                      s -> {
+                        work.prune();
+                        deleted.countDown();
+                        await(release);
+                      }));
+      assertThat(deleted.await(5, TimeUnit.SECONDS)).isTrue();
+      var claiming =
+          pool.submit(
+              () ->
+                  tx.execute(
+                      s -> {
+                        pid.set(jdbc.queryForObject("SELECT pg_backend_pid()", Integer.class));
+                        return communities.create(
+                            owner, slug, "New", "", "PRIVATE", "OPEN", "deleted-key");
+                      }));
+      assertThat(waitForCompletionOrLock(claiming, pid))
+          .as("claim waits for cleanup's actual uncommitted deletion")
+          .isTrue();
+      release.countDown();
+      pruning.get(10, TimeUnit.SECONDS);
+      var c = claiming.get(10, TimeUnit.SECONDS);
+      assertThat(communities.create(owner, slug, "New", "", "PRIVATE", "OPEN", "deleted-key").id())
+          .isEqualTo(c.id());
+      failure(
+          () -> communities.create(owner, slug, "Different", "", "PRIVATE", "OPEN", "deleted-key"),
+          409);
+      assertThat(
+              count(
+                  "SELECT count(*) FROM platform.idempotency_record WHERE actor_id=? AND response_reference=?",
+                  owner.userId(),
+                  c.id()))
+          .isEqualTo(1);
+      assertThat(count("SELECT count(*) FROM platform.outbox_event WHERE aggregate_id=?", c.id()))
+          .isEqualTo(1);
+    } finally {
+      release.countDown();
+      pool.shutdownNow();
+    }
+  }
+
+  @Test
+  void pruneDeletesOnlyExpiredUnusedKeysInBatchesOfFiveHundred() {
+    var owner = user();
+    work.prune();
+    jdbc.update(
+        "INSERT INTO platform.idempotency_record(actor_id,route_key,key_hash,request_hash,expires_at,created_at) SELECT ?, 'POST /prune-regression', decode(lpad(to_hex(i),64,'0'),'hex'),decode(repeat('00',32),'hex'),?,? FROM generate_series(1,501) i",
+        owner.userId(),
+        clock.instant().minusSeconds(1).atOffset(ZoneOffset.UTC),
+        clock.instant().minusSeconds(86401).atOffset(ZoneOffset.UTC));
+    String slug = "live-" + UUID.randomUUID();
+    var current = communities.create(owner, slug, "Live", "", "PRIVATE", "OPEN", "live-key");
+    work.prune();
+    assertThat(
+            count(
+                "SELECT count(*) FROM platform.idempotency_record WHERE actor_id=? AND route_key='POST /prune-regression'",
+                owner.userId()))
+        .isEqualTo(1);
+    work.prune();
+    assertThat(
+            count(
+                "SELECT count(*) FROM platform.idempotency_record WHERE actor_id=? AND route_key='POST /prune-regression'",
+                owner.userId()))
+        .isZero();
+    assertThat(communities.create(owner, slug, "Live", "", "PRIVATE", "OPEN", "live-key").id())
+        .isEqualTo(current.id());
+  }
+
+  @Test
+  void renewedAdmissionKeysReplayTerminalReferencesWithoutExtraEventsOrJobs() {
+    var owner = user();
+    var target = user();
+    var c = community(owner, "PRIVATE", "REQUEST");
+    var old = admissions.invite(owner, c.id(), target.userId(), "invite-key");
+    admissions.respondInvite(owner, old.id(), "revoke");
+    var request = admissions.request(target, c.id(), "First", "request-key");
+    admissions.respondRequest(target, request.id(), "cancel");
+    clock.now = clock.now.plusSeconds(86400);
+    var renewed = admissions.invite(owner, c.id(), target.userId(), "invite-key");
+    assertThat(renewed.id()).isNotEqualTo(old.id());
+    admissions.respondInvite(target, renewed.id(), "decline");
+    var nextRequest = admissions.request(target, c.id(), "Second", "request-key");
+    assertThat(nextRequest.id()).isNotEqualTo(request.id());
+    admissions.respondRequest(target, nextRequest.id(), "cancel");
+    long events = count("SELECT count(*) FROM platform.outbox_event WHERE aggregate_id=?", c.id());
+    work.prune();
+    clock.now = clock.now.plusSeconds(1);
+    assertThat(admissions.invite(owner, c.id(), target.userId(), "invite-key").status())
+        .isEqualTo("DECLINED");
+    assertThat(admissions.invite(owner, c.id(), target.userId(), "invite-key").id())
+        .isEqualTo(renewed.id());
+    assertThat(admissions.request(target, c.id(), "Second", "request-key").id())
+        .isEqualTo(nextRequest.id());
+    failure(() -> admissions.request(target, c.id(), "Changed", "request-key"), 409);
+    failure(() -> admissions.invite(owner, c.id(), user().userId(), "invite-key"), 409);
+    assertThat(count("SELECT count(*) FROM community.invitation WHERE community_id=?", c.id()))
+        .isEqualTo(2);
+    assertThat(count("SELECT count(*) FROM community.join_request WHERE community_id=?", c.id()))
+        .isEqualTo(2);
+    assertThat(
+            count(
+                "SELECT count(*) FROM platform.job WHERE kind='COMMUNITY_INVITE_EXPIRY' AND dedup_key IN (?,?)",
+                renewed.id().toString(),
+                old.id().toString()))
+        .isEqualTo(2);
+    assertThat(count("SELECT count(*) FROM platform.outbox_event WHERE aggregate_id=?", c.id()))
+        .isEqualTo(events);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT expires_at FROM platform.idempotency_record WHERE actor_id=? AND route_key=?",
+                Instant.class,
+                owner.userId(),
+                "POST /communities/" + c.id() + "/invitations"))
+        .isEqualTo(clock.instant().minusSeconds(1).plusSeconds(86400));
+  }
+
+  @Test
+  void membershipAndAdmissionEventsKeepTheirOwnSourceStatusesAndVersions() {
+    var owner = user();
+    var target = user();
+    var c = community(owner, "PRIVATE", "OPEN");
+    members.join(target, c.id());
+    event(c.id(), "MemberJoinedCommunity", c.id(), target.userId(), "ACTIVE", cv(c.id()));
+    promote(owner, c.id(), target, "MODERATOR");
+    event(c.id(), "MembershipChanged", c.id(), target.userId(), "ACTIVE", cv(c.id()));
+    members.leave(target, c.id(), mv(c.id(), target.userId()));
+    event(c.id(), "MembershipChanged", c.id(), target.userId(), "LEFT", cv(c.id()));
+    var invite = admissions.invite(owner, c.id(), target.userId(), null);
+    event(
+        c.id(), "CommunityInvitationCreated", invite.id(), target.userId(), "PENDING", cv(c.id()));
+    admissions.respondInvite(target, invite.id(), "accept");
+    event(
+        c.id(),
+        "CommunityInvitationResolved",
+        invite.id(),
+        target.userId(),
+        "ACCEPTED",
+        cv(c.id()));
+    event(c.id(), "MemberJoinedCommunity", c.id(), target.userId(), "ACTIVE", cv(c.id()) - 1);
+    sanction(owner, c.id(), target, "SUSPEND_MEMBER", clock.instant().plusSeconds(60));
+    event(c.id(), "MembershipChanged", c.id(), target.userId(), "ACTIVE", cv(c.id()));
+    sanction(owner, c.id(), target, "BAN_MEMBER", null);
+    event(c.id(), "MembershipChanged", c.id(), target.userId(), "BANNED", cv(c.id()));
+    sanction(owner, c.id(), target, "UNBAN_MEMBER", null);
+    event(c.id(), "MembershipChanged", c.id(), target.userId(), "REMOVED", cv(c.id()));
+    communities.settings(owner, c.id(), cv(c.id()), null, null, null, "REQUEST");
+    var request = admissions.request(target, c.id(), "Synthetic message", null);
+    event(c.id(), "CommunityJoinRequested", request.id(), target.userId(), "PENDING", cv(c.id()));
+    admissions.respondRequest(owner, request.id(), "approve");
+    event(
+        c.id(),
+        "CommunityJoinRequestResolved",
+        request.id(),
+        target.userId(),
+        "APPROVED",
+        cv(c.id()));
+    event(c.id(), "MemberJoinedCommunity", c.id(), target.userId(), "ACTIVE", cv(c.id()) - 1);
+    communities.transfer(owner, c.id(), cv(c.id()), target.userId());
+    event(c.id(), "MembershipChanged", c.id(), target.userId(), "ACTIVE", cv(c.id()));
+    members.leave(owner, c.id(), mv(c.id(), owner.userId()));
+    // Lifecycle status is independent of a former owner's LEFT membership too.
+    var archived = communities.archive(target, c.id(), cv(c.id()));
+    event(c.id(), "CommunityUpdated", c.id(), target.userId(), "ARCHIVED", archived.version());
+  }
+
+  @Test
+  void rollbackKeepsSourceAndCorrectLifecycleMembershipAdmissionEventsAtomic() {
+    var owner = user();
+    var target = user();
+    var c = community(owner, "PRIVATE", "OPEN");
+    long events = count("SELECT count(*) FROM platform.outbox_event WHERE aggregate_id=?", c.id());
+    tx.executeWithoutResult(
+        s -> {
+          var archived = communities.archive(owner, c.id(), cv(c.id()));
+          event(c.id(), "CommunityUpdated", c.id(), owner.userId(), "ARCHIVED", archived.version());
+          s.setRollbackOnly();
+        });
+    assertThat(communities.read(owner, c.id()).status()).isEqualTo("ACTIVE");
+    tx.executeWithoutResult(
+        s -> {
+          members.join(target, c.id());
+          event(c.id(), "MemberJoinedCommunity", c.id(), target.userId(), "ACTIVE", cv(c.id()));
+          s.setRollbackOnly();
+        });
+    assertThat(store.member(c.id(), target.userId())).isNull();
+    var id =
+        tx.execute(
+            s -> {
+              var invite = admissions.invite(owner, c.id(), target.userId(), "rollback-key");
+              event(
+                  c.id(),
+                  "CommunityInvitationCreated",
+                  invite.id(),
+                  target.userId(),
+                  "PENDING",
+                  cv(c.id()));
+              s.setRollbackOnly();
+              return invite.id();
+            });
+    assertThat(store.invitation(id)).isNull();
+    assertThat(count("SELECT count(*) FROM platform.job WHERE dedup_key=?", id.toString()))
+        .isZero();
+    assertThat(
+            count(
+                "SELECT count(*) FROM platform.idempotency_record WHERE actor_id=?",
+                owner.userId()))
+        .isZero();
+    assertThat(count("SELECT count(*) FROM platform.outbox_event WHERE aggregate_id=?", c.id()))
+        .isEqualTo(events);
+    assertThat(cv(c.id())).isEqualTo(c.version());
+  }
+
+  private void event(
+      UUID community, String type, UUID source, UUID user, String status, long version) {
+    var row =
+        jdbc.queryForMap(
+            "SELECT aggregate_type,aggregate_version,event_sequence,schema_version,payload::text FROM platform.outbox_event WHERE aggregate_id=? AND event_type=? AND aggregate_version=?",
+            community,
+            type,
+            version);
+    assertThat(row)
+        .containsEntry("aggregate_type", "community")
+        .containsEntry("aggregate_version", version)
+        .containsEntry("event_sequence", 0)
+        .containsEntry("schema_version", 1);
+    var payload = json.readTree((String) row.get("payload"));
+    assertThat(payload.path("communityId").asText()).isEqualTo(community.toString());
+    assertThat(payload.path("userId").asText()).isEqualTo(user.toString());
+    assertThat(payload.path("sourceId").asText()).isEqualTo(source.toString());
+    assertThat(payload.path("status").asText()).isEqualTo(status);
+    var m = store.member(community, user);
+    assertThat(payload.path("membershipVersion").isNull()).isEqualTo(m == null);
+    if (m != null) {
+      assertThat(payload.path("membershipVersion").asLong()).isEqualTo(m.version());
+      assertThat(payload.path("role").asText())
+          .isEqualTo(m.effectiveRole(store.community(community, false, false)));
+      assertThat(payload.path("suspendedUntil").isNull()).isEqualTo(m.suspendedUntil() == null);
+      if (m.suspendedUntil() != null)
+        assertThat(payload.path("suspendedUntil").asText())
+            .isEqualTo(m.suspendedUntil().toString());
+    }
+  }
+
+  private boolean waitForCompletionOrLock(
+      Future<?> future, java.util.concurrent.atomic.AtomicInteger pid) {
+    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+    while (System.nanoTime() < deadline) {
+      if (future.isDone()) return false;
+      if (pid.get() != 0
+          && Boolean.TRUE.equals(
+              jdbc.queryForObject(
+                  "SELECT cardinality(pg_blocking_pids(?))>0", Boolean.class, pid.get())))
+        return true;
+      Thread.onSpinWait();
+    }
+    throw new AssertionError("Neither completion nor PostgreSQL lock wait observed");
   }
 
   @Test

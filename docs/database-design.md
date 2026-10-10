@@ -84,6 +84,14 @@ idempotency (actor/route/key hash, request hash, logical response UUID, 24h expi
 without cached bodies/secrets or a redundant response-status column. Scheduled
 invitation expiry reuses platform.job; no community-specific job queue/table.
 
+Resource idempotency claim uses atomic UPSERT/RETURNING under the same originating
+transaction, eliminating the cleanup race between INSERT and SELECT. Only expired
+keys renew; live replay leaves logical fields/expiry unchanged. Pruning selects
+at most 500 expired keys in deterministic expiry/primary-key order with FOR UPDATE
+SKIP LOCKED, then deletes only still-expired rows. In-use/renewed keys survive;
+cleanup may lag without reducing a committed replay window. No migration is needed
+for this protocol fix; V0001–V0011 remain unchanged.
+
 No account/graph SQL views are introduced before their consuming phases. The
 community views expose exactly the published columns below, current source state,
 and stored membership role; effective OWNER derives from the community owner ID.

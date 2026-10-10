@@ -61,7 +61,7 @@ public class CommunityAdmissions implements AdmissionCommands {
         .work()
         .job("COMMUNITY_INVITE_EXPIRY", i.id().toString(), i.id() + ":" + id, i.expiresAt());
     access.bump(c);
-    access.changed(actor, c, "CommunityInvitationCreated", invitee, i.id(), "PENDING");
+    access.admissionChanged(actor, c, "CommunityInvitationCreated", invitee, i.id(), "PENDING");
     idempotency.complete(actor.userId(), route, key, i.id());
     return inviteInfo(i);
   }
@@ -96,11 +96,11 @@ public class CommunityAdmissions implements AdmissionCommands {
       // Effective existing membership does not emit a duplicate join, but resolution still has its
       // own versioned fact.
       access.bump(access.store().community(c.id(), false, false));
-      access.changed(actor, c, "CommunityInvitationResolved", actor.userId(), id, result);
+      access.admissionChanged(actor, c, "CommunityInvitationResolved", actor.userId(), id, result);
     } else {
       access.store().resolveInvite(id, result, access.clock().instant());
       access.bump(c);
-      access.changed(actor, c, "CommunityInvitationResolved", i.inviteeId(), id, result);
+      access.admissionChanged(actor, c, "CommunityInvitationResolved", i.inviteeId(), id, result);
     }
     return inviteInfo(access.store().invitation(id));
   }
@@ -134,7 +134,7 @@ public class CommunityAdmissions implements AdmissionCommands {
             UUID.randomUUID(), id, actor.userId(), "PENDING", message, access.clock().instant(), 0);
     access.store().request(r);
     access.bump(c);
-    access.changed(actor, c, "CommunityJoinRequested", actor.userId(), r.id(), "PENDING");
+    access.admissionChanged(actor, c, "CommunityJoinRequested", actor.userId(), r.id(), "PENDING");
     idempotency.complete(actor.userId(), route, key, r.id());
     return requestInfo(r);
   }
@@ -167,7 +167,7 @@ public class CommunityAdmissions implements AdmissionCommands {
       memberships.activate(actor, c, r.userId());
     }
     access.bump(access.store().community(c.id(), false, false));
-    access.changed(actor, c, "CommunityJoinRequestResolved", r.userId(), id, result);
+    access.admissionChanged(actor, c, "CommunityJoinRequestResolved", r.userId(), id, result);
     return requestInfo(access.store().request(id));
   }
 

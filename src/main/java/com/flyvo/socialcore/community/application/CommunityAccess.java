@@ -94,25 +94,42 @@ public class CommunityAccess {
     if (size < 1 || size > 100 || offset < 0 || offset > 10000) throw Failure.invalid();
   }
 
-  void changed(ActorContext actor, Community c, String type, UUID user) {
-    var member = store.member(c.id(), user);
-    changed(actor, c, type, user, c.id(), member == null ? c.status() : member.status());
+  void communityChanged(ActorContext actor, Community c, String type, UUID user) {
+    var current = store.community(c.id(), false, false);
+    changed(actor, current, type, user, c.id(), current.status(), store.member(c.id(), user));
   }
 
-  void changed(
-      ActorContext actor, Community c, String type, UUID user, UUID source, String status) {
-    // Community version sequences all effective community/membership transitions.
+  void membershipChanged(ActorContext actor, Community c, String type, UUID user) {
     var current = store.community(c.id(), false, false);
     var member = store.member(c.id(), user);
+    changed(actor, current, type, user, c.id(), member.status(), member);
+  }
+
+  void admissionChanged(
+      ActorContext actor, Community c, String type, UUID user, UUID source, String status) {
+    var current = store.community(c.id(), false, false);
+    changed(actor, current, type, user, source, status, store.member(c.id(), user));
+  }
+
+  private void changed(
+      ActorContext actor,
+      Community current,
+      String type,
+      UUID user,
+      UUID source,
+      String status,
+      Member member) {
+    // Envelope version sequences all transitions; status belongs to the event's source,
+    // never to whichever membership the initiating actor happens to have.
     work.event(
         type,
         "community",
-        c.id(),
+        current.id(),
         current.version(),
         0,
         json.writeValueAsString(
             new com.flyvo.socialcore.community.api.event.CommunityTransition(
-                c.id(),
+                current.id(),
                 user,
                 source,
                 status,
@@ -123,8 +140,8 @@ public class CommunityAccess {
         actor.userId(),
         type.replaceAll("([a-z])([A-Z])", "$1_$2").toUpperCase(java.util.Locale.ROOT),
         "community",
-        c.id(),
-        c.id(),
+        current.id(),
+        current.id(),
         "SUCCESS",
         null);
   }

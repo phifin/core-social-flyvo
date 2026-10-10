@@ -52,10 +52,31 @@ not response bodies. See [community operations](../ops/community.md).
 
 CommunityCreated/Updated, MemberJoinedCommunity, MembershipChanged and admission
 created/resolved facts use publisher-owned CommunityTransition v1 payloads:
-communityId/userId/sourceId/status/role/suspendedUntil/membershipVersion. Community
-version is monotonic across user transitions. Admission sourceId is invitation or
-request UUID; membership changes reference community scope. ModerationActionApplied
-contains actionId/communityId/userId/action. Names, private request messages and
+communityId/userId/sourceId/status/role/suspendedUntil/membershipVersion. The envelope
+aggregateType is community, aggregateId is communityId, aggregateVersion is the
+post-transition community version (monotonic across user transitions), schemaVersion
+is 1 and eventSequence is 0. Status comes from the named committed source, never
+from the initiating actor's membership:
+
+| Event | sourceId | status |
+|---|---|---|
+| CommunityCreated / CommunityUpdated | Community UUID | Community ACTIVE / ARCHIVED |
+| MemberJoinedCommunity / MembershipChanged | Community UUID; userId identifies membership | Membership ACTIVE / LEFT / REMOVED / BANNED |
+| CommunityInvitationCreated / CommunityInvitationResolved | Invitation UUID | Invitation PENDING / ACCEPTED / DECLINED / REVOKED (EXPIRED remains cleanup-only) |
+| CommunityJoinRequested / CommunityJoinRequestResolved | Request UUID | Request PENDING / APPROVED / REJECTED / CANCELLED |
+
+userId is the initiating user for community lifecycle, the subject member for
+membership/ownership transitions and invitee/requester for admissions. Role,
+suspendedUntil and membershipVersion describe that user's post-transition membership
+when present (otherwise null); membershipVersion is not the envelope community
+version. Archive thus publishes ARCHIVED even with an ACTIVE owner membership.
+Archive retry at the current version publishes nothing. Source mutation, event and
+mandatory audit remain one transaction; rollback retains neither mutation nor event.
+This is a v1 producer correctness fix, with no payload-shape change or consumer
+implementation. Existing historical outbox payloads are not rewritten; any future
+projection rollout must backfill/reconcile current source as already required above.
+
+ModerationActionApplied contains actionId/communityId/userId/action. Names, private request messages and
 sanction reasons are excluded. There are no future projection/notification consumers
 enabled; jobs do not require outbox delivery rows. Cleanup expiry itself is not a
 new social activity event and authorization cannot rely on delayed consumers.

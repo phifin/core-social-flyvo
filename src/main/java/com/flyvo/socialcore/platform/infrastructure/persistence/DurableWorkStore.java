@@ -380,7 +380,17 @@ public class DurableWorkStore implements DurableWork {
         status -> {
           var now = time(clock.instant());
           jdbc.update(
-              "DELETE FROM platform.idempotency_record WHERE (actor_id,route_key,key_hash) IN (SELECT actor_id,route_key,key_hash FROM platform.idempotency_record WHERE expires_at<=? ORDER BY expires_at LIMIT 500)",
+              """
+              WITH expired AS (
+                SELECT actor_id,route_key,key_hash FROM platform.idempotency_record
+                WHERE expires_at<=? ORDER BY expires_at,actor_id,route_key,key_hash
+                LIMIT 500 FOR UPDATE SKIP LOCKED
+              )
+              DELETE FROM platform.idempotency_record r USING expired e
+              WHERE r.actor_id=e.actor_id AND r.route_key=e.route_key AND r.key_hash=e.key_hash
+                AND r.expires_at<=?
+              """,
+              now,
               now);
           jdbc.update(
               "UPDATE platform.job SET status='DEAD',last_error_code='ATTEMPTS_EXHAUSTED',lease_owner=NULL,lease_until=NULL WHERE id IN (SELECT id FROM platform.job WHERE status='RUNNING' AND lease_until<=? AND attempts>=10 ORDER BY lease_until,id LIMIT 500)",

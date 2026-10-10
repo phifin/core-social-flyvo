@@ -67,6 +67,10 @@ DDL refinements in [database design](../database-design.md), worker/limits in
 
 ## Executed verification
 
+This section records the initial implementation checks. The later R1–R2 repair
+round and its independently executed checks are recorded below; the original
+99-test evidence must not be confused with the current 107-test suite.
+
 All Maven commands use `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64` (shell default
 is not the build's required JDK). Docker/Testcontainers run, no skipped ITs.
 
@@ -108,6 +112,86 @@ loss/reclaim/two workers/retry-to-DEAD and real HTTP endpoints. Pure domain test
 cover ban reactivation denial and owner self-leave after archive. Existing Phase 1
 R1–R3, refresh/provider/CSRF/current status, PostgreSQL/Mailpit and durable work tests
 all pass without changing their security expectations.
+
+## Main review R1–R2 repair round — 2026-10-10
+
+Resumed at clean `b008fba` on master; this mailbox-only review follows `70179b1`
+and reviewed implementation `f1cde63`. Original reviewer findings/dispositions
+remain in [mailbox](../agent-handoff.md); development proposes fixes, not acceptance.
+The real fix hash and next owner are recorded there after the code commit.
+
+R1: claim is now a single INSERT/ON CONFLICT UPDATE/RETURNING. It locks the key,
+renews only at/past expiry and preserves all logical fields on live replay,
+including the original 24-hour expiry. It cannot lose a conflicting expired row
+between INSERT and SELECT because that gap no longer exists. Prune locks at most
+500 expired candidates in deterministic order with SKIP LOCKED, then deletes only
+still-expired rows. Claimed/renewing records are skipped, not waited on or deleted.
+Each live replay performs a logically unchanged row update to return/lock current
+state atomically; this is a deliberate bounded PostgreSQL implementation choice.
+Mutation/reference storage, current policy checks and changed-body 409 remain intact.
+
+R2: explicit community/membership/admission event helpers replace membership-based
+status inference. CommunityCreated/Updated reads post-transition community status;
+membership/admission events retain their own source semantics. Published v1 field
+shape is unchanged; [event documentation](../events-and-jobs.md) and producer
+record JavaDoc now specify status, sourceId, subject and version meaning. No
+migration, dependency, HTTP/OpenAPI change, new consumer or Phase 3 work.
+
+Eight permanent CommunityIT regressions were added:
+
+- `pruneSkipsRenewingIdempotencyAndPreservesReplayWindow`
+- `idempotencyClaimSurvivesCleanupAtStatementBoundary`
+- `claimWaitsForCleanupDeletionThenCreatesOneReplayableResource`
+- `pruneDeletesOnlyExpiredUnusedKeysInBatchesOfFiveHundred`
+- `renewedAdmissionKeysReplayTerminalReferencesWithoutExtraEventsOrJobs`
+- `lifecycleEventsDescribeCommittedCommunityStateAndArchiveRetryIsSilent`
+- `membershipAndAdmissionEventsKeepTheirOwnSourceStatusesAndVersions`
+- `rollbackKeepsSourceAndCorrectLifecycleMembershipAdmissionEventsAtomic`
+
+Before production edits, the first, second and sixth regressions ran against the
+reviewed code on real PostgreSQL 18.6: **3 tests, 2 assertion failures, 1 error,
+0 skips**. Renewed key count was 0 instead of 1; archive payload was ACTIVE instead
+of ARCHIVED; the claim interleaving raised EmptyResultDataAccessException. That
+error is the reproduced application defect, not infrastructure failure. The first
+attempt was interrupted before test results and was rerun; only the completed
+reproduction counts. After fixes those same three tests passed, then all eight
+passed in the targeted and full suites below. Latches, real SQL statement-boundary
+instrumentation and pg_blocking_pids arrange interleavings; no sleep or fabricated
+SQL/lock result. Tests inspect committed references/payloads and repeat commands to
+prove no extra resource/event/job and unchanged live expiry; rollback checks include
+idempotency and scheduled job removal. Existing authority/body-denial tests remain.
+
+Commands use Java 21 and real Testcontainers infrastructure:
+
+```bash
+./mvnw -B -ntp spotless:apply test-compile \
+  failsafe:integration-test failsafe:verify \
+  '-Dit.test=CommunityIT#pruneSkipsRenewingIdempotencyAndPreservesReplayWindow+idempotencyClaimSurvivesCleanupAtStatementBoundary+lifecycleEventsDescribeCommittedCommunityStateAndArchiveRetryIsSilent'
+./mvnw -B -ntp spotless:apply test \
+  '-Dtest=CommunityPolicyTest,ArchitectureTest,PersistenceBoundaryTest' \
+  failsafe:integration-test failsafe:verify '-Dit.test=CommunityIT,FoundationIT'
+./mvnw -B -ntp verify
+```
+
+- Final targeted: BUILD SUCCESS, 11 unit/architecture + 44 integration = **55**,
+  zero failures/errors/skips (CommunityIT 34, FoundationIT 10).
+- Full verify: BUILD SUCCESS, 29 unit/architecture + 78 integration = **107**,
+  zero failures/errors/skips, formatting/Enforcer/dependency convergence pass;
+  PostgreSQL migration/owner/view/concurrency and Mailpit/provider tests run.
+- Logs: `/tmp/social-core-phase2-r1-r2-red.log`, `-green-initial.log`, `-targeted.log`,
+  `-verify.log`; local temporary evidence, not repository artifacts.
+- Local Markdown links and staged/working whitespace checks pass. Source and
+  contract changes are task-scoped; migrations V0001–V0011 unchanged.
+- Pinned Gitleaks 8.28.0 scanned the staged index-exported source snapshot: no
+  leaks. Log: `/tmp/social-core-phase2-r1-r2-gitleaks.log`; ignored keys/build
+  artifacts excluded. Only this evidence sentence is added afterward.
+
+Docker image/isolated HTTP smoke, OpenAPI validator and remote CI are not rerun in
+this repair round; no container/HTTP/spec shape change. Initial implementation
+operational evidence remains historical, not claimed as rerun. Existing outbox
+history is not rewritten; no consumer is enabled and future projections must
+backfill/reconcile current source before rollout. Main re-review and previously
+documented provider/production readiness gates remain. No local fix/test blocker.
 
 ## Refinements and remaining gates
 

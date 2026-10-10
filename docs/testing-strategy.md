@@ -52,6 +52,15 @@ checked without skips. Community published-view columns and SQL/object visibilit
 parity are checked; a synthetic 10,000-member query plan uses membership_pkey.
 Exact commands/results and measurement limits are in [Phase 2](phases/phase-2.md).
 
+Phase 2 R1–R2 regressions reproduce renewal/prune deletion, INSERT/SELECT cleanup
+empty-row failure and archive's incorrect outbox status before fixes on PostgreSQL.
+Latches, real statement-boundary instrumentation and pg_blocking_pids prove renewal-
+first, cleanup-between-statements and cleanup-first interleavings, without sleep or
+mocked SQL/lock results. Tests assert bounded expiry cleanup, replay UUID/body conflict,
+unchanged live expiry and no extra resources/events/jobs, including terminal admission.
+Committed lifecycle/membership/admission payload/source/version and archive no-op
+retry are checked independently of responses, with source/event rollback atomicity.
+
 Phase 1 adds real PostgreSQL + Mailpit tests, a JDK local HTTP provider server
 (no live-provider CI calls or additional mock-server dependency), signed JWT/JWKS
 fixtures, separate-transaction/barrier races and an instrumented password-hashing

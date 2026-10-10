@@ -50,7 +50,7 @@ public class MembershipLifecycle implements MembershipCommands {
           .store()
           .resolveRequest(request.id(), "CANCELLED", actor.userId(), access.clock().instant());
     access.bump(c);
-    access.changed(actor, c, "MemberJoinedCommunity", user);
+    access.membershipChanged(actor, c, "MemberJoinedCommunity", user);
   }
 
   @Transactional
@@ -154,7 +154,7 @@ public class MembershipLifecycle implements MembershipCommands {
             next.suspendedUntil(),
             access.clock().instant());
     access.bump(c);
-    access.changed(actor, c, "MembershipChanged", m.userId());
+    access.membershipChanged(actor, c, "MembershipChanged", m.userId());
   }
 
   @Transactional(readOnly = true)

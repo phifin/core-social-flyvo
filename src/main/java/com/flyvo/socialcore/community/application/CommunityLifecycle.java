@@ -61,7 +61,7 @@ public class CommunityLifecycle implements CommunityCommands, MembershipQueries 
             access.clock().instant(),
             0);
     access.store().create(c, access.clock().instant());
-    access.changed(actor, c, "CommunityCreated", actor.userId());
+    access.communityChanged(actor, c, "CommunityCreated", actor.userId());
     idempotency.complete(actor.userId(), route, key, c.id());
     return info(c);
   }
@@ -131,7 +131,7 @@ public class CommunityLifecycle implements CommunityCommands, MembershipQueries 
         m = mode == null ? c.joinMode() : mode;
     validate(n, d, v, m);
     access.store().settings(id, n, d, v, m, access.clock().instant());
-    access.changed(actor, c, "CommunityUpdated", actor.userId());
+    access.communityChanged(actor, c, "CommunityUpdated", actor.userId());
     return info(access.store().community(id, false, false));
   }
 
@@ -144,7 +144,7 @@ public class CommunityLifecycle implements CommunityCommands, MembershipQueries 
     access.version(c.version(), version);
     if (c.active()) {
       access.store().archive(id, access.clock().instant());
-      access.changed(actor, c, "CommunityUpdated", actor.userId());
+      access.communityChanged(actor, c, "CommunityUpdated", actor.userId());
     }
     return info(access.store().community(id, false, false));
   }
@@ -165,7 +165,7 @@ public class CommunityLifecycle implements CommunityCommands, MembershipQueries 
         .store()
         .membership(id, actor.userId(), "ADMIN", "ACTIVE", null, access.clock().instant());
     access.store().transfer(id, successor, access.clock().instant());
-    access.changed(actor, c, "MembershipChanged", successor);
+    access.membershipChanged(actor, c, "MembershipChanged", successor);
     access
         .work()
         .audit(actor.userId(), "COMMUNITY_OWNER_TRANSFERRED", "community", id, "SUCCESS", null);

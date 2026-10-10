@@ -56,6 +56,14 @@ it never caches private bodies or credentials. Expired keys can be reused;
 domain uniqueness still decides the result. Member/role DELETE/PATCH uses the
 target membership's If-Match; retries with an obsolete version yield 412.
 
+Claim is one PostgreSQL UPSERT/RETURNING that inserts or locks the key and renews
+only when `expires_at <= claim time`. Live replay preserves the original hash,
+reference, creation time and expiry; it does not extend retention. Mutation and
+reference completion retain that lock through commit. Cleanup locks at most 500
+expired rows with SKIP LOCKED and rechecks expiry on deletion, never waiting on a
+claim or removing a renewed key from a stale candidate snapshot. A concurrent
+cleanup deletion is handled by the atomic UPSERT, not a fallible INSERT/SELECT gap.
+
 ## Authority, archive and account closure
 
 OWNER derives exclusively from community.owner_user_id. Persisted membership
@@ -114,6 +122,10 @@ moderation transaction, not a separately routable unaudited HTTP endpoint.
 CommunityTransition and ModerationActionApplied are publisher-owned event records.
 Outbox community versions order effective transitions; payloads include source
 IDs/status/member role/suspension/version, without names, request messages or reasons.
+CommunityCreated/Updated status is the post-transition **community** status,
+including ARCHIVED while the owner membership remains ACTIVE. Membership events
+use the subject membership status; admission events use invitation/request status.
+The [event contract](events-and-jobs.md) specifies each source and version explicitly.
 No future notification/search consumer is enabled. Source read-only views are
 community_api.communities_v1/memberships_v1, allowlisted solely for the future
 content query adapter; membership view role is stored role, OWNER derives by join.
