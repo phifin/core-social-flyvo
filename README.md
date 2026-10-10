@@ -6,6 +6,10 @@ A reusable Java backend core for social networks and communities. The core has n
 
 ## Start here
 
+Phase 4 is IN_PROGRESS: [checkpoint](docs/phases/phase-4.md) and
+[local storage operations](ops/media.md). Silo/SDK prerequisites and post/policy
+primitives are verified; publish/media/avatar APIs are not delivered yet.
+
 For sequential development/review threads, read the fixed [agent handoff](docs/agent-handoff.md) and [thread workflow](docs/thread-workflow.md).
 
 1. [Architecture and repository structure](docs/architecture.md): boundaries, dependency graph, transactions, conventions.
@@ -82,7 +86,7 @@ Health probes and explicitly implemented auth/onboarding and visible-profile rou
 
 Responses carry `X-Request-ID`; safe incoming IDs up to 64 ASCII characters are retained and invalid IDs are replaced. Structured JSON logs include requestId from MDC during request handling. Errors expose stable code/requestId and sanitized details, not rejected values or exception messages. JDBC connect/read timeouts are five seconds, pool acquisition five seconds, and readiness is intentionally separate from liveness.
 
-Flyway `V0001`–`V0011` remain unchanged; `V0012`–`V0014` add graph relations/revisions/views, account ACTIVE view and FRIENDS profile visibility. Hibernate validates account/profile mappings; graph/community/identity/worker adapters use parameterized JDBC under the same local transaction manager. OSIV and auto-DDL remain off. Production must separate migration/runtime roles before launch. No media, Redis or broker is introduced.
+Flyway `V0001`–`V0011` remain unchanged; `V0012`–`V0014` add graph relations/revisions/views, account ACTIVE view and FRIENDS profile visibility. Hibernate validates account/profile mappings; graph/community/identity/worker adapters use parameterized JDBC under the same local transaction manager. OSIV and auto-DDL remain off. Production must separate migration/runtime roles before launch. Phase 4 adds opt-in Silo/SDK storage prerequisites, not user-facing media routes yet. No Redis or broker is introduced.
 
 Graph flow: PUT/DELETE `/api/v1/me/following/{user}`, `/me/blocks/{user}` and `/me/mutes/{user}` manage distinct edges. POST `/friend-requests` with userId, then the addressee accepts/declines or requester cancels through its purpose-specific route. Block atomically removes conflicting relationships; unblock restores nothing. Profile FRIENDS uses current friendship; signed-in blocks override all scopes. Lists in [OpenAPI](docs/api/openapi.yaml) use bounded pages and opaque cursors; continue until nextCursor is null, including empty filtered pages. See [graph operations](ops/graph.md).
 

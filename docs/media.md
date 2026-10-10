@@ -4,6 +4,11 @@ Images are in the first usable content phase. Use an S3-compatible object store,
 
 ## Upload sequence
 
+Implementation checkpoint: [Phase 4](phases/phase-4.md) and
+[local storage operations](../ops/media.md) record verified Compose/Testcontainers
+storage and SDK primitives. The sequence below still requires lifecycle/API/worker
+implementation; it is not delivered merely because the storage tests pass.
+
 1. Authenticated verified user requests upload with purpose POST/AVATAR, declared MIME, bytes and SHA-256 checksum. Enforce rate/quota (initial 10 MiB/image, 40 megapixels, 10 attachments/post, 100 MiB pending upload quota/user, 1 GiB retained media/user configurable). Reserve quota and insert UPLOAD_PENDING asset. ID and quarantine key are backend-generated; original filename is metadata at most, never an object key.
 2. Return presigned PUT URL expiring in 10 minutes plus required content type/checksum headers. Bucket CORS allows only configured frontend origins. A signed declared size/header is not relied on as the sole upload limit: reject oversized actual objects, configure ingress/storage controls, and account reserved bytes so uploads cannot bypass quotas. Prefer signed POST length conditions if the selected compatible store/SDK supports them consistently; changing transport does not change final validation.
 3. Client uploads directly to quarantine, then calls finalize with asset ID and upload result/version identifier. Owner-only finalize probes trusted storage HEAD outside a transaction, checks expected key/version/size/checksum and performs state/version CAS in a short transaction to UPLOADED. No arbitrary external URL or key from the client is trusted.

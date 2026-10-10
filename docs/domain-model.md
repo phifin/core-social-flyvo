@@ -65,6 +65,10 @@ Private-profile status does not itself restrict FOLLOWERS post audience: anyone 
 
 ## Content
 
+Phase 4's current [checkpoint](phases/phase-4.md) implements pure audience/body
+invariants and canonical ordinary read/history policy only. Persistence, commands,
+SQL/API composition, revisions/moderation and media/avatar integration remain.
+
 `Post` is an aggregate: author, optional community, body (plain text initially, max 10,000 characters), optional one HTTP(S) link, content kind (`STANDARD` initially), audience, media references (max 10), timestamps, version and state (`PUBLISHED`, `DELETED`, `REMOVED`). Nonempty body, link or media is required. Create directly as PUBLISHED; server drafts are deferred. `deleted_at` is owner soft deletion; moderation removal uses separate reason/action reference. Neither is returned in normal lists. A deleted post has no readable comments or attachments through the application.
 
 Personal audiences: PUBLIC, FOLLOWERS, FRIENDS, CUSTOM, ONLY_ME. Community posts use COMMUNITY only and carry one community ID. COMMUNITY means public if community is PUBLIC, otherwise effective members only. This avoids conflicting “public post in a private community” flags. No cross-post to several communities in one aggregate.

@@ -54,5 +54,48 @@ services:
     environment:
       MP_MAX_MESSAGES: 500
       MP_DISABLE_VERSION_CHECK: "true"
+  silo:
+    profiles: [media]
+    image: docker.io/pgsty/silo:RELEASE.2026-09-16T00-00-00Z@sha256:635197cb9f36d01bee221d34d1c7d7960f6a95c48b0b6c01d99cd13bdae51a46
+    user: "${APP_UID:-10001}:${APP_GID:-10001}"
+    command: [sh, /opt/storage/start.sh]
+    ports:
+      - "127.0.0.1:${STORAGE_PORT:-9000}:9000"
+      - "127.0.0.1:${STORAGE_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - ./.local/storage-data:/data
+      - ./.local/secrets:/run/secrets:ro
+      - ./ops/local/storage:/opt/storage:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    cpus: 2
+    healthcheck:
+      test: [CMD, silo, healthcheck]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    stop_grace_period: 30s
+  silo-init:
+    profiles: [media]
+    image: docker.io/pgsty/silo:RELEASE.2026-09-16T00-00-00Z@sha256:635197cb9f36d01bee221d34d1c7d7960f6a95c48b0b6c01d99cd13bdae51a46
+    user: "${APP_UID:-10001}:${APP_GID:-10001}"
+    command: [sh, /opt/storage/init.sh]
+    environment:
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
+    depends_on:
+      silo:
+        condition: service_healthy
+    volumes:
+      - ./.local/secrets:/run/secrets:ro
+      - ./ops/local/storage:/opt/storage:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
 volumes:
   postgres-data:

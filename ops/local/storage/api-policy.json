@@ -1,0 +1,10 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {"Effect": "Allow", "Action": ["s3:PutObject", "s3:GetObject", "s3:GetObjectVersion"],
+     "Resource": ["arn:aws:s3:::social-quarantine/incoming/*"]},
+    {"Effect": "Allow", "Action": ["s3:GetObjectVersion"],
+     "Resource": ["arn:aws:s3:::social-delivery/variants/*"],
+     "Condition": {"Null": {"s3:versionid": "false"}}}
+  ]
+}

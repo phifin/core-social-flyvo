@@ -41,6 +41,11 @@ Track JaCoCo coverage as a diagnostic, especially policy/state branches; avoid v
 
 ## Definition of tested
 
+Phase 4's [checkpoint](phases/phase-4.md) adds real pinned Silo contract tests and
+pure post invariant/policy matrices. It does not yet prove post SQL/object parity,
+Phase 4 PostgreSQL migrations, lifecycle races, hostile decoding or avatar behavior.
+The prior PostgreSQL integration suite remains required and passes unchanged.
+
 Phase 3 GraphIT covers real PostgreSQL relationship lifecycles, denied actor/IDOR,
 FRIENDS and bilateral block policy, opposite/duplicate requests, follow/block races,
 both shared-guard/block orders, UUID ordering parity, no-op event counts/revisions,

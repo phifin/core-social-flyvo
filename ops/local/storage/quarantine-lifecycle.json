@@ -1,0 +1,5 @@
+{
+  "Rules": [{"ID": "quarantine-ceiling", "Status": "Enabled",
+    "Filter": {"Prefix": "incoming/"}, "Expiration": {"Days": 2},
+    "NoncurrentVersionExpiration": {"NoncurrentDays": 2}}]
+}

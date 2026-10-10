@@ -1,0 +1,11 @@
+<CORSConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+  <CORSRule>
+    <AllowedOrigin>FRONTEND_ORIGIN</AllowedOrigin>
+    <AllowedMethod>PUT</AllowedMethod>
+    <AllowedHeader>content-type</AllowedHeader>
+    <AllowedHeader>x-amz-checksum-sha256</AllowedHeader>
+    <ExposeHeader>x-amz-version-id</ExposeHeader>
+    <ExposeHeader>etag</ExposeHeader>
+    <MaxAgeSeconds>600</MaxAgeSeconds>
+  </CORSRule>
+</CORSConfiguration>

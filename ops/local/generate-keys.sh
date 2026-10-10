@@ -17,4 +17,10 @@ fi
 if [[ ! -e .local/secrets/limiter.b64 ]]; then
   openssl rand -base64 32 > .local/secrets/limiter.b64
 fi
+for storage_secret in storage-admin storage-api storage-worker storage-kms; do
+  if [[ ! -e .local/secrets/$storage_secret.b64 ]]; then
+    openssl rand -base64 32 > ".local/secrets/$storage_secret.b64"
+  fi
+done
+mkdir -p .local/storage-data
 printf '%s\n' 'Local keys are ready in .local/secrets; preserve them across restarts.'
