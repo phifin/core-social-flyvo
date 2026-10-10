@@ -55,6 +55,8 @@ The implementation definition of done and frozen/flexible decisions are in `docs
 
 ## Sequential thread handoff
 
+- The main conversation is orchestrator/reviewer only: prepare prompts, identify an existing development chat or propose a named new one, and review delivered code. Do not implement subsequent phases or fixes in main. The user's one-time exception allows main to finish the already-started Phase 3 only; see `docs/thread-workflow.md`.
+
 - The user runs one thread at a time in this checkout. Use `docs/agent-handoff.md` as the fixed mailbox; no agent spawning or external messaging is implied.
 - Before returning, update the mailbox with actual code commit, checks, limitations and next owner. Preserve reviewer findings and respond to each ID; only the main reviewer marks them resolved or accepts a phase.
 - Commit the handoff documentation after the code commit so the mailbox can reference its real hash. Never invent a self-referential report commit hash. A review-only task may commit documentation with outstanding code findings clearly recorded.

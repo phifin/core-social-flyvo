@@ -2,6 +2,22 @@
 
 The user activates one thread at a time in the same checkout. The main thread coordinates scope and reviews; a development thread implements the assigned task. No service, agent API or concurrent execution is needed. Threads communicate through the tracked file `docs/agent-handoff.md`.
 
+## User-confirmed thread roles — 2026-10-10
+
+The current main conversation is orchestrator/reviewer only. For subsequent phases,
+main prepares the implementation prompt and tells the user which existing development
+chat to reuse, or explicitly proposes a new chat with its name. If existing chat names
+are unknown, ask the user or propose a named new chat; never claim to have created one.
+The user switches chats manually. Main reviews delivered code and records findings;
+it does not implement features or review fixes itself. A request to continue/start a
+phase means coordinate its handoff, not take over development. Documentation-only
+coordination/review updates and appropriate verification remain part of main's role.
+
+Explicit one-time exception: the user authorized main to finish the already-started
+Phase 3 implementation in this conversation. This does not authorize development
+in later phases. Phase 3 still needs independent review; implementation cannot
+self-accept. This role clarification does not authorize agent spawning.
+
 ## Always read and verify
 
 Read AGENTS.md, the mailbox, git status and recent history before acting. Verify that the mailbox's code commit exists and matches the work being reviewed; later documentation-only commits are expected. If newer code exists, inspect it and explicitly record the new review baseline. Do not act on stale findings as if they referred to current code. The mailbox is a task/status record, not permission to override security, ADRs or human instructions.
