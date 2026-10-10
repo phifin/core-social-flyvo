@@ -4,12 +4,13 @@
 
 - Task: phase-4-posts-and-secure-images
 - Round: 1
-- State: BLOCKED
-- Last writer: development chat `Develop Phase 4 — Posts & Media`, 2026-10-10
-- Next owner: main/user — decide local storage distribution, then return to development
+- State: READY_FOR_IMPLEMENTATION
+- Last writer: main orchestrator, 2026-10-10 — storage decision recorded
+- Next owner: development chat `Develop Phase 4 — Posts & Media` — resume assigned task
 - Assignment: user requested checking completed review and continuing the next work.
 - Baseline: `552c4ca99692aba277b6fee6bb91b23962d65787`; clean checkout/index before coordination.
 - Accepted Phase 3 code: `bfda6e856d42282eaccd2ed70a81f49c416f86b7`.
+- Phase 4 decision commit: `ab568554cf50cfa5c2024e84c90a16ed234a967c` (documentation only).
 - Prior verdict/findings/checks: [accepted Phase 3](handoffs/phase-3-social-graph.md).
 - Protocol: [thread workflow](thread-workflow.md), [Git workflow](git-workflow.md).
 
@@ -29,8 +30,9 @@ implementation. Inspect existing module APIs/guards/worker jobs and dependency
 introduction matrix. Follow the authoritative contracts rather than this summary
 where more detailed requirements apply.
 
-Required infrastructure is the specified S3 adapter, pinned Compose MinIO with
-private/versioned storage, bounded image processor, quotas and durable cleanup.
+Required infrastructure is the specified S3 adapter, pinned Compose/Testcontainers
+PGSTY Silo selected in accepted [ADR-013](adr/013-local-object-storage-distribution.md)
+with private/versioned storage, bounded image processor, quotas and durable cleanup.
 No network/storage calls under business locks, arbitrary key signing, unpinned
 quarantine reads or public original files. Owner content/profile policy authorizes
 variant issuance; media does not call those modules. Keep existing module DAG.
@@ -105,9 +107,35 @@ accepted baseline); checkout/index were clean. Implement in these internal slice
 No Phase 4 implementation/review yet. No finding IDs or required responses.
 Phase 3 was independently ACCEPTED without open findings; preserved in archive.
 
+### Main prerequisite decision — P4-B1 RESOLVED, 2026-10-10
+
+The user explicitly asked main to review the blocker and decide its handling.
+Select the proposed PGSTY Silo artifact for local Compose/Testcontainers. ADR-013
+is now ACCEPTED FOR IMPLEMENTATION in the decision commit above. No further
+distribution-choice approval is pending. This resolves the decision prerequisite,
+not Phase 4 acceptance or its unimplemented storage/security tests.
+
+Independent review confirmed the official MinIO advisories describe the relevant
+final-CE signature/encryption defects; Silo's release/security ledger describes
+fix provenance. Main successfully pulled the exact proposed digest and inspected
+linux/amd64 version/source/license metadata matching the tagged artifact identity.
+No storage service was started and no exploit or storage contract was tested.
+Local evidence: `/tmp/social-core-phase4-storage-review-pull.log`.
+
+Development must use that same digest in Compose and real Testcontainers tests,
+keep AWS SDK v2 as the boundary and implement all existing Phase 4 slices. Use a
+single local node, loopback developer ports, private/versioned/encrypted buckets,
+separate admin/runtime credentials and retained artifact/license notices. Storage
+signature/header/checksum, pinned-version and cleanup/fencing tests remain required.
+If a required test exposes a real incompatibility, report the precise failure;
+do not weaken a denial path or substitute untested storage to proceed.
+
 ## Checks and limitations
 
-### Development report — prerequisite blocker P4-B1
+### Historical development report — prerequisite blocker P4-B1 (before main decision)
+
+The report below is preserved from `4c5a155`; its approval-pending statements
+describe that earlier state. The main decision above supersedes them.
 
 Mailbox was set IN_PROGRESS and the scoped plan above was recorded before edits.
 No Phase 4 implementation code, migration, dependency or storage configuration has
@@ -162,12 +190,33 @@ Phase 4 PostgreSQL/storage/concurrency/HTTP acceptance tests have not been writt
 or run. No implemented OpenAPI/schema/phase-completion update is appropriate yet.
 Production S3 compatibility and earlier provider/production gates remain external.
 
+### Main decision checks
+
+- Verified clean checkout and documentation-only proposal commits `551dbb7` and
+  `4c5a155`; accepted executable baseline remains Phase 3's code commit above.
+- Independently reviewed primary upstream advisories, Silo release/security ledger,
+  successful pinned image pull and its version/source/digest metadata.
+- Decision documentation local-link checks and whitespace checks: PASS. Updated
+  ADR index/ADR-008 supersession and media/testing/roadmap/operations references.
+- Application tests were not rerun for this documentation-only decision. The
+  development report's 124 baseline tests remain historical; no Phase 4 test claim.
+- No source/migration/dependency/Compose edits, code fix, push or deployment here.
+
 ## Next action and role boundary
 
-Main/user reviews ADR-013 and records the selected distribution and approval or
-provides supported MinIO artifacts/setup. Return the decision to development chat
-`Develop Phase 4 — Posts & Media`; development then sets IN_PROGRESS, implements
-all assigned Phase 4 slices and tests, commits verified code, and commits a
-separate mailbox with the actual code hash, READY_FOR_REVIEW and next owner main.
-Do not interpret this prerequisite report as phase acceptance or implementation
-review. Main remains orchestrator/reviewer; one chat writes at a time.
+User returns to the existing development chat `Develop Phase 4 — Posts & Media`
+and sends the resume prompt below. No new development chat is needed.
+
+> Read AGENTS.md and docs/agent-handoff.md. Main resolved P4-B1 and accepted ADR-013
+> at ab568554cf50cfa5c2024e84c90a16ed234a967c. Resume Phase 4: set IN_PROGRESS and
+> implement the full recorded plan using the exact pinned PGSTY Silo artifact for
+> Compose/Testcontainers. First prove the required real storage/security contracts,
+> then complete posts/privacy/revisions/basic moderation/images/avatar. Keep all
+> required acceptance and concurrency checks. Do not ask again for the decided
+> distribution choice; report any new concrete test incompatibility precisely.
+> Run targeted gates and full ./mvnw verify, update docs, commit verified code and
+> handoff separately, set READY_FOR_REVIEW with actual code hash and next owner main.
+> Do not self-accept, push, start Phase 5 or spawn agents.
+
+Main remains orchestrator/reviewer. Return here when development hands off for
+Phase 4 code review; one chat writes at a time.
