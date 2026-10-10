@@ -21,6 +21,25 @@ class ProfileController {
 
   public record PreferenceChange(String locale, String timeZone, String defaultPostAudience) {}
 
+  public record Avatar(UUID mediaId) {}
+
+  @PutMapping("/me/avatar")
+  ResponseEntity<ProfileQueries.Summary> avatar(
+      @AuthenticationPrincipal ActorContext actor,
+      @RequestHeader(name = "If-Match", required = false) String match,
+      @RequestBody Avatar request) {
+    var p = profiles.avatar(actor, version(match), request.mediaId());
+    return ResponseEntity.ok().eTag("\"" + p.version() + "\"").body(p);
+  }
+
+  @PostMapping("/users/{id}/avatar/access")
+  ResponseEntity<?> avatarAccess(
+      @AuthenticationPrincipal ActorContext actor, @PathVariable UUID id) {
+    return ResponseEntity.ok()
+        .header("Cache-Control", "private, no-store")
+        .body(profiles.avatarAccess(actor == null ? ActorContext.anonymous() : actor, id));
+  }
+
   @GetMapping("/users/{id}/graph/{kind}")
   com.flyvo.socialcore.graph.api.RelationshipQueries.Page<UUID> graph(
       @AuthenticationPrincipal ActorContext actor,

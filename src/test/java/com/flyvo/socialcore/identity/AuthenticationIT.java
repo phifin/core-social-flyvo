@@ -1222,6 +1222,7 @@ class AuthenticationIT {
             mail,
             Clock.systemUTC(),
             List.of(),
+            List.of(),
             new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
     worker.runOnce();
     assertThat(

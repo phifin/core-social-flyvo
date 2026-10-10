@@ -19,6 +19,7 @@ for bucket in social-quarantine social-delivery; do
   mcli --config-dir /tmp/mcli anonymous set none "local/$bucket" >/dev/null
   mcli --config-dir /tmp/mcli version enable "local/$bucket" >/dev/null
   mcli --config-dir /tmp/mcli encrypt set sse-s3 "local/$bucket" >/dev/null
+  mcli --config-dir /tmp/mcli quota set "local/$bucket" --size 10GiB >/dev/null
 done
 while IFS= read -r line; do
   case "$line" in

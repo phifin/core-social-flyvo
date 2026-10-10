@@ -12,4 +12,6 @@ public interface ProfileRepository {
   void add(Profile profile, Preferences preferences);
 
   void flush();
+
+  java.util.List<Profile> summaries(java.util.List<UUID> users);
 }

@@ -10,7 +10,13 @@ public interface ProfileQueries {
       String displayName,
       String bio,
       String visibility,
-      long version) {}
+      long version,
+      UUID avatarMediaId) {}
 
   Summary visible(ActorContext actor, UUID userId);
+
+  record Attribution(UUID userId, String displayName) {}
+
+  /** Internal minimal attribution only AFTER containing-content authorization. */
+  java.util.List<Attribution> attributionSummaries(java.util.List<UUID> userIds);
 }

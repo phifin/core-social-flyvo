@@ -41,10 +41,18 @@ Track JaCoCo coverage as a diagnostic, especially policy/state branches; avoid v
 
 ## Definition of tested
 
-Phase 4's [checkpoint](phases/phase-4.md) adds real pinned Silo contract tests and
-pure post invariant/policy matrices. It does not yet prove post SQL/object parity,
-Phase 4 PostgreSQL migrations, lifecycle races, hostile decoding or avatar behavior.
-The prior PostgreSQL integration suite remains required and passes unchanged.
+Phase 4's [evidence](phases/phase-4.md) includes real pinned Silo security/storage,
+secret-mount isolation, PostgreSQL SQL/object/current-API policy parity, post HTTP
+and version/idempotency/retention, scoped moderation rollback, ten-image atomicity,
+named quota/attach/cleanup/member/block races, pinned overwrite/fenced stale and
+partial outputs, terminal recovery, all-version purge and avatar replacement.
+Spies inject bounded failures/latches but call real repositories/storage; PostgreSQL
+wait_event_type=Lock establishes conflicting mutation waits. ImageProcessorTest
+executes actual isolated JPEG/PNG/static WebP decoding and hostile container/CRC/
+dimension/metadata cases. PackagedImageProcessorIT repeats WebP using the built
+Boot jar/child launcher. FoundationIT upgrades V0014 with retained checksums/profile;
+the actual candidate SQL has a skewed 12,000-row indexed EXPLAIN and bounded hydrate
+query-count regression. The prior integration suite remains required, not replaced.
 
 Phase 3 GraphIT covers real PostgreSQL relationship lifecycles, denied actor/IDOR,
 FRIENDS and bilateral block policy, opposite/duplicate requests, follow/block races,

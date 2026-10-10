@@ -15,4 +15,16 @@ public interface ModerationActions {
       String after,
       String requestId,
       Instant now);
+
+  void appendPost(
+      UUID id,
+      UUID actor,
+      UUID community,
+      UUID post,
+      String action,
+      String reason,
+      String before,
+      String after,
+      String requestId,
+      Instant now);
 }

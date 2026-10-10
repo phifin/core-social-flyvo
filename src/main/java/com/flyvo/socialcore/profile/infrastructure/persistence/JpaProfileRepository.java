@@ -38,4 +38,12 @@ class JpaProfileRepository implements ProfileRepository {
   public void flush() {
     entities.flush();
   }
+
+  public java.util.List<Profile> summaries(java.util.List<UUID> users) {
+    if (users.isEmpty()) return java.util.List.of();
+    return entities
+        .createQuery("SELECT p FROM Profile p WHERE p.userId IN :users", Profile.class)
+        .setParameter("users", users)
+        .getResultList();
+  }
 }

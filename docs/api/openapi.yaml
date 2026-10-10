@@ -1,8 +1,8 @@
 openapi: "3.1.0"
 info:
-  title: "social-core accounts, communities and graph"
-  version: "0.3.0"
-  description: "Implemented Phases 0–3. All unsafe API calls require CSRF cookie/header and exact trusted Origin, including Bearer calls. Every Bearer validates current PostgreSQL session/account; dependency outage is 503. Auth/API responses are no-store. Unsupported routes remain deny-by-default. Browser deployment is same-site TLS; content and later phases remain unimplemented."
+  title: "social-core accounts, communities, graph, posts and images"
+  version: "0.4.0"
+  description: "Implemented Phases 0–4, pending independent Phase 4 review. All unsafe API calls require CSRF cookie/header and exact trusted Origin, including Bearer and anonymous capability requests. Every Bearer validates current PostgreSQL session/account; dependency outage is 503. Auth/API responses are no-store. Unsupported routes remain deny-by-default. Browser deployment is same-site TLS; Phase 5 onward is not implemented."
 paths:
   "/actuator/health":
     get:
@@ -2021,6 +2021,201 @@ paths:
                 "$ref": "#/components/schemas/FriendRequestPage"
         "default":
           "$ref": "#/components/responses/Problem"
+  /api/v1/posts:
+    get:
+      operationId: listPosts
+      summary: Bounded current-policy query, not a home feed
+      security: [{BearerAuth: []}, {}]
+      description: "At most one author/community filter. Order publishedAt DESC, UUID DESC. Encrypted 15-minute cursor binds actor, filters and asOf; size 1–100. Each page rechecks current sources. Empty filtered pages may still have a cursor. No counts or signed URLs."
+      parameters:
+        - {name: authorId, in: query, schema: {type: string, format: uuid}}
+        - {name: communityId, in: query, schema: {type: string, format: uuid}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+        - {name: after, in: query, schema: {type: string, maxLength: 4096}}
+      responses:
+        '200': {description: Current visible posts, content: {application/json: {schema: {$ref: '#/components/schemas/PostPage'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+    post:
+      operationId: publishPost
+      summary: Atomically bind zero to ten owned READY images and publish
+      security: [{BearerAuth: []}]
+      description: "Requires active account, current community write authority if scoped and unblocked active participants. Nonempty plain text, unfetched HTTP(S) link or images. CUSTOM has 1–100 fixed recipients excluding author. Optional 24-hour logical idempotency, not cached response. Replay reauthorizes. Maximum JSON body 256 KiB."
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PostPublish'}}}}
+      responses:
+        '201': {description: Published with Location and quoted version ETag, content: {application/json: {schema: {$ref: '#/components/schemas/Post'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/posts/{id}:
+    parameters:
+      - {$ref: '#/components/parameters/PostId'}
+    get:
+      operationId: getPost
+      summary: Read using current audience, account, block and community facts
+      security: [{BearerAuth: []}, {}]
+      responses:
+        '200': {description: Private no-store representation with version ETag, content: {application/json: {schema: {$ref: '#/components/schemas/Post'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+    patch:
+      operationId: editPost
+      summary: Owner-only versioned body, mention and attachment replacement
+      security: [{BearerAuth: []}]
+      description: "Audience is a separate command. Missing If-Match is 428, stale is 412. publishedAt never changes; editedAt and immutable revision advance. Removed attachments remain private history for 30 days, cannot be rebound."
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PostEdit'}}}}
+      responses:
+        '200': {description: Updated with ETag, content: {application/json: {schema: {$ref: '#/components/schemas/Post'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+    delete:
+      operationId: deletePost
+      summary: Versioned owner soft deletion, including blind deletion after departure
+      security: [{BearerAuth: []}]
+      description: "Owner may delete without reading departed-community content. Archive still denies writes. Author deletion takes precedence over moderation restore. Immediately denies history/media issuance; retention redacts after 30 days."
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      responses:
+        '204': {description: Soft deleted}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/posts/{id}/audience:
+    put:
+      operationId: changePostAudience
+      summary: Explicit audited versioned audience change
+      security: [{BearerAuth: []}]
+      description: "Current authority and participants rechecked. COMMUNITY cannot become a personal audience. Widening is attributable and audited; next reads/history/media use the new audience."
+      parameters:
+        - {$ref: '#/components/parameters/PostId'}
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/PostAudience'}}}}
+      responses:
+        '200': {description: Updated with ETag, content: {application/json: {schema: {$ref: '#/components/schemas/Post'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/posts/{id}/revisions:
+    get:
+      operationId: listPostRevisions
+      summary: Private retained history, author or current effective community moderator
+      security: [{BearerAuth: []}]
+      description: "Requires current ordinary post visibility as well as history authority. Staff history reads are audited. Immutable snapshots do not grant historical permissions. Descending revision ordinal, 30-day retention. nextCursor is a revision ordinal to pass as before (not the post-list cursor)."
+      parameters:
+        - {$ref: '#/components/parameters/PostId'}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+        - {name: before, in: query, schema: {type: integer, minimum: 1, default: 2147483647}}
+      responses:
+        '200': {description: Private retained history, content: {application/json: {schema: {$ref: '#/components/schemas/PostRevisionPage'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/posts/{id}/media/{media}/access:
+    post:
+      operationId: issuePostImageAccess
+      summary: Source-authorized pinned processed variants, never originals
+      security: [{BearerAuth: []}, {}]
+      description: "Current post policy authorizes each issuance; inaccessible or wrong context is 404. Optional revision requires retained author/staff history authority. No uploader bypass. URL is a reusable bearer capability for at most 60 seconds; previous bytes cannot be revoked. Cache-Control private, no-store."
+      parameters:
+        - {$ref: '#/components/parameters/PostId'}
+        - {name: media, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: revision, in: query, schema: {type: integer, minimum: 1}}
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+      responses:
+        '200': {description: Two current generation variants, content: {application/json: {schema: {$ref: '#/components/schemas/ImageVariants'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/media/uploads:
+    post:
+      operationId: requestImageUpload
+      summary: Reserve per-owner quota and create a private upload intent
+      security: [{BearerAuth: []}]
+      description: "Server generates ID/key. Direct PUT capability expires within 10 minutes and never past the intent's 15-minute TTL. All returned headers are required; client retains x-amz-version-id for finalize. MIME, declared size and SHA-256 are signed. Initial 10/min, 100 MiB pending, 1 GiB total accounting, configurable. 503 STORAGE_DISABLED when local storage is not enabled. Original filenames/keys/URLs and owner fields are not inputs."
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ImageUpload'}}}}
+      responses:
+        '201': {description: Private no-store intent with Location, content: {application/json: {schema: {$ref: '#/components/schemas/ImageUploadIntent'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/media/{id}/finalize:
+    post:
+      operationId: finalizeImageUpload
+      summary: Inspect pinned upload version outside locks and enqueue processing atomically
+      security: [{BearerAuth: []}]
+      description: "Owner-only. Same verified version is idempotent; different version is 409. Metadata mismatch, absent version, expiration or invalid state never schedules READY. Processing is asynchronous."
+      parameters:
+        - {$ref: '#/components/parameters/PostId'}
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, required: [versionId], properties: {versionId: {type: string, minLength: 1, maxLength: 256}}}}}}
+      responses:
+        '202': {description: Status with Location, content: {application/json: {schema: {$ref: '#/components/schemas/ImageStatus'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/media/{id}:
+    parameters:
+      - {$ref: '#/components/parameters/PostId'}
+    get:
+      operationId: getOwnedImageStatus
+      summary: Owner-only metadata status, no key, original or bound download URL
+      security: [{BearerAuth: []}]
+      responses:
+        '200': {description: Metadata only, content: {application/json: {schema: {$ref: '#/components/schemas/ImageStatus'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+    delete:
+      operationId: deleteUnboundImage
+      summary: Owner claims unbound asset for durable all-version deletion
+      security: [{BearerAuth: []}]
+      description: "Bound or processing assets cannot be deleted through the uploader path. DELETING/DELETED replay is idempotent. Accounting releases only after confirmed storage purge."
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+      responses:
+        '204': {description: Deletion scheduled or already deleted}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/me/avatar:
+    put:
+      operationId: replaceAvatar
+      summary: Versioned profile command atomically binds AVATAR and releases prior image
+      security: [{BearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, properties: {mediaId: {type: [string, 'null'], format: uuid, description: Null or omitted removes avatar}}}}}}
+      responses:
+        '200': {description: Current profile with ETag, content: {application/json: {schema: {$ref: '#/components/schemas/Profile'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/users/{id}/avatar/access:
+    post:
+      operationId: issueAvatarAccess
+      summary: Current profile policy authorizes selected READY avatar only
+      security: [{BearerAuth: []}, {}]
+      parameters:
+        - {$ref: '#/components/parameters/PostId'}
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+      responses:
+        '200': {description: Private no-store variants; absent avatar is 404, content: {application/json: {schema: {$ref: '#/components/schemas/ImageVariants'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/communities/{community}/moderation/posts/{post}/actions:
+    post:
+      operationId: moderateCommunityPost
+      summary: Attributable scoped remove or restore, never edits author text
+      security: [{BearerAuth: []}]
+      description: "Current effective MODERATOR+ of exact active community. If-Match is post version. Cross-community IDs cannot be used. Private reason/before/after remain in append-only action; outbox has identifiers only. Author-deleted post cannot be restored. No Phase 5 report workflow."
+      parameters:
+        - {name: community, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: post, in: path, required: true, schema: {type: string, format: uuid}}
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, required: [action, reason], properties: {action: {type: string, enum: [REMOVE_CONTENT, RESTORE_CONTENT]}, reason: {type: string, minLength: 1, maxLength: 2000}}}}}}
+      responses:
+        '200': {description: Action committed with post ETag, content: {application/json: {schema: {type: object, additionalProperties: false, required: [actionId, version, status], properties: {actionId: {type: string, format: uuid}, version: {type: integer, minimum: 0}, status: {type: string, enum: [PUBLISHED, REMOVED]}}}}}}
+        default: {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
     BearerAuth:
@@ -2033,6 +2228,11 @@ components:
       name: "refresh"
       description: "Host-only Secure HttpOnly SameSite=Strict; Path=/api/v1/auth. Local localhost profile alone allows HTTP."
   parameters:
+    PostId:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
     IfMatch:
       name: If-Match
       in: header
@@ -2738,6 +2938,137 @@ components:
           maxItems: 2
           items:
             "$ref": "#/components/schemas/Identity"
+    PostAudience:
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type: {type: string, enum: [PUBLIC, FOLLOWERS, FRIENDS, CUSTOM, ONLY_ME, COMMUNITY]}
+        recipientIds: {type: array, uniqueItems: true, maxItems: 100, items: {type: string, format: uuid}, description: Required nonempty only for CUSTOM; otherwise empty or omitted}
+    PostMention:
+      type: object
+      additionalProperties: false
+      required: [userId, start, end]
+      properties:
+        userId: {type: string, format: uuid}
+        start: {type: integer, minimum: 0, description: UTF-16 offset, never splits surrogate pair}
+        end: {type: integer, minimum: 1, description: Exclusive UTF-16 offset within body}
+    PostAttachment:
+      type: object
+      additionalProperties: false
+      required: [mediaId]
+      properties:
+        mediaId: {type: string, format: uuid}
+        altText: {type: [string, 'null'], maxLength: 1000}
+    PostEdit:
+      type: object
+      additionalProperties: false
+      required: [body]
+      properties:
+        body: {type: string, maxLength: 10000, description: Plain text Unicode code points, not HTML}
+        linkUrl: {type: [string, 'null'], maxLength: 2048, description: Absolute HTTP(S) without userinfo; never fetched}
+        mentions: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/PostMention'}}
+        media: {type: array, maxItems: 10, items: {$ref: '#/components/schemas/PostAttachment'}}
+    PostPublish:
+      type: object
+      additionalProperties: false
+      required: [body, audience]
+      properties:
+        body: {type: string, maxLength: 10000}
+        linkUrl: {type: [string, 'null'], maxLength: 2048}
+        communityId: {type: [string, 'null'], format: uuid}
+        audience: {$ref: '#/components/schemas/PostAudience'}
+        mentions: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/PostMention'}}
+        media: {type: array, maxItems: 10, items: {$ref: '#/components/schemas/PostAttachment'}}
+    Post:
+      type: object
+      additionalProperties: false
+      required: [id, authorId, displayName, communityId, body, linkUrl, audience, recipientIds, mentions, hashtags, media, publishedAt, editedAt, revision, version]
+      properties:
+        id: {type: string, format: uuid}
+        authorId: {type: string, format: uuid}
+        displayName: {type: string}
+        communityId: {type: [string, 'null'], format: uuid}
+        body: {type: string, maxLength: 10000}
+        linkUrl: {type: [string, 'null']}
+        audience: {type: string, enum: [PUBLIC, FOLLOWERS, FRIENDS, CUSTOM, ONLY_ME, COMMUNITY]}
+        recipientIds: {type: array, maxItems: 100, items: {type: string, format: uuid}, description: Owner-only list; empty for other readers}
+        mentions: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/PostMention'}}
+        hashtags: {type: array, maxItems: 10, items: {type: string}}
+        media: {type: array, maxItems: 10, items: {$ref: '#/components/schemas/PostAttachment'}}
+        publishedAt: {type: string, format: date-time}
+        editedAt: {type: [string, 'null'], format: date-time}
+        revision: {type: integer, minimum: 1}
+        version: {type: integer, minimum: 0}
+    PostPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/Post'}}
+        nextCursor: {type: [string, 'null']}
+    PostRevisionPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        nextCursor: {type: [string, 'null'], description: Exclusive revision ordinal for before parameter}
+        items:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            additionalProperties: false
+            required: [number, editorId, body, linkUrl, audience, media, editedAt]
+            properties:
+              number: {type: integer, minimum: 1}
+              editorId: {type: string, format: uuid}
+              body: {type: string}
+              linkUrl: {type: [string, 'null']}
+              audience: {$ref: '#/components/schemas/PostAudience'}
+              media: {type: array, maxItems: 10, items: {$ref: '#/components/schemas/PostAttachment'}}
+              editedAt: {type: string, format: date-time}
+    ImageUpload:
+      type: object
+      additionalProperties: false
+      required: [purpose, mime, bytes, sha256]
+      properties:
+        purpose: {type: string, enum: [POST, AVATAR]}
+        mime: {type: string, enum: [image/jpeg, image/png, image/webp]}
+        bytes: {type: integer, minimum: 1, maximum: 10485760}
+        sha256: {type: string, minLength: 44, maxLength: 44, description: Base64 of raw SHA-256 digest}
+    ImageUploadIntent:
+      type: object
+      additionalProperties: false
+      required: [id, state, uploadUrl, headers, expiresAt]
+      properties:
+        id: {type: string, format: uuid}
+        state: {type: string, enum: [UPLOAD_PENDING]}
+        uploadUrl: {type: string, format: uri, description: Secret capability, never log query string}
+        headers: {type: object, additionalProperties: {type: array, items: {type: string}}}
+        expiresAt: {type: string, format: date-time, description: Intent expiry; PUT signature can expire earlier}
+    ImageStatus:
+      type: object
+      additionalProperties: false
+      required: [id, purpose, state, version]
+      properties:
+        id: {type: string, format: uuid}
+        purpose: {type: string, enum: [POST, AVATAR]}
+        state: {type: string, enum: [UPLOAD_PENDING, UPLOADED, PROCESSING, READY, EXPIRED, REJECTED, FAILED, DELETING, DELETED]}
+        version: {type: integer, minimum: 0}
+    ImageVariants:
+      type: array
+      maxItems: 2
+      items:
+        type: object
+        additionalProperties: false
+        required: [name, url, mime, width, height]
+        properties:
+          name: {type: string, enum: [DISPLAY, THUMBNAIL]}
+          url: {type: string, format: uri, description: Secret pinned capability, expires within 60 seconds}
+          mime: {type: string, enum: [image/png]}
+          width: {type: integer, minimum: 1, maximum: 2048}
+          height: {type: integer, minimum: 1, maximum: 2048}
     Profile:
       type: "object"
       additionalProperties: false
@@ -2768,6 +3099,9 @@ components:
         version:
           type: "integer"
           minimum: 0
+        avatarMediaId:
+          type: [string, 'null']
+          format: uuid
     ProfileChange:
       type: "object"
       additionalProperties: false

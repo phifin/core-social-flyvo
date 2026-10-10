@@ -27,10 +27,16 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD:-local-development-only}
       SPRING_PROFILES_ACTIVE: local
       SMTP_HOST: mailpit
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
       AUTH_PRIVATE_KEY_FILE: /run/secrets/signing-private.pem
       AUTH_PUBLIC_KEY_FILE: /run/secrets/signing-public.pem
       MAIL_ENCRYPTION_KEY_FILE: /run/secrets/mail.b64
       LIMITER_KEY_FILE: /run/secrets/limiter.b64
+      MEDIA_ENABLED: ${MEDIA_ENABLED:-false}
+      STORAGE_ENDPOINT: ${STORAGE_ENDPOINT:-http://silo:9000}
+      STORAGE_PUBLIC_ENDPOINT: ${STORAGE_PUBLIC_ENDPOINT:-http://localhost:9000}
+      STORAGE_API_KEY_FILE: /run/secrets/storage-api.b64
+      STORAGE_WORKER_KEY_FILE: /run/secrets/storage-worker.b64
     ports:
       - "127.0.0.1:${APP_PORT:-8080}:8080"
     depends_on:
@@ -39,12 +45,19 @@ services:
       mailpit:
         condition: service_started
     volumes:
-      - ./.local/secrets:/run/secrets:ro
+      - ./.local/secrets/signing-private.pem:/run/secrets/signing-private.pem:ro
+      - ./.local/secrets/signing-public.pem:/run/secrets/signing-public.pem:ro
+      - ./.local/secrets/mail.b64:/run/secrets/mail.b64:ro
+      - ./.local/secrets/limiter.b64:/run/secrets/limiter.b64:ro
+      - ./.local/secrets/storage-api.b64:/run/secrets/storage-api.b64:ro
+      - ./.local/secrets/storage-worker.b64:/run/secrets/storage-worker.b64:ro
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    cpus: 2
     stop_grace_period: 30s
   mailpit:
     image: axllent/mailpit:v1.31.4@sha256:b68349e3a014b90c5610bfb26b2ae36f3892d7b8cf25ee140c6c71c98d2fcf48
@@ -64,7 +77,8 @@ services:
       - "127.0.0.1:${STORAGE_CONSOLE_PORT:-9001}:9001"
     volumes:
       - ./.local/storage-data:/data
-      - ./.local/secrets:/run/secrets:ro
+      - ./.local/secrets/storage-admin.b64:/run/secrets/storage-admin.b64:ro
+      - ./.local/secrets/storage-kms.b64:/run/secrets/storage-kms.b64:ro
       - ./ops/local/storage:/opt/storage:ro
     read_only: true
     tmpfs:
@@ -90,7 +104,9 @@ services:
       silo:
         condition: service_healthy
     volumes:
-      - ./.local/secrets:/run/secrets:ro
+      - ./.local/secrets/storage-admin.b64:/run/secrets/storage-admin.b64:ro
+      - ./.local/secrets/storage-api.b64:/run/secrets/storage-api.b64:ro
+      - ./.local/secrets/storage-worker.b64:/run/secrets/storage-worker.b64:ro
       - ./ops/local/storage:/opt/storage:ro
     read_only: true
     tmpfs:

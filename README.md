@@ -2,13 +2,13 @@
 
 A reusable Java backend core for social networks and communities. The core has no family, university, alumni, employer, or other application-specific domain concepts.
 
-**Current status: Phase 3 social graph accepted after independent main review.** Phases 1–3 are accepted; production readiness remains separately gated. Content and later social features remain planned. The application is `social-core`, root package `com.flyvo.socialcore`; the checkout may remain `fly-social`. See [Phase 0](docs/phases/phase-0.md), [Phase 1](docs/phases/phase-1.md), [Phase 2](docs/phases/phase-2.md), [Phase 3 evidence](docs/phases/phase-3.md), [community](docs/community.md) and [graph contract](docs/graph.md). Architecture documents describe the target; phase records describe delivery.
+**Current status: Phase 4 posts/privacy/revisions/basic moderation/images/avatar locally verified, awaiting independent main review.** Phases 1–3 are accepted; Phase 4 is not self-accepted. Production readiness remains separately gated. Phase 5 onward is not implemented. The application is `social-core`, root package `com.flyvo.socialcore`; the checkout may remain `fly-social`. See [Phase 4 evidence](docs/phases/phase-4.md), [content](docs/content.md), [community](docs/community.md), [graph](docs/graph.md) and [media](docs/media.md). Architecture documents describe the target; phase records describe delivery.
 
 ## Start here
 
-Phase 4 is IN_PROGRESS: [checkpoint](docs/phases/phase-4.md) and
-[local storage operations](ops/media.md). Silo/SDK prerequisites and post/policy
-primitives are verified; publish/media/avatar APIs are not delivered yet.
+Phase 4 exposes bounded post publication/query/history, current-policy variant access
+and versioned avatar replacement. [Local storage operations](ops/media.md) explains
+enabling the real Silo pipeline; there is no fake storage fallback.
 
 For sequential development/review threads, read the fixed [agent handoff](docs/agent-handoff.md) and [thread workflow](docs/thread-workflow.md).
 

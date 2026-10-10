@@ -215,6 +215,34 @@ Global acquisition order: account lifecycle guards (user UUID order) -> session 
 
 ## Migration and retention rules
 
+Phase 4 adds V0015–V0021; applied V0001–V0014 remain unchanged. V0015 owns media
+quota/asset/variant/binding; V0016 owns post/recipient/revision/media/mention/hashtag;
+V0017 adds the scalar profile avatar FK. V0018 extends append-only moderation
+actions with generated typed MEMBER/POST target FK columns and action/target CHECKs.
+V0019 adds deferred nonempty/CUSTOM-recipient guards and immutable revision UPDATE
+rejection (bounded retention DELETE is allowed). V0020 requires READY/matching
+purpose under an asset row guard before binding and rejects unpinned/null versions.
+Revisions also persist mention snapshots. State/status precedence is enforced by
+Post and PostgreSQL; uniqueness is never just a service query.
+V0021 prevents relation post_id reparenting: replacement uses DELETE/INSERT, firing
+both old/new aggregate guards rather than leaving an empty CUSTOM parent via UPDATE.
+
+Media binding is once per asset, not recyclable after release. Context UUIDs are
+logical owner-module IDs; owner modules retain actual media FKs and check binding
+through the media API, never reverse-query content/profile from media. Quota rows
+serialize reservations/bind/cleanup/accounting. Tombstone retained byte metadata
+is excluded from reconciliation totals once DELETED. All version/marker deletion
+occurs outside SQL; the fenced acknowledgement releases accounting exactly once.
+Post has explicit updated_at/version mutations; original published_at is preserved.
+The content query adapter consumes the existing published view allowlist only;
+no new foreign-base-table or JPA association access is introduced.
+
+The actual candidate SQL is EXPLAIN-tested on 12,000 skewed posts (10% selected
+author) and must use `post_author` with LIMIT. Bounded hydrate loads four own
+relation queries plus batched owner APIs; its statement count is independent of
+one versus one hundred posts. This is a representative local plan, not a public
+traffic latency/throughput guarantee.
+
 Use global `V0001__platform_foundation.sql`, `V0002__account_identity.sql` style versions, allocated after inspecting existing migrations. These names illustrate order, not a preassigned list. All changes use Flyway, including indexes/views/triggers/extensions/backfills. Do not edit an applied version. Concurrent index builds need an explicitly nontransactional Flyway migration and deployment runbook. Hibernate `ddl-auto=validate`, UTC JDBC timezone, OSIV disabled.
 
 Use expand/backfill/contract for deployed changes; no destructive column rename in a rolling deployment. Test an empty migration and upgrade from last released schema. Large backfills run as resumable jobs with checkpoints. Verify query plans with representative skew (large community/high-degree user), not empty databases.

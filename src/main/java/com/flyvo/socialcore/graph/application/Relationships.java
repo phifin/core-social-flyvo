@@ -232,7 +232,7 @@ public class Relationships implements GraphCommands, RelationshipQueries {
   @Transactional(propagation = Propagation.MANDATORY)
   public void guardInteractions(ActorContext actor, List<UUID> users) {
     actor(actor);
-    if (users == null || users.size() > 100 || users.stream().anyMatch(Objects::isNull))
+    if (users == null || users.size() > 121 || users.stream().anyMatch(Objects::isNull))
       throw Failure.invalid();
     var pairs =
         users.stream()

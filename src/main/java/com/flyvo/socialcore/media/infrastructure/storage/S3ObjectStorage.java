@@ -35,20 +35,30 @@ public final class S3ObjectStorage implements ObjectStorage {
   }
 
   public Upload upload(String key, String mime, long bytes, String sha256) {
+    return upload(key, mime, bytes, sha256, Duration.ofMinutes(10));
+  }
+
+  public Upload upload(String key, String mime, long bytes, String sha256, Duration ttl) {
     key(key, "incoming/");
     if (bytes < 1
         || bytes > 10 * 1024 * 1024
-        || !List.of("image/jpeg", "image/png", "image/webp").contains(mime))
+        || !List.of("image/jpeg", "image/png", "image/webp").contains(mime == null ? "" : mime))
       throw Failure.invalid();
     try {
-      if (Base64.getDecoder().decode(sha256).length != 32) throw Failure.invalid();
+      byte[] digest = Base64.getDecoder().decode(sha256);
+      if (digest.length != 32 || !Base64.getEncoder().encodeToString(digest).equals(sha256))
+        throw Failure.invalid();
     } catch (IllegalArgumentException | NullPointerException invalid) {
       throw Failure.invalid();
     }
+    if (ttl == null
+        || ttl.isNegative()
+        || ttl.isZero()
+        || ttl.compareTo(Duration.ofMinutes(10)) > 0) throw Failure.invalid();
     var signed =
         signer.presignPutObject(
             r ->
-                r.signatureDuration(Duration.ofMinutes(10))
+                r.signatureDuration(ttl)
                     .putObjectRequest(
                         p ->
                             p.bucket(quarantine)
@@ -224,6 +234,27 @@ public final class S3ObjectStorage implements ObjectStorage {
     return !after.isTruncated()
         && after.versions().stream().noneMatch(v -> !exact || v.key().equals(prefix))
         && after.deleteMarkers().stream().noneMatch(v -> !exact || v.key().equals(prefix));
+  }
+
+  public boolean purgeVariants(String prefix) {
+    outsideTransaction();
+    key(prefix, "variants/");
+    if (!prefix.endsWith("/")) throw Failure.invalid();
+    try {
+      return purge(delivery, prefix, false, System.nanoTime() + Duration.ofSeconds(20).toNanos());
+    } catch (software.amazon.awssdk.core.exception.SdkException failure) {
+      throw unavailable();
+    }
+  }
+
+  public boolean purgeUpload(String key) {
+    outsideTransaction();
+    key(key, "incoming/");
+    try {
+      return purge(quarantine, key, true, System.nanoTime() + Duration.ofSeconds(20).toNanos());
+    } catch (software.amazon.awssdk.core.exception.SdkException failure) {
+      throw unavailable();
+    }
   }
 
   private static void withinDeadline(long deadline) {

@@ -65,9 +65,10 @@ Private-profile status does not itself restrict FOLLOWERS post audience: anyone 
 
 ## Content
 
-Phase 4's current [checkpoint](phases/phase-4.md) implements pure audience/body
-invariants and canonical ordinary read/history policy only. Persistence, commands,
-SQL/API composition, revisions/moderation and media/avatar integration remain.
+Phase 4 implements the post aggregate, persisted audience/mention/hashtag/media
+relations and immutable revisions. [Content](content.md) records guarded commands,
+batched SQL/current-source policy, HTTP and retention; [media](media.md) records the
+secure image and avatar lifecycle. Comments/reactions below remain Phase 5 targets.
 
 `Post` is an aggregate: author, optional community, body (plain text initially, max 10,000 characters), optional one HTTP(S) link, content kind (`STANDARD` initially), audience, media references (max 10), timestamps, version and state (`PUBLISHED`, `DELETED`, `REMOVED`). Nonempty body, link or media is required. Create directly as PUBLISHED; server drafts are deferred. `deleted_at` is owner soft deletion; moderation removal uses separate reason/action reference. Neither is returned in normal lists. A deleted post has no readable comments or attachments through the application.
 

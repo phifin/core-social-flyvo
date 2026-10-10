@@ -49,6 +49,33 @@ Email jobs containing verification/reset links require recoverable secrets for d
 
 ## Notification semantics (Phase 7)
 
+### Phase 4 implemented worker extension
+
+`ExternalJobHandler` publishes prepare/effect/ack, not business callbacks into
+platform. Platform claims only registered kinds, fences by owner/generation/60-second
+lease, executes preparation in a short transaction, storage/decoder outside all
+business locks, then completion and acknowledgement in one fenced transaction.
+Failed/reclaimed workers cannot commit READY or deletion accounting. Each process
+handles one external job per tick. Ten attempts, exponential/jitter retry and DEAD
+metrics remain bounded; expired tenth external claims run terminal recovery.
+
+Media kinds: MEDIA_PROCESS, MEDIA_CLEANUP, MEDIA_GENERATION_PURGE,
+MEDIA_QUARANTINE_PURGE (external), MEDIA_QUOTA_RECONCILE (DB-only). Content/profile
+own POST_RETENTION, POST_BINDING_RECONCILE, AVATAR_BINDING_RECONCILE DB jobs.
+Per-generation orphan jobs preserve current READY output; full cleanup confirms
+all versions/markers before releasing quota. Reconciliation does not grant access.
+Post retention deletes at most 500 old revisions per transaction, requeues a bounded
+next batch, redacts deleted text after 30 days and ends removed-image holds.
+
+PostCreated/PostUpdated/PostAudienceChanged/PostDeleted/PostRemoved/PostRestored
+v1 payloads contain postId/authorId/revision/status, no body/custom recipients/URLs.
+MediaUploaded/MediaReady contain assetId; MediaRejected adds safe reasonCode.
+ModerationActionApplied v1 has a typed postId for POST actions (existing MEMBER
+actions keep userId). Consumers must discriminate target shape when introduced;
+no downstream consumers are enabled in Phase 4. Action reasons/private before/after
+remain in moderation.action, not generic jobs/outbox. ProfileUpdated retains its
+existing userId payload. All required source/event/audit/jobs are atomic.
+
 Phase 2 schedules each seven-day invitation expiry as a deduplicated DB-only job.
 The existing worker handles at most one registered DB job in addition to mail and
 delivery per tick. Mail claims only MAIL; registered handlers claim their own kinds.

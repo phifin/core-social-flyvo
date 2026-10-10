@@ -16,6 +16,13 @@ public interface MembershipQueries {
 
   List<Facts> facts(UUID userId, List<UUID> communityIds);
 
+  record Scope(UUID communityId, String visibility, String status, UUID ownerId) {}
+
+  List<Scope> scopes(List<UUID> communityIds);
+
+  /** Current scope guard; staff requires effective MODERATOR+, write denies archive. */
+  Scope guardScope(ActorContext actor, UUID communityId, boolean staff, boolean write);
+
   /**
    * Requires a transaction and all relevant account guards acquired before this community guard.
    */

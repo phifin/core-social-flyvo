@@ -124,6 +124,125 @@ public class DurableWorkStore implements DurableWork {
     return true;
   }
 
+  public boolean consumeExternalJob(
+      UUID owner, List<com.flyvo.socialcore.platform.api.ExternalJobHandler> handlers) {
+    if (handlers.isEmpty()) return true;
+    record ExternalClaim(
+        UUID id,
+        String payload,
+        com.flyvo.socialcore.platform.api.ExternalJobHandler handler,
+        com.flyvo.socialcore.platform.api.ExternalJobHandler.Lease lease) {}
+    var kinds =
+        handlers.stream().map(com.flyvo.socialcore.platform.api.ExternalJobHandler::kind).toList();
+    tx.executeWithoutResult(
+        status -> {
+          var args = new java.util.ArrayList<Object>(kinds);
+          args.add(time(clock.instant()));
+          jdbc.query(
+              "SELECT id,kind,payload->>'data',lease_generation FROM platform.job WHERE kind IN ("
+                  + String.join(",", java.util.Collections.nCopies(kinds.size(), "?"))
+                  + ") AND status='RUNNING' AND attempts>=10 AND lease_until<=? ORDER BY lease_until,id LIMIT 1 FOR UPDATE SKIP LOCKED",
+              r -> {
+                externalHandler(handlers, r.getString(2))
+                    .failed(
+                        r.getString(3),
+                        new com.flyvo.socialcore.platform.api.ExternalJobHandler.Lease(
+                            r.getLong(4), 10, clock.instant()));
+                jdbc.update(
+                    "UPDATE platform.job SET status='DEAD',lease_owner=NULL,lease_until=NULL,last_error_code='FINAL_LEASE_EXPIRED' WHERE id=?",
+                    r.getObject(1, UUID.class));
+              },
+              args.toArray());
+        });
+    var claim =
+        tx.execute(
+            status -> {
+              var args = new java.util.ArrayList<Object>(kinds);
+              args.add(time(clock.instant()));
+              args.add(time(clock.instant()));
+              var rows =
+                  jdbc.query(
+                      "SELECT id,kind,payload->>'data',lease_generation,attempts FROM platform.job WHERE kind IN ("
+                          + String.join(",", java.util.Collections.nCopies(kinds.size(), "?"))
+                          + ") AND ((status IN ('PENDING','RETRY') AND available_at<=?) OR (status='RUNNING' AND lease_until<=?)) AND attempts<10 ORDER BY available_at,id LIMIT 1 FOR UPDATE SKIP LOCKED",
+                      (rs, n) ->
+                          new ExternalClaim(
+                              rs.getObject(1, UUID.class),
+                              rs.getString(3),
+                              externalHandler(handlers, rs.getString(2)),
+                              new com.flyvo.socialcore.platform.api.ExternalJobHandler.Lease(
+                                  rs.getLong(4) + 1,
+                                  rs.getInt(5) + 1,
+                                  clock.instant().plusSeconds(60))),
+                      args.toArray());
+              if (rows.isEmpty()) return null;
+              var c = rows.getFirst();
+              jdbc.update(
+                  "UPDATE platform.job SET status='RUNNING',attempts=attempts+1,lease_owner=?,lease_until=?,lease_generation=lease_generation+1 WHERE id=?",
+                  owner,
+                  time(c.lease().until()),
+                  c.id());
+              return c;
+            });
+    if (claim == null) return true;
+    try {
+      String prepared =
+          tx.execute(
+              s -> {
+                if (jdbc.queryForList(
+                        "SELECT id FROM platform.job WHERE id=? AND status='RUNNING' AND lease_owner=? AND lease_generation=? AND lease_until>? FOR UPDATE",
+                        claim.id(),
+                        owner,
+                        claim.lease().generation(),
+                        time(clock.instant()))
+                    .isEmpty()) throw new IllegalStateException("JOB_LEASE_LOST");
+                return claim.handler().prepare(claim.payload(), claim.lease());
+              });
+      String result = claim.handler().execute(prepared);
+      tx.executeWithoutResult(
+          s -> {
+            if (jdbc.queryForList(
+                    "SELECT id FROM platform.job WHERE id=? AND status='RUNNING' AND lease_owner=? AND lease_generation=? AND lease_until>? FOR UPDATE",
+                    claim.id(),
+                    owner,
+                    claim.lease().generation(),
+                    time(clock.instant()))
+                .isEmpty()) return;
+            claim.handler().complete(claim.payload(), claim.lease(), prepared, result);
+            if (jdbc.update(
+                    "UPDATE platform.job SET status='COMPLETED',completed_at=?,lease_owner=NULL,lease_until=NULL WHERE id=? AND lease_owner=? AND lease_generation=? AND lease_until>?",
+                    time(clock.instant()),
+                    claim.id(),
+                    owner,
+                    claim.lease().generation(),
+                    time(clock.instant()))
+                != 1) throw new IllegalStateException("JOB_LEASE_EXPIRED");
+          });
+      return true;
+    } catch (RuntimeException failure) {
+      tx.executeWithoutResult(
+          s -> {
+            if (!jdbc.queryForList(
+                    "SELECT id FROM platform.job WHERE id=? AND status='RUNNING' AND lease_owner=? AND lease_generation=? AND lease_until>? FOR UPDATE",
+                    claim.id(),
+                    owner,
+                    claim.lease().generation(),
+                    time(clock.instant()))
+                .isEmpty()) claim.handler().failed(claim.payload(), claim.lease());
+          });
+      finish(
+          new Claim(
+              claim.id(), owner, claim.lease().generation(), claim.lease().attempt(), null, null),
+          "EXTERNAL_JOB_FAILED");
+      return false;
+    }
+  }
+
+  private com.flyvo.socialcore.platform.api.ExternalJobHandler externalHandler(
+      List<com.flyvo.socialcore.platform.api.ExternalJobHandler> handlers, String kind) {
+    return handlers.stream().filter(h -> h.kind().equals(kind)).findFirst().orElseThrow();
+  }
+
   @Transactional(propagation = Propagation.MANDATORY)
   public void mail(
       String dedupKey, String address, String template, String secret, Instant expiresAt) {

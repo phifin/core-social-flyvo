@@ -203,10 +203,7 @@ class StorageContractIT {
         .isEqualTo(original);
     assertThat(send(putRequest(put, later)).statusCode()).isBetween(400, 499);
     String damaged = put.url().toString().replace("X-Amz-Signature=", "X-Amz-Signature=0");
-    assertThat(
-            send(HttpRequest.newBuilder(URI.create(damaged))
-                    .PUT(HttpRequest.BodyPublishers.ofByteArray(original)))
-                .statusCode())
+    assertThat(send(putRequest(put, original).uri(URI.create(damaged))).statusCode())
         .isBetween(400, 499);
   }
 
@@ -256,45 +253,145 @@ class StorageContractIT {
 
   @Test
   void unsignedTrailerAndSnowballDoNotBypassInvalidSignature() throws Exception {
-    String now =
-        java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'")
-            .withZone(java.time.ZoneOffset.UTC)
-            .format(java.time.Instant.now());
-    String date = now.substring(0, 8);
     for (boolean snowball : new boolean[] {false, true}) {
-      byte[] data = snowball ? new byte[1024] : "untrusted bytes".getBytes(StandardCharsets.UTF_8);
+      String prefix = "incoming/" + UUID.randomUUID() + "/";
+      String extracted = prefix + "entry.txt";
+      byte[] data = snowball ? archive() : "untrusted bytes".getBytes(StandardCharsets.UTF_8);
       var body = new java.io.ByteArrayOutputStream();
       body.write((Integer.toHexString(data.length) + "\r\n").getBytes(StandardCharsets.UTF_8));
       body.write(data);
       body.write(
           ("\r\n0\r\nx-amz-checksum-sha256:" + checksum(data) + "\r\n\r\n")
               .getBytes(StandardCharsets.UTF_8));
-      String key = key();
-      var request =
-          HttpRequest.newBuilder(endpoint().resolve("/" + QUARANTINE + "/" + key))
-              .header("x-amz-date", now)
-              .header("x-amz-content-sha256", "STREAMING-UNSIGNED-PAYLOAD-TRAILER")
-              .header("x-amz-decoded-content-length", Integer.toString(data.length))
-              .header("x-amz-trailer", "x-amz-checksum-sha256")
-              .header("Content-Encoding", "aws-chunked")
-              .header(
-                  "Authorization",
-                  "AWS4-HMAC-SHA256 Credential="
-                      + API
-                      + "/"
-                      + date
-                      + "/us-east-1/s3/aws4_request, SignedHeaders=content-encoding;host;x-amz-content-sha256;x-amz-date;x-amz-decoded-content-length;"
-                      + (snowball ? "x-amz-meta-snowball-auto-extract;" : "")
-                      + "x-amz-trailer, Signature="
-                      + "0".repeat(64))
-              .PUT(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray()));
-      if (snowball) request.header("x-amz-meta-snowball-auto-extract", "true");
-      assertThat(send(request).statusCode())
-          .as("invalid signature, extract=%s", snowball)
-          .isEqualTo(403);
-      assertThatThrownBy(() -> admin.headObject(r -> r.bucket(QUARANTINE).key(key)))
-          .isInstanceOf(NoSuchKeyException.class);
+      String key = prefix + "archive.tar";
+      var unsigned =
+          software.amazon.awssdk.http.SdkHttpFullRequest.builder()
+              .uri(endpoint().resolve("/" + QUARANTINE + "/" + key))
+              .method(software.amazon.awssdk.http.SdkHttpMethod.PUT)
+              .putHeader("x-amz-content-sha256", "STREAMING-UNSIGNED-PAYLOAD-TRAILER")
+              .putHeader("x-amz-decoded-content-length", Integer.toString(data.length))
+              .putHeader("x-amz-trailer", "x-amz-checksum-sha256")
+              .putHeader("Content-Encoding", "aws-chunked");
+      if (snowball)
+        unsigned
+            .putHeader("x-amz-meta-snowball-auto-extract", "true")
+            .putHeader("x-amz-meta-minio-snowball-prefix", prefix);
+      // The SDK signs the streaming payload marker; it does not invent test crypto.
+      var signed =
+          software.amazon.awssdk.auth.signer.AwsS3V4Signer.create()
+              .sign(
+                  unsigned.build(),
+                  software.amazon.awssdk.auth.signer.params.AwsS3V4SignerParams.builder()
+                      .awsCredentials(AwsBasicCredentials.create(API, API_SECRET))
+                      .signingRegion(Region.US_EAST_1)
+                      .signingName("s3")
+                      .enablePayloadSigning(false)
+                      .enableChunkedEncoding(false)
+                      .build());
+      String auth = signed.firstMatchingHeader("Authorization").orElseThrow();
+      // Exercise both advisories BEFORE the positive control on exactly the same
+      // key, bytes and signed operation headers. No missing-header false positives.
+      for (boolean queryOnly : new boolean[] {false, true}) {
+        URI uri = signed.getUri();
+        if (queryOnly) {
+          String credential = auth.substring(auth.indexOf("Credential=") + 11, auth.indexOf(","));
+          String headers =
+              auth.substring(auth.indexOf("SignedHeaders=") + 14, auth.indexOf(", Signature="));
+          uri =
+              URI.create(
+                  uri
+                      + "?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential="
+                      + java.net.URLEncoder.encode(credential, StandardCharsets.UTF_8)
+                      + "&X-Amz-Date="
+                      + signed.firstMatchingHeader("x-amz-date").orElseThrow()
+                      + "&X-Amz-Expires=600&X-Amz-SignedHeaders="
+                      + java.net.URLEncoder.encode(headers, StandardCharsets.UTF_8)
+                      + "&X-Amz-Signature="
+                      + "0".repeat(64));
+        }
+        var request = trailerRequest(signed, uri, body.toByteArray(), false);
+        if (!queryOnly)
+          request.header(
+              "Authorization",
+              auth.replaceAll("Signature=[0-9a-f]+", "Signature=" + "0".repeat(64)));
+        assertThat(request.build().headers().firstValue("Authorization").isEmpty())
+            .isEqualTo(queryOnly);
+        var denied = send(request);
+        String errorCode =
+            new String(denied.body(), StandardCharsets.UTF_8)
+                .replaceAll("(?s).*<Code>([^<]+)</Code>.*", "$1");
+        assertThat(denied.statusCode())
+            .as(
+                "invalid signature: extract=%s, queryOnly=%s, code=%s",
+                snowball, queryOnly, errorCode)
+            .isEqualTo(queryOnly ? 400 : 403);
+        assertThat(errorCode)
+            .as("extract=%s, queryOnly=%s", snowball, queryOnly)
+            .isEqualTo(queryOnly ? "InvalidRequest" : "SignatureDoesNotMatch");
+        if (queryOnly) {
+          // Tagged Silo explicitly rejects presigned auth for unsigned trailers
+          // before consuming bytes (ErrSignatureVersionNotSupported).
+          assertThat(new String(denied.body(), StandardCharsets.UTF_8))
+              .contains("The authorization mechanism you have provided is not supported");
+        }
+        assertThat(admin.listObjectVersions(r -> r.bucket(QUARANTINE).prefix(prefix)).versions())
+            .isEmpty();
+        assertThatThrownBy(() -> admin.headObject(r -> r.bucket(QUARANTINE).key(extracted)))
+            .isInstanceOf(NoSuchKeyException.class);
+      }
+      var positive = send(trailerRequest(signed, signed.getUri(), body.toByteArray(), true));
+      assertThat(positive.statusCode())
+          .as("well-formed valid control: extract=%s", snowball)
+          .isEqualTo(200);
+      assertThat(
+              admin
+                  .getObjectAsBytes(r -> r.bucket(QUARANTINE).key(snowball ? extracted : key))
+                  .asByteArray())
+          .isEqualTo(snowball ? "fixture".getBytes(StandardCharsets.UTF_8) : data);
     }
+  }
+
+  static HttpRequest.Builder trailerRequest(
+      software.amazon.awssdk.http.SdkHttpFullRequest signed,
+      URI uri,
+      byte[] body,
+      boolean includeAuth) {
+    var request = HttpRequest.newBuilder(uri).PUT(HttpRequest.BodyPublishers.ofByteArray(body));
+    signed
+        .headers()
+        .forEach(
+            (name, values) -> {
+              if (!name.equalsIgnoreCase("host")
+                  && (includeAuth || !name.equalsIgnoreCase("Authorization")))
+                values.forEach(value -> request.header(name, value));
+            });
+    return request;
+  }
+
+  static byte[] archive() {
+    // A nonempty POSIX ustar: one seven-byte entry, padded blocks and two end blocks.
+    byte[] tar = new byte[2048];
+    tarField(tar, 0, "entry.txt");
+    tarField(tar, 100, "0000600");
+    tarField(tar, 108, "0000000");
+    tarField(tar, 116, "0000000");
+    tarField(tar, 124, "00000000007");
+    tarField(tar, 136, "00000000000");
+    java.util.Arrays.fill(tar, 148, 156, (byte) ' ');
+    tar[156] = '0';
+    tarField(tar, 257, "ustar");
+    tarField(tar, 263, "00");
+    int sum = 0;
+    for (int i = 0; i < 512; i++) sum += Byte.toUnsignedInt(tar[i]);
+    tarField(tar, 148, String.format(java.util.Locale.ROOT, "%06o", sum));
+    tar[155] = ' ';
+    tarField(tar, 512, "fixture");
+    return tar;
+  }
+
+  static void tarField(byte[] tar, int offset, String value) {
+    byte[] bytes = value.getBytes(StandardCharsets.US_ASCII);
+    System.arraycopy(bytes, 0, tar, offset, bytes.length);
   }
 
   @Test

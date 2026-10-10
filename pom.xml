@@ -46,6 +46,12 @@
         </dependencies>
     </dependencyManagement>
     <dependencies>
+        <!-- Phase 4: maintained pure-Java static WebP decoding in the bounded child JVM. -->
+        <dependency>
+            <groupId>com.twelvemonkeys.imageio</groupId>
+            <artifactId>imageio-webp</artifactId>
+            <version>3.15.3</version>
+        </dependency>
         <!-- Phase 4's actual storage boundary; one BOM keeps all SDK modules aligned. -->
         <dependency>
             <groupId>software.amazon.awssdk</groupId>

@@ -73,6 +73,29 @@ class SecurityConfiguration {
                         "/actuator/health/liveness",
                         "/actuator/health/readiness")
                     .permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/v1/posts", "/api/v1/posts/*")
+                    .permitAll()
+                    .requestMatchers(
+                        HttpMethod.POST,
+                        "/api/v1/posts/*/media/*/access",
+                        "/api/v1/users/*/avatar/access")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/v1/posts/*/revisions", "/api/v1/media/*")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.POST,
+                        "/api/v1/posts",
+                        "/api/v1/media/uploads",
+                        "/api/v1/media/*/finalize",
+                        "/api/v1/communities/*/moderation/posts/*/actions")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.PUT, "/api/v1/posts/*/audience", "/api/v1/me/avatar")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.PATCH, "/api/v1/posts/*")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.DELETE, "/api/v1/posts/*", "/api/v1/media/*")
+                    .authenticated()
                     .requestMatchers(
                         HttpMethod.GET,
                         "/api/v1/auth/csrf",

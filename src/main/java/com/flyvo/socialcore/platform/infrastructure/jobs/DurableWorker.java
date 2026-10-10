@@ -18,6 +18,7 @@ public class DurableWorker {
   private final Clock clock;
   private final java.util.List<com.flyvo.socialcore.platform.api.JobHandler> handlers;
   private final UUID owner = UUID.randomUUID();
+  private final java.util.List<com.flyvo.socialcore.platform.api.ExternalJobHandler> external;
   private final io.micrometer.core.instrument.Counter failures;
 
   public DurableWorker(
@@ -25,11 +26,13 @@ public class DurableWorker {
       MailTransport mail,
       Clock clock,
       java.util.List<com.flyvo.socialcore.platform.api.JobHandler> handlers,
+      java.util.List<com.flyvo.socialcore.platform.api.ExternalJobHandler> external,
       io.micrometer.core.instrument.MeterRegistry metrics) {
     this.store = store;
     this.mail = mail;
     this.clock = clock;
     this.handlers = handlers;
+    this.external = external;
     failures = metrics.counter("social.work.failures");
     for (String status : java.util.List.of("PENDING", "RUNNING", "RETRY", "DEAD"))
       io.micrometer.core.instrument.Gauge.builder(
@@ -69,6 +72,7 @@ public class DurableWorker {
     }
     store.consumeOne(owner);
     if (!store.consumeJob(owner, handlers)) failures.increment();
+    if (!store.consumeExternalJob(owner, external)) failures.increment();
   }
 
   @Scheduled(fixedDelay = 60000)

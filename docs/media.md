@@ -4,10 +4,11 @@ Images are in the first usable content phase. Use an S3-compatible object store,
 
 ## Upload sequence
 
-Implementation checkpoint: [Phase 4](phases/phase-4.md) and
-[local storage operations](../ops/media.md) record verified Compose/Testcontainers
-storage and SDK primitives. The sequence below still requires lifecycle/API/worker
-implementation; it is not delivered merely because the storage tests pass.
+Phase 4 implements this sequence, including source-authorized post/avatar access,
+real Silo processing and durable recovery. [Phase evidence](phases/phase-4.md),
+[implemented OpenAPI](api/openapi.yaml) and [operations](../ops/media.md) distinguish
+local checks from production storage/ingress gates. No owner draft-preview signing
+endpoint is exposed.
 
 1. Authenticated verified user requests upload with purpose POST/AVATAR, declared MIME, bytes and SHA-256 checksum. Enforce rate/quota (initial 10 MiB/image, 40 megapixels, 10 attachments/post, 100 MiB pending upload quota/user, 1 GiB retained media/user configurable). Reserve quota and insert UPLOAD_PENDING asset. ID and quarantine key are backend-generated; original filename is metadata at most, never an object key.
 2. Return presigned PUT URL expiring in 10 minutes plus required content type/checksum headers. Bucket CORS allows only configured frontend origins. A signed declared size/header is not relied on as the sole upload limit: reject oversized actual objects, configure ingress/storage controls, and account reserved bytes so uploads cannot bypass quotas. Prefer signed POST length conditions if the selected compatible store/SDK supports them consistently; changing transport does not change final validation.
@@ -53,3 +54,41 @@ Post deletion/removal immediately denies media URL issuance. Soft-deleted post b
 Content/profile endpoints first authorize current resource access, then ask media for READY variant capabilities, max 60 seconds. Media has no dependency on content/profile: the owning module is the orchestrator, and there is no public “sign any media ID” API. Non-bound owner preview may use a separate owner-only capability for READY drafts, never rejected/quarantined content. Application responses use `Cache-Control: private, no-store` for signed URLs. Storage/CDN rules must not extend private capability TTL or expose public fallback paths. Previously issued URLs/bytes remain accessible until expiry/already downloaded; strict immediate byte revocation would require an authenticated delivery proxy, a future explicit tradeoff.
 
 Thumbnails (e.g. max 320px) and display images (max 2048px) are generated together initially, preserving aspect ratio. Exact quality/dimension defaults are configuration after visual/size evaluation. Video later adds multipart upload, duration probing, isolated transcoding, poster frames, multiple renditions and significantly different quotas/lease times. Documents add antivirus/content-disposition policies and no inline active content. These add processors/kinds without changing post ownership or audience.
+
+## Implemented Phase 4 refinements
+
+- The only new decoder dependency is TwelveMonkeys `imageio-webp` 3.15.3 (pure
+  Java static WebP support; JPEG/PNG use JDK ImageIO). Both output variants are
+  fresh PNGs, without copied metadata, max sides 2048/320, no enlargement. Original
+  orientation metadata is stripped, not copied into output. The strict container
+  parser checks PNG CRC/end, JPEG segment/scan/end and WebP RIFF/chunks; rejects
+  animation, trailing/polyglot data, format mismatch and dimensions over 40 MP
+  before pixel allocation. Input and each output are capped at 10 MiB.
+- Decoder runs in a separate headless JVM, 384 MiB heap, one reported processor,
+  cleared environment and a 15-second total IPC/process deadline. It does not load
+  Spring or storage credentials. Compose caps the complete app/child cgroup at
+  1 GiB/two CPUs. This is resource/credential minimization, not a claim of an OS
+  network/filesystem sandbox; production must apply its execution/egress isolation.
+- `app.media.limits.pending-bytes`, `retained-bytes`, `uploads-per-minute` configure
+  accounting defaults (100 MiB, 1 GiB, ten/minute). Initial pixel/input/output and
+  resize safety ceilings are reviewed fixed defaults, not request-controlled.
+  Retained accounting includes both variants and is released only on confirmed
+  all-version purge. Quota reconciliation runs hourly, twenty owners per job.
+- External jobs have short fenced claim/prepare/ack transactions and out-of-TX
+  effects. Every generation schedules a durable orphan check; READY schedules
+  quarantine purge after upload expiry and unbound cleanup after 24 hours.
+  Retry is bounded to ten attempts; expired final leases become FAILED/DEAD rather
+  than stuck PROCESSING. FAILED allows a 24-hour restricted operator repair window.
+  DELETING/DEAD retains quota until confirmed deletion; replay never resets generation.
+- Owner modules schedule binding checks with source transitions. A missing/wrong
+  context binding already denies access synchronously; checks emit attributable
+  technical `MEDIA_BINDING_MISMATCH` audit alerts, never infer access from storage.
+  Restore drills can enqueue these checks per bounded source batch.
+- Released edit history remains private for 30 days. Removal denies ordinary and
+  history access immediately and privately holds its images for 30 days; restore
+  after this window restores text, not purged image bytes. There is no indefinite
+  evidence hold/report workflow in Phase 4. Avatar replacement releases immediately.
+- Compose/bootstrap pin ADR-013's exact digest and mount individual secret files
+  only. Separate internal SDK and browser presigner endpoints are required when
+  the application runs inside Compose. Bucket quotas and lifecycle are defense
+  in depth, not a synchronous hard disk/adversarial overwrite budget; see operations.

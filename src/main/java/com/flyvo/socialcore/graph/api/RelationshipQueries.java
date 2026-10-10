@@ -20,7 +20,8 @@ public interface RelationshipQueries {
 
   /**
    * Caller holds sorted account guards first. Requires a transaction; shared pair guards sorted by
-   * key.
+   * key. Maximum 121 participants for Phase 4 author/CUSTOM/mention write sets; fact-query pages
+   * remain capped at 100.
    */
   void guardInteractions(ActorContext actor, List<UUID> users);
 

@@ -23,6 +23,8 @@ public class Profiles implements ProfileCommands, ProfileQueries {
   private final DurableWork work;
   private final tools.jackson.databind.ObjectMapper json;
   private final com.flyvo.socialcore.graph.api.RelationshipQueries graph;
+  private final com.flyvo.socialcore.media.api.MediaCommands media;
+  private final com.flyvo.socialcore.media.api.MediaQueries variants;
 
   public Profiles(
       ProfileRepository entities,
@@ -30,13 +32,17 @@ public class Profiles implements ProfileCommands, ProfileQueries {
       Clock clock,
       DurableWork work,
       tools.jackson.databind.ObjectMapper json,
-      com.flyvo.socialcore.graph.api.RelationshipQueries graph) {
+      com.flyvo.socialcore.graph.api.RelationshipQueries graph,
+      com.flyvo.socialcore.media.api.MediaCommands media,
+      com.flyvo.socialcore.media.api.MediaQueries variants) {
     this.entities = entities;
     this.accounts = accounts;
     this.clock = clock;
     this.work = work;
     this.json = json;
     this.graph = graph;
+    this.media = media;
+    this.variants = variants;
   }
 
   @Transactional(propagation = Propagation.MANDATORY)
@@ -104,7 +110,64 @@ public class Profiles implements ProfileCommands, ProfileQueries {
 
   private Summary summary(Profile p) {
     return new Summary(
-        p.userId(), p.handle(), p.displayName(), p.bio(), p.visibility(), p.version());
+        p.userId(),
+        p.handle(),
+        p.displayName(),
+        p.bio(),
+        p.visibility(),
+        p.version(),
+        p.avatarMediaId());
+  }
+
+  @Transactional
+  public Summary avatar(ActorContext actor, long expected, UUID mediaId) {
+    requireActor(actor);
+    if (!accounts.guard(actor.userId(), false).active()) throw Failure.unauthorized();
+    var p = entities.find(actor.userId(), true);
+    if (p.version() != expected) throw new Failure(412, "STALE_VERSION");
+    if (java.util.Objects.equals(p.avatarMediaId(), mediaId)) return summary(p);
+    if (mediaId != null)
+      media.bind(actor.userId(), "AVATAR", actor.userId(), java.util.List.of(mediaId));
+    if (p.avatarMediaId() != null)
+      media.release(
+          actor.userId(),
+          "AVATAR",
+          actor.userId(),
+          java.util.List.of(p.avatarMediaId()),
+          clock.instant());
+    p.avatar(mediaId, clock.instant());
+    entities.flush();
+    work.job(
+        "AVATAR_BINDING_RECONCILE",
+        p.userId() + ":" + p.version(),
+        p.userId().toString(),
+        clock.instant());
+    work.event(
+        "ProfileUpdated",
+        "profile",
+        p.userId(),
+        p.version(),
+        0,
+        json.writeValueAsString(
+            new com.flyvo.socialcore.profile.api.event.ProfileUpdated(p.userId())));
+    return summary(p);
+  }
+
+  @Transactional(readOnly = true)
+  public java.util.List<com.flyvo.socialcore.media.api.MediaQueries.Variant> avatarAccess(
+      ActorContext actor, UUID id) {
+    var profile = visible(actor, id);
+    if (profile.avatarMediaId() == null) throw new Failure(404, "NOT_FOUND");
+    return variants.access("AVATAR", id, profile.avatarMediaId(), false);
+  }
+
+  @Transactional(readOnly = true)
+  public java.util.List<Attribution> attributionSummaries(java.util.List<UUID> ids) {
+    if (ids == null || ids.size() > 100 || ids.stream().anyMatch(java.util.Objects::isNull))
+      throw Failure.invalid();
+    return entities.summaries(ids).stream()
+        .map(p -> new Attribution(p.userId(), p.displayName()))
+        .toList();
   }
 
   public record PreferenceInfo(

@@ -169,3 +169,17 @@ Properties/environment overrides and deployment limitations are in
 [identity operations](../ops/identity.md).
 
 Explicit allowlisted request DTOs prevent mass assignment; ignore/reject unexpected privilege fields consistently. Set request/body/upload limits, database statement timeouts and provider timeouts. Parameterize SQL. Return plain text; rich HTML remains disabled. No remote URL downloads without SSRF review. Store secrets in environment/secret manager, never git/logs/events. Redact Authorization, cookies, reset codes, provider tokens, passwords, raw emails and presigned URL query strings. Log reason codes and correlation IDs instead. CORS, CSRF, object-level denial, rate-limit bypass, logout races and malicious upload cases are required tests.
+
+Phase 4 composes current ContentAccessPolicy for direct reads, batch hydrate, SQL
+candidates, private revisions and post media issuance. Current block/account/scope
+changes apply on the next read; historical audience snapshots never grant access.
+Owner deletion after private-community departure is blind, not a read permission.
+Scoped remove/restore cannot edit body or restore author deletion. Mandatory action,
+audit and minimal outbox commit atomically; staff history reads are audited.
+Post/mention/hashtag text stays plain and links are not fetched. Unknown privileged
+JSON fields are rejected. Post create/edit bodies have a 256 KiB cap, not unlimited
+content input. Variant GET capabilities expire within 60 seconds; previously issued
+bytes are not immediately revocable. Metadata status, raw object existence and
+uploader ownership do not bypass binding context. Avatar issuance uses current
+profile policy. [Media isolation](media.md#implemented-phase-4-refinements) and
+[storage operations](../ops/media.md) document local limitations and production gates.

@@ -1,5 +1,11 @@
 # Explicit local-only defaults. Production has no credential fallback.
 app:
+  media:
+    enabled: ${MEDIA_ENABLED:false}
+    endpoint: ${STORAGE_ENDPOINT:http://localhost:9000}
+    public-endpoint: ${STORAGE_PUBLIC_ENDPOINT:http://localhost:9000}
+    api-key-file: ${STORAGE_API_KEY_FILE:.local/secrets/storage-api.b64}
+    worker-key-file: ${STORAGE_WORKER_KEY_FILE:.local/secrets/storage-worker.b64}
   security:
     ephemeral-keys: false
     encryption-key-file: ${MAIL_ENCRYPTION_KEY_FILE:.local/secrets/mail.b64}

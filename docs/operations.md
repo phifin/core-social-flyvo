@@ -2,6 +2,11 @@
 
 ## Deployment baseline
 
+Phase 4 [media operations](../ops/media.md) covers real local enablement, individual
+secret mounts, SDK endpoint split, bounded isolated processing, quota/reconciliation,
+lease recovery and restricted audited replay. Post/avatar APIs are implemented;
+production S3 IAM/KMS/ingress compatibility remains an explicit deployment gate.
+
 Phase 3 graph uses the existing PostgreSQL worker and platform encryption key;
 request expiry, cursor lifetime, limits and recovery are in [graph operations](../ops/graph.md).
 

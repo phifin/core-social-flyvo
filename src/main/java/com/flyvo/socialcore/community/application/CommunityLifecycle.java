@@ -201,6 +201,26 @@ public class CommunityLifecycle implements CommunityCommands, MembershipQueries 
     return access.store().ownsActive(user);
   }
 
+  @Transactional(readOnly = true)
+  public List<Scope> scopes(List<UUID> ids) {
+    if (ids == null || ids.size() > 100 || ids.stream().anyMatch(java.util.Objects::isNull))
+      throw Failure.invalid();
+    return access.store().communities(ids).stream()
+        .map(c -> new Scope(c.id(), c.visibility(), c.status(), c.ownerId()))
+        .toList();
+  }
+
+  @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+  public Scope guardScope(ActorContext actor, UUID id, boolean staff, boolean write) {
+    access.actor(actor);
+    var c = access.guard(id, false);
+    if (write) CommunityPermissionPolicy.active(c);
+    if (staff)
+      CommunityPermissionPolicy.require(
+          c, access.store().member(id, actor.userId()), access.clock().instant(), 2);
+    return new Scope(c.id(), c.visibility(), c.status(), c.ownerId());
+  }
+
   public static Info info(Community c) {
     return new Info(
         c.id(),

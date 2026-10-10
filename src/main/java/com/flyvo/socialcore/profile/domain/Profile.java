@@ -24,6 +24,9 @@ public class Profile {
 
   private String visibility;
 
+  @Column(name = "avatar_media_id")
+  private UUID avatarMediaId;
+
   @Column(name = "created_at")
   private Instant createdAt;
 
@@ -67,6 +70,15 @@ public class Profile {
 
   public long version() {
     return version;
+  }
+
+  public UUID avatarMediaId() {
+    return avatarMediaId;
+  }
+
+  public void avatar(UUID media, Instant now) {
+    avatarMediaId = media;
+    updatedAt = now;
   }
 
   public void change(String handle, String name, String bio, String visibility, Instant now) {

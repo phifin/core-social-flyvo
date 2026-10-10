@@ -41,6 +41,18 @@ start returns a URL in JSON; callbacks redirect with a marker, never credentials
 
 ## Pagination
 
+Phase 4 implemented contracts are in [OpenAPI](api/openapi.yaml) and [content](content.md).
+Post create/edit JSON is capped at 256 KiB to fit 10,000 Unicode code points and
+ten alt texts, including JSON escaping; other API bodies remain capped at 16 KiB.
+Post lists use encrypted opaque 15-minute keyset cursors (viewer/filter/asOf bound).
+Private revision pages instead use a bounded exclusive `before` revision ordinal,
+returned as nextCursor, under current author/staff authorization; no hidden row
+identity is encoded in that ordinal. Mutation If-Match is a strong quoted version;
+missing/stale remains 428/412. Moderation's ETag is the post version, not action ID.
+Media upload returns 201/Location; finalize returns 202/Location; owner status is
+metadata only. Image capability endpoints are unsafe POSTs with CSRF/Origin even
+for anonymous PUBLIC resources, and return private, no-store pinned variants.
+
 Phase 3 graph lists use UUID-ascending keyset pages with `size` 1–100 and opaque
 `after` cursors (15 minutes, viewer/owner/list bound). The platform authenticated
 encryption primitive conceals the last scanned UUID when account filtering hides

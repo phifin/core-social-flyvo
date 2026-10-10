@@ -12,6 +12,8 @@ public interface ObjectStorage {
 
   Upload upload(String key, String mime, long bytes, String sha256);
 
+  Upload upload(String key, String mime, long bytes, String sha256, Duration ttl);
+
   ObjectInfo inspectUpload(String key, String versionId);
 
   byte[] readUpload(String key, String versionId, long ceiling);
@@ -22,4 +24,8 @@ public interface ObjectStorage {
 
   /** Deletes only the given asset-owned prefixes, all versions/markers, with bounded work. */
   boolean purge(String quarantineKey, String variantPrefix);
+
+  boolean purgeVariants(String variantPrefix);
+
+  boolean purgeUpload(String quarantineKey);
 }
