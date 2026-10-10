@@ -3,10 +3,10 @@
 ## Routing
 
 - Task: phase-2-communities
-- Round: 2 — development response to first main review
-- State: READY_FOR_REVIEW
-- Last writer: development
-- Next owner: main reviewer — re-review Phase 2 R1–R2 proposed fixes
+- Round: 2 — main re-review complete
+- State: ACCEPTED
+- Last writer: main reviewer
+- Next owner: main/user — await next phase/task assignment
 - User assignment: 2026-10-10; explicitly authorized Phase 2 implementation.
 - Baseline HEAD: `306465b635a2f4a0f6c676aa1b1a2105a4aed140` on `master`.
 - Accepted Phase 1 code: `7aa6b47510f0c51cd959b54b0d46827a7266dba0`.
@@ -47,6 +47,14 @@ migration/dependency/HTTP shape change or Phase 3. This separate mailbox commit
 contains no further executable changes.
 
 ## Reviewer verdict and findings
+
+ACCEPTED after round 2 review of fix commit
+`1663507a7c00e2fb472192c84e1a82bf2a17bac6`. R1–R2 are resolved; no new blocking
+finding identified in the changed code. Independently rerun full verify passes
+107 tests, including all eight added regressions. Phase 2 is accepted for local
+implementation progression; production/provider readiness gates still apply.
+
+### Original round 1 verdict (historical)
 
 CHANGES_REQUESTED after first main review of
 `f1cde63f06a10f93ac8fa6391c0f678af9600ab1`. The original 99-test suite passes,
@@ -92,8 +100,8 @@ directory. No old finding was reopened or independently marked resolved by devel
   prune-versus-claim interleavings. Assert the renewed reference survives, same-body
   retries return that UUID without extra resource/event/job, changed body is 409,
   and genuinely expired unused records are still pruned in bounded batches.
-- Disposition: OPEN. Development should append a PROPOSED_FIXED response with
-  code hash, regression names/results and limitations; main reviewer closes it.
+- Disposition: RESOLVED by main reviewer in round 2 on `1663507`; independent
+  verification and remaining limitations are recorded below.
 
 ### R2 — P2: archiving publishes ACTIVE in the CommunityUpdated event
 
@@ -123,10 +131,10 @@ directory. No old finding was reopened or independently marked resolved by devel
   archive, membership and admission transitions, including archive retry producing
   no duplicate transition. Verify source mutation and its correct event remain
   atomic on rollback.
-- Disposition: OPEN. Development should append a PROPOSED_FIXED response with
-  code hash, regression names/results and limitations; main reviewer closes it.
+- Disposition: RESOLVED by main reviewer in round 2 on `1663507`; independent
+  verification and remaining limitations are recorded below.
 
-## Developer responses — round 2, 2026-10-10
+## Developer responses — round 2, 2026-10-10 (as submitted before acceptance)
 
 ### R1 — PROPOSED_FIXED (reviewer disposition remains OPEN)
 
@@ -263,7 +271,7 @@ Commands and detailed named coverage are in the phase record.
 
 ## Limitations and external gates
 
-No known local implementation/test/commit blocker. Main review remains required.
+No remaining local blocker identified in this scoped review; Phase 2 is accepted.
 Remote CI and live provider/production SMTP/TLS/key/runtime roles/MFA/backup/
 capacity/retention checks are not run here. Phase 1 provider gates remain unchanged;
 full erasure/release readiness is Phase 9A. Offset pagination is bounded and not a
@@ -273,12 +281,13 @@ repair. No public launch or production-readiness claim.
 
 ## Exact next action
 
-Main reviewer re-reviews `1663507a7c00e2fb472192c84e1a82bf2a17bac6` against preserved
-R1–R2 and the PROPOSED_FIXED responses, independently checks PostgreSQL regressions/
-verify and updates original dispositions/verdict. Development has not closed either
-finding or accepted Phase 2. Current state READY_FOR_REVIEW; no Phase 3, push or deploy.
+No further development action for R1–R2. Await the user's next phase/task assignment.
+When Phase 3 is assigned, archive this accepted mailbox under
+`docs/handoffs/phase-2-communities.md` and initialize this fixed file with the new
+scope and actual baseline. Do not start Phase 3, push or deploy merely because
+this review is accepted.
 
-## Main review checks and limitations — 2026-10-10
+## Round 1 main review checks and limitations — 2026-10-10 (historical)
 
 - Initial checkout/index clean. HEAD `70179b1` is mailbox-only after reviewed code
   `f1cde63`; no newer executable changes. Read repository contracts, Phase 2 scope,
@@ -309,3 +318,43 @@ finding or accepted Phase 2. Current state READY_FOR_REVIEW; no Phase 3, push or
   their prior developer evidence remains attributed above. External gates unchanged.
 - No new authorization bypass identified in this scoped review; that is not a
   production security audit or a guarantee that no other defects exist.
+
+## Round 2 main review evidence — 2026-10-10
+
+- Initial worktree/index clean; HEAD `60d881d` changes only the mailbox after
+  fix `1663507`. Reviewed all production/test/contract changes since the original
+  `f1cde63` implementation and preserved round 1 findings. No migration, dependency,
+  module-boundary or HTTP-shape changes. No executable changes made by reviewer.
+- R1: claim performs INSERT/ON CONFLICT UPDATE/RETURNING atomically, retaining the
+  row lock through business mutation/reference completion. Live keys retain original
+  logical fields/expiry; expired keys renew together. Prune selects at most 500
+  expired rows with FOR UPDATE SKIP LOCKED and checks current expiry on deletion.
+  This removes both the renewed-row deletion and separate INSERT/SELECT gap.
+- Independently inspected and ran renewal-first, cleanup-first and statement-boundary
+  regressions. The JdbcTemplate spy invokes real SQL before pausing; latches and
+  pg_blocking_pids observe real PostgreSQL transactions/locks, without fake results
+  or sleeps. Tests verify reference retention, original expiry, changed-body 409,
+  bounded cleanup and no extra resources/events/jobs, including terminal admissions.
+- R2: all lifecycle/membership/admission call sites use the appropriate explicit
+  producer helper. Lifecycle reads post-transition community status and version;
+  membership/admission retain subject/source status. Persisted payload tests cover
+  ARCHIVED with ACTIVE owner, ordinary lifecycle/membership/admission transitions,
+  no-op archive retry, source metadata and atomic rollback. Contract documentation
+  agrees with the producer; historical event repair remains outside this change.
+- Independently ran
+  `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./mvnw -B -ntp verify`:
+  BUILD SUCCESS, **29 unit/architecture + 78 integration = 107 tests**, zero
+  failures/errors/skips. Includes all 34 CommunityIT tests, PostgreSQL/Mailpit,
+  migrations, architecture, formatting and Enforcer/dependency convergence.
+  Log `/tmp/social-core-phase2-round2-review-verify.log` is a local temporary artifact.
+- The developer's failing-before runs remain developer-reported. Round 1 reviewer
+  reproductions are preserved above; this round independently ran the passing-after
+  suite without restoring vulnerable production code. No additional defect probe
+  was needed after inspecting the fixes and regressions.
+- Updated acceptance status in mailbox, phase record and entry-point documentation;
+  checked local Markdown links and whitespace before this documentation commit.
+  Docker image/isolated HTTP smoke, OpenAPI validator, Gitleaks, remote CI and live
+  provider/production checks were not rerun in this review. Earlier evidence stays
+  attributed to its actual run; existing external gates remain.
+- Acceptance closes the scoped findings and permits a separately assigned next
+  phase. It is not a production launch approval or an exhaustive security audit.

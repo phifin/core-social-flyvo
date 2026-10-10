@@ -1,6 +1,6 @@
 # HANDOFF TO IMPLEMENTATION MODEL
 
-This blueprint is the architectural source of truth. Phases 0–2 are implemented locally; Phase 2 awaits main review. See [foundation evidence](phases/phase-0.md), [identity evidence](phases/phase-1.md), [community evidence](phases/phase-2.md) and README for the actual surface. Phase 3 onward remain planned. Implement the **requested phase only**, preserving the decisions below.
+This blueprint is the architectural source of truth. Phases 0–2 are implemented locally; Phase 2 is accepted after round 2 main review. See [foundation evidence](phases/phase-0.md), [identity evidence](phases/phase-1.md), [community evidence](phases/phase-2.md) and README for the actual surface. Phase 3 onward remain planned and require assignment. Implement the **requested phase only**, preserving the decisions below.
 
 ## Read first
 

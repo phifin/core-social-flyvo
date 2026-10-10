@@ -1,7 +1,7 @@
 # Phase 2 — Communities, membership and scoped authority
 
 Date: 2026-10-10. Development implementation complete locally and verified;
-review status READY_FOR_REVIEW, not ACCEPTED. Baseline `306465b` on master,
+review status ACCEPTED after round 2 on fix commit `1663507`. Baseline `306465b` on master,
 accepted Phase 1 code `7aa6b47`; initial index/worktree clean. Prior findings and
 evidence preserved in [Phase 1 archive](../handoffs/phase-1-review-fixes.md), with
 relative links rebased for its new directory. No subagents, push or deployment.
@@ -190,8 +190,22 @@ Docker image/isolated HTTP smoke, OpenAPI validator and remote CI are not rerun 
 this repair round; no container/HTTP/spec shape change. Initial implementation
 operational evidence remains historical, not claimed as rerun. Existing outbox
 history is not rewritten; no consumer is enabled and future projections must
-backfill/reconcile current source before rollout. Main re-review and previously
-documented provider/production readiness gates remain. No local fix/test blocker.
+backfill/reconcile current source before rollout. At repair handoff, main re-review
+was pending; the verdict below supersedes that status. Previously documented
+provider/production readiness gates remain. No local fix/test blocker.
+
+## Main review acceptance — 2026-10-10
+
+Main reviewer accepts Phase 2 at `1663507a7c00e2fb472192c84e1a82bf2a17bac6`;
+R1–R2 are RESOLVED with no new blocking finding in the changed code. Clean review
+HEAD `60d881d` was mailbox-only after that fix. Independently reviewed atomic claim/
+bounded locking prune, source-specific event producers, eight permanent regressions
+and the updated contracts. Independently ran Java 21 `./mvnw -B -ntp verify`:
+**107 tests (29 unit/architecture + 78 integration), zero failures/errors/skips**.
+Full evidence and retained findings/responses are in the [mailbox](../agent-handoff.md).
+No executable changes were made during re-review. Container smoke, remote CI and
+external production/provider checks were not rerun. Local acceptance does not
+remove those gates or assign Phase 3 automatically.
 
 ## Refinements and remaining gates
 
@@ -212,4 +226,4 @@ Live Google/Facebook approval/smoke, production SMTP/TLS/key/roles, shared limit
 before multiple public instances, operator MFA, backup restore, capacity/retention
 and public-launch readiness remain external gates. Remote CI has not been run.
 No Phase 3 graph/content/search/notification/tenant feature or new infrastructure.
-Next owner is main reviewer for Phase 2; no automatic acceptance or Phase 3 start.
+Next owner is main/user for the next task assignment; no automatic Phase 3 start.

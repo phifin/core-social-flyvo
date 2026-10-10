@@ -2,7 +2,8 @@
 
 This is the implemented subsystem contract. Read with [domain model](domain-model.md),
 [security](security.md), [schema](database-design.md), [OpenAPI](api/openapi.yaml)
-and [Phase 2 evidence](phases/phase-2.md). Local delivery awaits main review.
+and [Phase 2 evidence](phases/phase-2.md). Local delivery is accepted after round 2
+main review; production readiness remains separately gated.
 
 ## Community and discovery
 
