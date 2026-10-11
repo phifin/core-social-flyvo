@@ -52,8 +52,9 @@ concurrent writers, push or Phase 7 implementation.
 - Media cleanup retains quota through expiry plus settling and repairs late
   completion durably. Production upload deadline/storage budget, decoder isolation,
   provider compatibility and other launch gates remain pending.
-- Keep the single exact historical secret-scan exception, default detection,
-  full-history scan and redaction.
+- Keep only the reviewed exact historical secret-scan fingerprints, default
+  detection, full-history scan and redaction. There are two fingerprints for the
+  same non-secret hash: the original handoff and its verbatim accepted archive.
 - Use owner APIs and sanctioned SQL views; no foreign writes/joins, duplicate policy
   authority, architecture exclusions or authorization cache.
 - No notifications/SSE/search/advanced Phase 8 moderation, Redis/broker/fan-out,
@@ -77,6 +78,13 @@ master before this handoff is Phase 3 `552c4ca`; main is preparing the accepted
 Phase 4/documentation fast-forward and will verify the resulting remote hash.
 Local verification and successful push do not imply remote CI success.
 Development must hand back locally even when its tests pass.
+
+Main's archival commit `4dd092c` copied the previously reviewed non-secret code-hash
+text into a new path, producing the same scanner heuristic at archive line 482.
+Main added only that commit/path/rule/line fingerprint as publication metadata,
+preserving the original archive and default detection. This is not a new code
+finding, credential leak, broad exclusion or history rewrite. Full-history scan
+and external positive control are rerun before push.
 
 ## Next action
 
