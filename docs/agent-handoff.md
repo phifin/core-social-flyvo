@@ -4,16 +4,18 @@
 
 - Task: phase-4-posts-and-secure-images
 - Round: 2
-- State: CHANGES_REQUESTED
-- Last writer: main, 2026-10-11 — full-delivery review and larger-package planning
-- Next owner: existing development chat `Develop Phase 4 — Posts & Media`
-- Assignment: address P4-R1/P4-R2 from `44bcc99` and complete the full Phase 4 plan.
+- State: READY_FOR_REVIEW
+- Last writer: development, 2026-10-11 — verified round 2 stabilization delivery
+- Next owner: main (orchestrator/reviewer)
+- Assignment: address P4-R3/P4-R4/P4-R5 from `8333028`; no Phase 5–6 implementation.
 - Baseline: `552c4ca99692aba277b6fee6bb91b23962d65787`; clean checkout/index before coordination.
 - Accepted Phase 3 code: `bfda6e856d42282eaccd2ed70a81f49c416f86b7`.
 - Phase 4 decision commit: `ab568554cf50cfa5c2024e84c90a16ed234a967c` (documentation only).
 - Phase 4 checkpoint code: `8fe7738e637e23dc72fe2d6c9845bbe1fe6c02e3` (prerequisites only, not full implementation).
 - Complete Phase 4 code: `12fce2f8715ff7e17920b3b1bcf6e39b9b3da311`.
-- Reviewed execution baseline: `44bcc99`; checkout/index were clean before this implementation.
+- Round 2 stabilization code: `9bdc9996b546d73356f177759806296cea40bc43`.
+- Stabilization baseline: `8333028`; checkout/index were clean before this round.
+- Initial full-delivery execution baseline: `44bcc99`; that checkout/index were clean.
 - Prior verdict/findings/checks: [accepted Phase 3](handoffs/phase-3-social-graph.md).
 - Protocol: [thread workflow](thread-workflow.md), [Git workflow](git-workflow.md).
 
@@ -114,6 +116,37 @@ accepted baseline); checkout/index were clean. Implement in these internal slice
    as next owner. No self-acceptance, Phase 5, push or agents.
 
 ## Current implementation report — full Phase 4, 2026-10-11
+
+### Round 2 stabilization plan (executed)
+
+Baseline `8333028`, clean checkout/index. Preserve all main findings/dispositions.
+P4-R3: replace multi-statement relation/root loading with a bounded single-statement
+snapshot; exercise recipient removal/body edits, audience-kind switches and
+attachment/mention edits with real PostgreSQL transactions and statement barriers.
+P4-R4: deny issuance/binding immediately on deletion but keep quota until upload
+expiry plus a bounded in-flight settling window; durably recheck without consuming
+the failure budget before that boundary. Test real reusable Silo PUTs, rejection,
+crash/retry and exactly-once quota release, including quarantine-only cleanup.
+P4-R5: record only the exact historical false-positive fingerprint with rationale;
+run the CI-pinned full-history scan and an external synthetic positive control.
+Update stale status and affected lifecycle/query/testing/operations documentation,
+then targeted tests, formatting and full verify. Commit verified code/docs first,
+mailbox separately with its real hash and READY_FOR_REVIEW/next owner main.
+No self-resolution/acceptance, push, history rewrite, broad exclusions or agents.
+
+### Round 2 current delivery
+
+Verified stabilization code/documentation/tests:
+`9bdc9996b546d73356f177759806296cea40bc43`.
+This extends the complete Phase 4 delivery below; it does not self-resolve R3/R4/R5
+or accept Phase 4. R1/R2 were already resolved by main. Eight additional Phase4IT
+tests cover coherent aggregate/history races, upload cleanup/settling/reconciliation
+and bounded replay/FAILED recovery; seven were run red against historical code.
+Exact per-ID responses and fresh checks/limitations follow. README and
+implementation-handoff now reflect implemented Phase 4 awaiting main re-review.
+No Phase 5–6 implementation, push, agent or external coordination.
+
+### Initial full-delivery report (historical)
 
 Code/documentation/tests committed as
 `12fce2f8715ff7e17920b3b1bcf6e39b9b3da311` (`feat(content): deliver phase 4 posts and secure image lifecycle`).
@@ -241,6 +274,64 @@ After Phase 4 acceptance main will activate that two-phase package in a named ne
 chat. It combines content interactions, report moderation and feed in one sequential
 assignment with internal gates, rather than handing off individual small features.
 User-authorized push belongs exclusively to main under [Git workflow](git-workflow.md).
+
+### Round 2 developer responses — proposed fixes, not reviewer dispositions
+
+All three responses refer to stabilization code
+`9bdc9996b546d73356f177759806296cea40bc43`.
+P4-R3/P4-R4/P4-R5 remain OPEN; only main may resolve them after independent review.
+
+- **P4-R3:** `JdbcPosts.load` now hydrates the root plus independently aggregated,
+  ordered recipients/media/mentions in one READ COMMITTED SQL statement snapshot,
+  without Cartesian expansion, per-post JDBC queries or foreign-base-table access.
+  Direct read, batch hydrate and history/media authorization use that same load.
+  History SQL additionally caps revisions at the coherent authorized post revision,
+  preventing a later edit from entering an old authorized response. Current owner
+  APIs/policy and the existing module/view allowlist remain unchanged. Real PG
+  statement-completion latches commit recipient removal followed by B-only body
+  edit, both audience-kind switches and body/attachment/mention replacement while
+  the reader is paused. A staff-history barrier commits departure followed by an
+  author edit. Old implementations reproduce a leaked B-only body, mixed data,
+  INVALID_POST_AUDIENCE and a post-departure history body; all four new regressions
+  pass on the fix, as do SQL/object parity and constant one-versus-100 query count.
+  Already-authorized old responses can still race a concurrent revocation; no
+  cross-request serializable or immediate byte-revocation guarantee is added.
+- **P4-R4:** deletion/rejection still denies issuance/new finalize/binding immediately.
+  Full cleanup in every eligible state and READY quarantine cleanup wait for the
+  persisted upload expiry plus fifteen-minute settling before purge/accounting.
+  `ExternalJobHandler.Deferred` rolls preparation back and durably requeues the
+  same job under its lease fence; attempts are restored, generation never resets,
+  and actual failures/crashes retain bounded ten-attempt/DEAD semantics. Expiry of
+  the lease before ack retains DELETING/quota for a fenced retry. Confirmation of
+  all versions/markers releases accounting once. Hourly MEDIA_STORAGE_RECONCILE
+  uses twenty-asset keyset pages and stable sweep-hour dedup to recheck terminal
+  tombstones and READY quarantine, so unusually late completions are not left
+  permanently unaccounted/unpurged. FAILED keeps its full 24-hour operator window
+  from transition. Real Silo tests exercise pending DELETE, early rejection and
+  READY deletion with reused valid PUT (200), actual short-capability expiry (403),
+  durable RETRY/available_at without attempt burn, upload-expiry-only denial of
+  accounting release, settling then zero versions/markers, duplicate release,
+  purge-before-ack lease loss/crash, retry and a late SDK-write/tombstone sweep.
+  The late SDK write explicitly models an in-flight completion, not a successful
+  new write using an expired presign. Quarantine-only purge preserves active post
+  variants; batch/replay and FAILED-window regression pass. Old cleanup fails all
+  three core regressions. **Limit:** Silo has rolling idle reads, not a total PUT
+  deadline. Settling plus durable sweep is eventual repair for exceptional late
+  completions, not synchronous bounded physical erasure. Production ingress must
+  enforce total completion within settling and verify its provider. That existing
+  untrusted-traffic/physical-budget deployment gate remains unrun; local Silo is
+  loopback-only. No false hard-duration guarantee or silent storage substitution.
+- **P4-R5:** exact pinned baseline full-history scan reproduced the single
+  non-secret code-hash match. `.gitleaksignore` records only its exact historical
+  commit/path/rule/line fingerprint with rationale. No rule disablement, directory/
+  path exclusion, redaction weakening, history rewrite or scan-depth change.
+  CI's original full-history Docker command is unchanged; an added external
+  synthetic generic-api-key positive control must produce scanner exit 1 and the
+  expected rule, while its wrapper succeeds and removes the fixtures. Default
+  detection remains enabled. Full-history scan on the real new code commit passes:
+  **27 commits, zero findings**, exit 0; repo is not shallow. Staged scan and positive
+  control pass. Current status prose in README, implementation-handoff and ADR-013
+  was reconciled, retaining awaiting-review/not-accepted wording.
 
 ### Main remote delivery — 2026-10-11
 
@@ -379,7 +470,64 @@ do not weaken a denial path or substitute untested storage to proceed.
 
 ## Checks and limitations
 
-### Final development verification — 2026-10-11
+### Round 2 stabilization verification — 2026-10-11
+
+Explicit installed Java 21; shell default/identity unchanged. Final commands:
+
+```bash
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 \
+PATH=/usr/lib/jvm/java-21-openjdk-amd64/bin:$PATH \
+  ./mvnw -B -ntp spotless:apply test \
+  -Dtest=OpenApiContractTest,ImageProcessorTest,PostPolicyTest,ArchitectureTest,PersistenceBoundaryTest \
+  failsafe:integration-test failsafe:verify \
+  -Dit.test=Phase4IT,StorageContractIT,ComposeSecretsIT,FoundationIT
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 \
+PATH=/usr/lib/jvm/java-21-openjdk-amd64/bin:$PATH \
+  ./mvnw -B -ntp spotless:apply verify
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 \
+PATH=/usr/lib/jvm/java-21-openjdk-amd64/bin:$PATH \
+  ./mvnw -B -ntp spotless:check test -Dtest=OpenApiContractTest
+docker run --rm -v "$PWD:/repo:ro" \
+  zricethezav/gitleaks:v8.28.0@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854 \
+  git /repo --redact --no-banner
+bash ops/ci/secret-scan-regression.sh
+```
+
+- PASS targeted **76**: 18 unit/architecture/contract +58 integration.
+- PASS full verify **182**: 39 unit/architecture/contract +143 integration.
+  Zero failures/errors/skips in both; PostgreSQL 18.6 and the exact accepted Silo
+  digest, 33 Phase4IT, twelve StorageContractIT, Compose isolation, packaged WebP
+  decoder and every prior PostgreSQL/Mailpit suite. No new dependency/migration,
+  architecture exclusion, mocked persistence or skipped Docker gate.
+- PASS final Spotless/Enforcer/convergence and OpenAPI YAML/reference check after
+  documentation updates; resolved app/media Compose, script syntax, changed local
+  Markdown link paths and staged whitespace. Runtime deployment config unchanged.
+- PASS exact CI full-history/redacted scan: 27 commits including stabilization,
+  zero findings; full repository, not shallow. External synthetic positive still
+  detects generic-api-key/exit 1; wrapper succeeds. Staged stdin scan also clean,
+  never substituted for full history. Handoff is rescanned after its own commit;
+  its result is reported in chat, not an invented self-reference in this file.
+- Deliberate historical-code negative gate: seven tests, six assertion failures
+  and one invalid-audience error. Fixed implementations restored before final
+  targeted/full gates. Earlier fixture-job ordering and test generic-inference/
+  formatter iterations were fixed; these are not silently treated as green runs.
+
+Logs: `/tmp/social-core-p4-r345-targeted.log`, `...-verify.log`,
+`...-doc-format.log`, `...-negative.log`, `...-history-code.log`, `...-staged.log`,
+and `/tmp/social-core-p4-r5-positive-final.log`. Fresh operational shell/Compose
+checks pass. Actual Compose startup/bootstrap replay and Docker application build
+remain historical initial-delivery checks below; not rerun or claimed as current.
+
+No new proven local compatibility/test blocker. Production S3/IAM/KMS/checksum/
+version/delete compatibility, absolute ingress/upload completion and strict
+physical/overwrite budgets, TLS/runtime separation, stronger decoder isolation,
+security/restore/legal-retention/alert gates remain deployment-blocking and unrun.
+Settling cannot make rolling-idle Silo a bounded total-duration upload server;
+exceptional late versions are durably reconciled, not instantly erased. SDK fixture
+write validates that repair path without claiming an expired URL bypass. Main must
+review this explicit limitation with the proposed R4 fix; no self-acceptance.
+
+### Initial full-delivery development verification — 2026-10-11 (historical)
 
 Installed JDK 21 explicitly selected; the shell's default Java 8 was not changed.
 
@@ -601,15 +749,18 @@ Production S3 compatibility and earlier provider/production gates remain externa
 
 **Current:** development addresses round-2 P4-R3–R5 in the existing Phase 4 chat.
 Main-only remote delivery and the larger next package are recorded above. The
-original incoming review instructions below are historical and do not override
-CHANGES_REQUESTED. No Phase 5/6 activation or Phase 4 acceptance yet.
+original incoming review instructions below are historical; current routing is
+READY_FOR_REVIEW to main. No Phase 5/6 activation or Phase 4 acceptance yet.
 
-Main reviews complete code `12fce2f8715ff7e17920b3b1bcf6e39b9b3da311`, not just
-the prerequisite checkpoint. Independently verify P4-R1/P4-R2 evidence and the full
-posts/privacy/revisions/basic moderation/images/avatar scope, schema/owner boundaries,
-HTTP/current-source policy and real storage/concurrency/recovery gates. Main alone
-may mark findings resolved or accept; new findings keep stable IDs and route back
-to the existing development chat. Do not implement fixes in main or start Phase 5.
+Main reviews stabilization `9bdc9996b546d73356f177759806296cea40bc43` against
+`8333028`, including the complete Phase 4 ancestor, not just its prerequisite
+checkpoint. Independently verify P4-R3/P4-R4/P4-R5, especially coherent read/history
+and explicit settling/late-completion reconciliation limits; eight regressions,
+182-test full gate and exact pinned full-history scan evidence. P4-R1/P4-R2 remain
+resolved by main, with their regression gates retained. Reassess the full scope
+and source/storage/owner boundaries before accepting Phase 4. Only main may resolve
+findings or accept; new findings keep stable IDs and route back to this development
+chat. Do not implement fixes in main or activate Phase 5–6 before acceptance.
 
 The original main resume assignment is preserved as historical context below.
 All requested Phase 4 implementation work is now handed off for review; acceptance
