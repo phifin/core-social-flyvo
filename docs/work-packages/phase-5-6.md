@@ -1,10 +1,10 @@
 # Next package: interactions, reports and chronological feeds
 
-Status: PLANNED, NOT ACTIVATED. Main prepared this larger package at the user's
-request on 2026-10-11. Phase 4 must be independently accepted before main activates
-it in the fixed mailbox. Do not infer assignment from this file alone.
+Status: ACTIVATED by main on 2026-10-11 at the user's request to review and continue.
+Phase 4 code `9bdc999` was accepted in `26d60ce`; see the fixed mailbox and
+[accepted review](../handoffs/phase-4-posts-media.md). Phase 5/6 remain unimplemented.
 
-Proposed new chat: `Develop Phases 5–6 — Interactions, Moderation & Feeds`.
+New development chat to open: `Develop Phases 5–6 — Interactions, Moderation & Feeds`.
 One chat implements the entire package sequentially; no spawned agents or pushes.
 This doubles the roadmap-phase scope of a normal assignment, not a promise of
 twice the throughput. Keep internal slices green without frequent user handoffs.

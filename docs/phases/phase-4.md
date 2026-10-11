@@ -4,7 +4,8 @@ Complete Phase 4 is **ACCEPTED by main**, 2026-10-11, after independent review o
 `9bdc9996b546d73356f177759806296cea40bc43` and its full-delivery ancestor. Independent
 full verify: 182 pass (39 unit +143 integration), no failures/errors/skips. P4-R1
 through P4-R5 are resolved; pinned full-history scan and positive control pass.
-Detailed review: [mailbox](../agent-handoff.md). Production readiness remains gated.
+Detailed review: [accepted archive](../handoffs/phase-4-posts-media.md).
+Current routing: [mailbox](../agent-handoff.md). Production readiness remains gated.
 Latest stabilization baseline: `8333028` (main round 2 CHANGES_REQUESTED);
 initial full-delivery resume baseline was `44bcc99`. Earlier prerequisite code `8fe7738` was a
 checkpoint only. Main accepted ADR-013 at `ab568554cf50cfa5c2024e84c90a16ed234a967c`.

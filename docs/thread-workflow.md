@@ -35,10 +35,10 @@ checkout writers are introduced. Explicit multi-phase packages supersede the
 single-phase stopping rule only for their named phases and internal prerequisites.
 Each phase still needs its own evidence and final main acceptance.
 
-The next proposed package is [Phases 5–6](work-packages/phase-5-6.md), gated on
-Phase 4 acceptance. Current Phase 4 review fixes remain in the existing chat
-`Develop Phase 4 — Posts & Media`. Do not mix unresolved source-privacy fixes with
-dependent feed implementation before main re-review.
+Phase 4 was accepted on 2026-10-11. Main activated [Phases 5–6](work-packages/phase-5-6.md)
+for the new chat `Develop Phases 5–6 — Interactions, Moderation & Feeds` under the
+user's continuation request. The Phase 4 chat has completed its assignment.
+The fixed mailbox carries actual routing and the accepted review archive.
 
 ## Always read and verify
 
