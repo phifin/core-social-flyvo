@@ -73,10 +73,13 @@ integration), zero failures/errors/skips; full-history pinned secret scan and
 synthetic control pass; Compose app/media config and whitespace pass. These checks
 cover the baseline, not Phase 5/6 acceptance.
 
-Origin is `https://github.com/phifin/core-social-flyvo.git`. Last confirmed remote
-master before this handoff is Phase 3 `552c4ca`; main is preparing the accepted
-Phase 4/documentation fast-forward and will verify the resulting remote hash.
-Local verification and successful push do not imply remote CI success.
+Origin is `https://github.com/phifin/core-social-flyvo.git`. Main successfully
+fast-forwarded remote master from `552c4ca` to
+`6cadc586636e70dc28cb63aba81464c6241cda2e`, verified by ls-remote, including accepted
+Phase 4 and the activated package. The exact 31-commit outgoing history scan passed.
+CI run 38114401976 was queued at the last check; remote success is not claimed.
+This documentation-only delivery record follows that verified push; any subsequent
+publication of this record is reported by main without embedding its own hash here.
 Development must hand back locally even when its tests pass.
 
 Main's archival commit `4dd092c` copied the previously reviewed non-secret code-hash
