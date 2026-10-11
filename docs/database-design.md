@@ -233,13 +233,20 @@ through the media API, never reverse-query content/profile from media. Quota row
 serialize reservations/bind/cleanup/accounting. Tombstone retained byte metadata
 is excluded from reconciliation totals once DELETED. All version/marker deletion
 occurs outside SQL; the fenced acknowledgement releases accounting exactly once.
+Every cleanup state waits for persisted upload expiry plus fifteen-minute settling,
+not merely UPLOAD_PENDING. Timing waits durably defer the job without exhausting
+failure retries. Hourly twenty-asset keyset sweeps repurge terminal tombstones and
+READY quarantine for exceptional late completions; they never decrement quota twice.
+FAILED resets orphan_expires_at to a 24-hour operator repair window on transition.
+No new schema/migration is needed for these protocols; V0001–V0021 remain unchanged.
 Post has explicit updated_at/version mutations; original published_at is preserved.
 The content query adapter consumes the existing published view allowlist only;
 no new foreign-base-table or JPA association access is introduced.
 
 The actual candidate SQL is EXPLAIN-tested on 12,000 skewed posts (10% selected
-author) and must use `post_author` with LIMIT. Bounded hydrate loads four own
-relation queries plus batched owner APIs; its statement count is independent of
+author) and must use `post_author` with LIMIT. Bounded hydrate loads roots and all
+owned relations in one statement snapshot using separate ordered JSON aggregates
+plus batched owner APIs; its statement count is independent of
 one versus one hundred posts. This is a representative local plan, not a public
 traffic latency/throughput guarantee.
 

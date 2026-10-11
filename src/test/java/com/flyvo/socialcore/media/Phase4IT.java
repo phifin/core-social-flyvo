@@ -134,6 +134,7 @@ class Phase4IT {
   @Autowired GenerationCleanup generations;
   @Autowired QuarantineCleanup quarantine;
   @Autowired QuotaReconciliation quotaRepair;
+  @Autowired StorageReconciliation storageRepair;
   @Autowired com.flyvo.socialcore.content.application.PostBindingReconciliation postRepair;
   @Autowired com.flyvo.socialcore.content.application.PostRetention retention;
   @Autowired CommunityPostModeration moderation;
@@ -274,6 +275,514 @@ class Phase4IT {
             reads.posts(viewer, null, null, 100, null).items().stream()
                 .anyMatch(p -> p.id().equals(id)))
         .isEqualTo(visible);
+  }
+
+  <T> T concurrentLoad(
+      String legacyRelation, java.util.function.Supplier<T> read, Runnable mutation)
+      throws Exception {
+    var entered = new CountDownLatch(1);
+    var release = new CountDownLatch(1);
+    var reading = new java.util.concurrent.atomic.AtomicReference<Thread>();
+    var once = new java.util.concurrent.atomic.AtomicBoolean();
+    var pool = Executors.newSingleThreadExecutor();
+    // Real statement completion: before the fix pause after a relation read; after
+    // the fix the entire aggregate has already used one PostgreSQL snapshot.
+    org.mockito.stubbing.Answer<Object> pause =
+        call -> {
+          Object result = call.callRealMethod();
+          String sql = call.getArgument(0);
+          if (Thread.currentThread() == reading.get()
+              && (sql.contains("FROM content." + legacyRelation + " WHERE")
+                  || sql.startsWith("SELECT p.*,\n"))
+              && once.compareAndSet(false, true)) {
+            entered.countDown();
+            assertThat(release.await(10, TimeUnit.SECONDS)).isTrue();
+          }
+          return result;
+        };
+    doAnswer(pause)
+        .when(jdbc)
+        .query(
+            anyString(), any(org.springframework.jdbc.core.RowMapper.class), any(Object[].class));
+    doAnswer(pause)
+        .when(jdbc)
+        .query(
+            anyString(),
+            any(org.springframework.jdbc.core.RowCallbackHandler.class),
+            any(Object[].class));
+    try {
+      var pending =
+          pool.submit(
+              () -> {
+                reading.set(Thread.currentThread());
+                return read.get();
+              });
+      assertThat(entered.await(10, TimeUnit.SECONDS)).isTrue();
+      mutation.run(); // Independent committed application transactions.
+      release.countDown();
+      return pending.get(10, TimeUnit.SECONDS);
+    } finally {
+      release.countDown();
+      pool.shutdownNow();
+      reset(jdbc);
+    }
+  }
+
+  @Test
+  void coherentCustomLoadCannotAuthorizeANewBodyWithRemovedRecipients() throws Exception {
+    for (boolean batch : List.of(false, true)) {
+      var author = user();
+      var a = user();
+      var b = user();
+      var p = posts.publish(author, request("CUSTOM", null, List.of(a.userId()), List.of()), null);
+      var result =
+          concurrentLoad(
+              "post_recipient",
+              () -> batch ? reads.hydrate(a, List.of(p.id())) : List.of(reads.read(a, p.id())),
+              () -> {
+                var changed =
+                    posts.audience(
+                        author,
+                        p.id(),
+                        p.version(),
+                        new ContentCommands.Audience("CUSTOM", List.of(b.userId())));
+                posts.edit(
+                    author,
+                    p.id(),
+                    changed.version(),
+                    new ContentCommands.Edit("B-only secret", null, List.of(), List.of()));
+              });
+      assertThat(result).hasSize(1);
+      assertThat(result.getFirst().body()).isEqualTo(p.body());
+      assertAll(a, p.id(), false);
+      assertThat(reads.read(b, p.id()).body()).isEqualTo("B-only secret");
+    }
+  }
+
+  @Test
+  void audienceKindSwitchLoadsValidOldOrNewAggregateWithoutServerError() throws Exception {
+    for (boolean toCustom : List.of(false, true)) {
+      var author = user();
+      var viewer = user();
+      String type = toCustom ? "PUBLIC" : "CUSTOM";
+      var p =
+          posts.publish(
+              author,
+              request(type, null, toCustom ? List.of() : List.of(viewer.userId()), List.of()),
+              null);
+      var result =
+          concurrentLoad(
+              "post_recipient",
+              () -> reads.read(viewer, p.id()),
+              () -> {
+                var changed =
+                    posts.audience(
+                        author,
+                        p.id(),
+                        p.version(),
+                        new ContentCommands.Audience(
+                            toCustom ? "CUSTOM" : "ONLY_ME",
+                            toCustom ? List.of(viewer.userId()) : List.of()));
+                posts.edit(
+                    author,
+                    p.id(),
+                    changed.version(),
+                    new ContentCommands.Edit("New coherent body", null, List.of(), List.of()));
+              });
+      assertThat(result.audience()).isEqualTo(type);
+      assertThat(result.body()).isEqualTo(p.body());
+      assertAll(viewer, p.id(), toCustom);
+    }
+  }
+
+  @Test
+  void bodyAttachmentAndMentionEditNeverMixesAggregateVersions() throws Exception {
+    var author = user();
+    var viewer = user();
+    var mentioned = user();
+    var oldImage = ready(author, "POST");
+    var newImage = ready(author, "POST");
+    var p =
+        posts.publish(
+            author,
+            new ContentCommands.Publish(
+                "old mention",
+                null,
+                null,
+                new ContentCommands.Audience("PUBLIC", List.of()),
+                List.of(new ContentCommands.Mention(mentioned.userId(), 0, 3)),
+                List.of(new ContentCommands.Attachment(oldImage, "old alt"))),
+            null);
+    var result =
+        concurrentLoad(
+            "post_media",
+            () -> reads.read(viewer, p.id()),
+            () ->
+                posts.edit(
+                    author,
+                    p.id(),
+                    p.version(),
+                    new ContentCommands.Edit(
+                        "new longer mention",
+                        null,
+                        List.of(new ContentCommands.Mention(mentioned.userId(), 4, 10)),
+                        List.of(new ContentCommands.Attachment(newImage, "new alt")))));
+    assertThat(result.body()).isEqualTo(p.body());
+    assertThat(result.media()).isEqualTo(p.media());
+    assertThat(result.mentions()).isEqualTo(p.mentions());
+    var current = reads.read(viewer, p.id());
+    assertThat(current.body()).isEqualTo("new longer mention");
+    assertThat(current.media().getFirst().mediaId()).isEqualTo(newImage);
+    assertThat(current.mentions().getFirst().start()).isEqualTo(4);
+  }
+
+  @Test
+  void historyDoesNotReadRevisionsCreatedAfterTheAuthorizedPostVersion() throws Exception {
+    var author = user();
+    var staff = user();
+    var c =
+        communities.create(
+            author, "history-" + UUID.randomUUID(), "History", "", "PRIVATE", "OPEN", null);
+    memberships.join(staff, c.id());
+    // Use the current membership version, not a guessed role/owner shortcut.
+    long version =
+        count(
+            "SELECT version FROM community.membership WHERE community_id=? AND user_id=?",
+            c.id(),
+            staff.userId());
+    memberships.role(author, c.id(), staff.userId(), version, "MODERATOR");
+    var p = posts.publish(author, request("COMMUNITY", c.id(), List.of(), List.of()), null);
+    var entered = new CountDownLatch(1);
+    var release = new CountDownLatch(1);
+    var pool = Executors.newSingleThreadExecutor();
+    doAnswer(
+            call -> {
+              if (call.getArgument(0).equals(p.id())) {
+                entered.countDown();
+                assertThat(release.await(10, TimeUnit.SECONDS)).isTrue();
+              }
+              return call.callRealMethod();
+            })
+        .when(repository)
+        .revisions(any(), anyInt(), anyInt(), any());
+    try {
+      var pending = pool.submit(() -> reads.revisions(staff, p.id(), 100, Integer.MAX_VALUE));
+      assertThat(entered.await(10, TimeUnit.SECONDS)).isTrue();
+      long current =
+          count(
+              "SELECT version FROM community.membership WHERE community_id=? AND user_id=?",
+              c.id(),
+              staff.userId());
+      memberships.leave(staff, c.id(), current);
+      posts.edit(
+          author,
+          p.id(),
+          p.version(),
+          new ContentCommands.Edit("after staff left", null, List.of(), List.of()));
+      release.countDown();
+      assertThat(pending.get(10, TimeUnit.SECONDS).items())
+          .extracting(ContentQueries.Revision::body)
+          .containsExactly(p.body());
+      denied(() -> reads.revisions(staff, p.id(), 100, Integer.MAX_VALUE), 404);
+    } finally {
+      release.countDown();
+      pool.shutdownNow();
+      reset(repository);
+    }
+  }
+
+  int putIntent(Images.UploadIntent intent, byte[] bytes) throws Exception {
+    var request =
+        HttpRequest.newBuilder(URI.create(intent.uploadUrl()))
+            .PUT(HttpRequest.BodyPublishers.ofByteArray(bytes));
+    intent
+        .headers()
+        .forEach(
+            (name, values) -> {
+              if (!name.equalsIgnoreCase("content-length"))
+                values.forEach(value -> request.header(name, value));
+            });
+    return StorageContractIT.send(request).statusCode();
+  }
+
+  void assertPurged(UUID id) {
+    var a = assets.asset(id, false);
+    for (var bucket : List.of(StorageContractIT.QUARANTINE, StorageContractIT.DELIVERY)) {
+      var prefix = bucket.equals(StorageContractIT.QUARANTINE) ? a.key() : "variants/" + id + "/";
+      var listing =
+          StorageContractIT.admin.listObjectVersions(r -> r.bucket(bucket).prefix(prefix));
+      assertThat(listing.versions()).isEmpty();
+      assertThat(listing.deleteMarkers()).isEmpty();
+    }
+  }
+
+  void consumeExactCleanup(UUID id, String suffix) {
+    // Make this real persisted job next without altering its lease/fencing/attempt budget.
+    jdbc.update(
+        "UPDATE platform.job SET available_at=? WHERE kind='MEDIA_CLEANUP' AND dedup_key=?",
+        Instant.EPOCH.atOffset(ZoneOffset.UTC),
+        id + ":" + suffix);
+    assertThat(work.consumeExternalJob(UUID.randomUUID(), List.of(cleanup))).isTrue();
+  }
+
+  @Test
+  void deleteAndEarlyRejectionDeferQuotaReleaseWhileRealPutCapabilitiesRemainReusable()
+      throws Exception {
+    for (String mode : List.of("pending", "rejected", "ready")) {
+      var owner = user();
+      byte[] bytes = mode.equals("rejected") ? new byte[] {1, 2, 3, 4} : png(10, 5);
+      // Exercise actual Silo expiry without a ten-minute wall-clock test. The DB
+      // deadline is deliberately more conservative than this real short capability.
+      // callRealMethod uses the overridden arguments, preserving the real signer.
+      doAnswer(
+              call -> {
+                call.getArguments()[4] = Duration.ofSeconds(3);
+                return call.callRealMethod();
+              })
+          .when(objects)
+          .upload(anyString(), anyString(), anyLong(), anyString(), any(Duration.class));
+      try {
+        var intent =
+            mode.equals("pending")
+                ? images.upload(
+                    owner,
+                    new Images.UploadRequest(
+                        "POST", "image/png", bytes.length, StorageContractIT.checksum(bytes)),
+                    null)
+                : upload(owner, "POST", bytes);
+        Instant expiresBy = Instant.now().plusSeconds(4);
+        if (!mode.equals("pending")) {
+          assertThat(work.consumeExternalJob(UUID.randomUUID(), List.of(processing))).isTrue();
+          assertThat(images.status(owner, intent.id()).state())
+              .isEqualTo(mode.equals("rejected") ? "REJECTED" : "READY");
+        }
+        String suffix = mode.equals("rejected") ? "rejected" : "owner-delete";
+        if (!mode.equals("rejected")) images.delete(owner, intent.id());
+        long reserved =
+            count("SELECT reserved_bytes FROM media.quota WHERE owner_id=?", owner.userId());
+        long retained =
+            count("SELECT retained_bytes FROM media.quota WHERE owner_id=?", owner.userId());
+        consumeExactCleanup(intent.id(), suffix);
+        var a = assets.asset(intent.id(), false);
+        var job =
+            jdbc.queryForMap(
+                "SELECT status,attempts,available_at,lease_generation FROM platform.job WHERE kind='MEDIA_CLEANUP' AND dedup_key=?",
+                intent.id() + ":" + suffix);
+        assertThat(job.get("status")).isEqualTo("RETRY");
+        assertThat(job.get("attempts")).isEqualTo(0);
+        assertThat(
+                jdbc.queryForObject(
+                        "SELECT available_at FROM platform.job WHERE kind='MEDIA_CLEANUP' AND dedup_key=?",
+                        OffsetDateTime.class,
+                        intent.id() + ":" + suffix)
+                    .toInstant())
+            .isEqualTo(a.uploadSettles());
+        assertThat(a.state()).isNotEqualTo("DELETED");
+        assertThat(a.finalizable(owner.userId(), clock.instant())).isFalse();
+        denied(
+            () ->
+                posts.publish(
+                    owner, request("PUBLIC", null, List.of(), List.of(intent.id())), null),
+            409);
+        assertThat(putIntent(intent, bytes)).isEqualTo(200);
+        assertThat(
+                StorageContractIT.admin
+                    .listObjectVersions(r -> r.bucket(StorageContractIT.QUARANTINE).prefix(a.key()))
+                    .versions())
+            .isNotEmpty();
+        // Passing upload expiry alone is not the settling boundary.
+        clock.now = a.uploadExpires().plusSeconds(1);
+        consumeExactCleanup(intent.id(), suffix);
+        assertThat(count("SELECT reserved_bytes FROM media.quota WHERE owner_id=?", owner.userId()))
+            .isEqualTo(reserved);
+        assertThat(count("SELECT retained_bytes FROM media.quota WHERE owner_id=?", owner.userId()))
+            .isEqualTo(retained);
+        await().atMost(Duration.ofSeconds(6)).until(() -> Instant.now().isAfter(expiresBy));
+        assertThat(putIntent(intent, bytes)).isEqualTo(403);
+        clock.now = a.uploadSettles().plusSeconds(1);
+        StorageContractIT.admin.deleteObject(
+            r -> r.bucket(StorageContractIT.QUARANTINE).key(a.key()));
+        drainCleanup(owner, intent.id());
+        assertPurged(intent.id());
+        assertThat(
+                count(
+                    "SELECT reserved_bytes+retained_bytes FROM media.quota WHERE owner_id=?",
+                    owner.userId()))
+            .isZero();
+        images.delete(owner, intent.id());
+        tx.executeWithoutResult(
+            s ->
+                work.job(
+                    "MEDIA_CLEANUP",
+                    intent.id() + ":replay",
+                    intent.id().toString(),
+                    clock.instant().minusSeconds(1)));
+        assertThat(work.consumeExternalJob(UUID.randomUUID(), List.of(cleanup))).isTrue();
+        assertThat(
+                count(
+                    "SELECT reserved_bytes+retained_bytes FROM media.quota WHERE owner_id=?",
+                    owner.userId()))
+            .isZero();
+      } finally {
+        reset(objects);
+      }
+    }
+  }
+
+  @Test
+  void purgeCrashAndLeaseLossKeepQuotaUntilFencedRetryAndTombstoneSweepRepurgesLateBytes()
+      throws Exception {
+    var owner = user();
+    byte[] bytes = png(8, 4);
+    var intent = upload(owner, "POST", bytes);
+    assertThat(work.consumeExternalJob(UUID.randomUUID(), List.of(processing))).isTrue();
+    images.delete(owner, intent.id());
+    var a = assets.asset(intent.id(), false);
+    clock.now = a.uploadSettles().plusSeconds(1);
+    var once = new java.util.concurrent.atomic.AtomicBoolean(true);
+    doAnswer(
+            call -> {
+              Object result = call.callRealMethod();
+              if (call.getArgument(0).equals(a.key()) && once.getAndSet(false))
+                clock.now = clock.now.plusSeconds(61);
+              return result;
+            })
+        .when(objects)
+        .purge(anyString(), anyString());
+    consumeExactCleanup(intent.id(), "owner-delete");
+    assertThat(images.status(owner, intent.id()).state()).isEqualTo("DELETING");
+    assertThat(count("SELECT retained_bytes FROM media.quota WHERE owner_id=?", owner.userId()))
+        .isPositive();
+    assertPurged(intent.id());
+    reset(objects);
+    drainCleanup(owner, intent.id());
+    assertThat(
+            count(
+                "SELECT reserved_bytes+retained_bytes FROM media.quota WHERE owner_id=?",
+                owner.userId()))
+        .isZero();
+    // Model an accepted-before-expiry request completing beyond the settling bound
+    // with a real late storage write (not a claim the expired presign can start one).
+    StorageContractIT.api.putObject(
+        r -> r.bucket(StorageContractIT.QUARANTINE).key(a.key()).contentType("image/png"),
+        software.amazon.awssdk.core.sync.RequestBody.fromBytes(bytes));
+    tx.executeWithoutResult(
+        s -> storageRepair.apply(Long.toString(clock.instant().getEpochSecond() / 3600)));
+    for (int n = 0; n < 200; n++) {
+      work.consumeJob(UUID.randomUUID(), List.of(storageRepair));
+      work.consumeExternalJob(UUID.randomUUID(), List.of(cleanup, quarantine));
+    }
+    assertPurged(intent.id());
+    assertThat(images.status(owner, intent.id()).state()).isEqualTo("DELETED");
+    assertThat(
+            count(
+                "SELECT reserved_bytes+retained_bytes FROM media.quota WHERE owner_id=?",
+                owner.userId()))
+        .isZero();
+  }
+
+  @Test
+  void readyQuarantineCleanupDefersDurablyWithoutDeletingBoundVariants() throws Exception {
+    var owner = user();
+    var id = ready(owner, "POST");
+    var p = posts.publish(owner, request("PUBLIC", null, List.of(), List.of(id)), null);
+    var a = assets.asset(id, false);
+    jdbc.update(
+        "UPDATE platform.job SET available_at=? WHERE kind='MEDIA_QUARANTINE_PURGE' AND dedup_key=?",
+        clock.instant().minusSeconds(1).atOffset(ZoneOffset.UTC),
+        id.toString());
+    assertThat(work.consumeExternalJob(UUID.randomUUID(), List.of(quarantine))).isTrue();
+    assertThat(
+            jdbc.queryForMap(
+                "SELECT status,attempts FROM platform.job WHERE kind='MEDIA_QUARANTINE_PURGE' AND dedup_key=?",
+                id.toString()))
+        .containsEntry("status", "RETRY")
+        .containsEntry("attempts", 0);
+    assertThat(
+            StorageContractIT.admin
+                .listObjectVersions(r -> r.bucket(StorageContractIT.QUARANTINE).prefix(a.key()))
+                .versions())
+        .isNotEmpty();
+    clock.now = a.uploadSettles().plusSeconds(1);
+    jdbc.update(
+        "UPDATE platform.job SET available_at=? WHERE kind='MEDIA_QUARANTINE_PURGE' AND dedup_key=?",
+        Instant.EPOCH.atOffset(ZoneOffset.UTC),
+        id.toString());
+    assertThat(work.consumeExternalJob(UUID.randomUUID(), List.of(quarantine))).isTrue();
+    assertThat(
+            StorageContractIT.admin
+                .listObjectVersions(r -> r.bucket(StorageContractIT.QUARANTINE).prefix(a.key()))
+                .versions())
+        .isEmpty();
+    assertThat(reads.mediaAccess(owner, p.id(), id, null)).hasSize(2);
+    assertThat(images.status(owner, id).state()).isEqualTo("READY");
+  }
+
+  @Test
+  void storageSweepIsTwentyAssetKeysetIdempotentAndKeepsFailedOperatorWindow() throws Exception {
+    for (int ownerNumber = 0; ownerNumber < 3; ownerNumber++) {
+      var owner = user();
+      byte[] bytes = png(2, 2);
+      for (int n = 0; n < 7; n++)
+        images.upload(
+            owner,
+            new Images.UploadRequest(
+                "POST", "image/png", bytes.length, StorageContractIT.checksum(bytes)),
+            null);
+    }
+    var owner = user();
+    var intent = upload(owner, "POST", png(4, 4));
+    tx.executeWithoutResult(
+        s -> {
+          assets.quota(owner.userId(), clock.instant());
+          assets.asset(intent.id(), true);
+          assets.state(intent.id(), "FAILED", "PROCESSING_EXHAUSTED", clock.instant());
+        });
+    var a = assets.asset(intent.id(), false);
+    assertThat(a.orphanExpires()).isEqualTo(clock.instant().plusSeconds(86400));
+    clock.now = a.uploadSettles().plusSeconds(1);
+    String hour = "90000000000";
+    tx.executeWithoutResult(s -> storageRepair.apply(hour));
+    assertThat(
+            count(
+                "SELECT count(*) FROM platform.job WHERE kind='MEDIA_CLEANUP' AND dedup_key LIKE ?",
+                "%:reconcile:" + hour))
+        .isEqualTo(20);
+    String next =
+        jdbc.queryForObject(
+            "SELECT payload->>'data' FROM platform.job WHERE kind='MEDIA_STORAGE_RECONCILE' AND dedup_key LIKE ?",
+            String.class,
+            hour + ":%");
+    assertThat(next).startsWith(hour + ":");
+    tx.executeWithoutResult(s -> storageRepair.apply(hour));
+    assertThat(
+            count(
+                "SELECT count(*) FROM platform.job WHERE kind='MEDIA_CLEANUP' AND dedup_key LIKE ?",
+                "%:reconcile:" + hour))
+        .isEqualTo(20);
+    tx.executeWithoutResult(s -> storageRepair.apply(next));
+    assertThat(
+            count(
+                "SELECT count(*) FROM platform.job WHERE kind='MEDIA_CLEANUP' AND dedup_key LIKE ?",
+                "%:reconcile:" + hour))
+        .isGreaterThan(20)
+        .isLessThanOrEqualTo(40);
+    String prepared =
+        tx.execute(
+            s ->
+                cleanup.prepare(
+                    intent.id().toString(),
+                    new ExternalJobHandler.Lease(1, 1, clock.instant().plusSeconds(60))));
+    assertThat(prepared).isEmpty();
+    assertThat(images.status(owner, intent.id()).state()).isEqualTo("FAILED");
+    assertThat(
+            StorageContractIT.admin
+                .listObjectVersions(r -> r.bucket(StorageContractIT.QUARANTINE).prefix(a.key()))
+                .versions())
+        .isNotEmpty();
+    clock.now = a.orphanExpires().plusSeconds(1);
+    drainCleanup(owner, intent.id());
+    assertPurged(intent.id());
   }
 
   @Test
@@ -657,6 +1166,7 @@ class Phase4IT {
         () -> posts.publish(owner, request("PUBLIC", null, List.of(), List.of(u.id())), null), 409);
     assertThat(count("SELECT reserved_bytes FROM media.quota WHERE owner_id=?", owner.userId()))
         .isPositive();
+    clock.now = assets.asset(u.id(), false).uploadSettles().plusSeconds(1);
     drainCleanup(owner, u.id());
     assertThat(count("SELECT reserved_bytes FROM media.quota WHERE owner_id=?", owner.userId()))
         .isZero();
@@ -754,6 +1264,7 @@ class Phase4IT {
         changed.bio(),
         "PRIVATE");
     denied(() -> profiles.avatarAccess(viewer, owner.userId()), 404);
+    clock.now = assets.asset(first, false).uploadSettles().plusSeconds(1);
     drainCleanup(owner, first);
   }
 
@@ -1183,6 +1694,7 @@ class Phase4IT {
     clock.now = clock.now.plusSeconds(901);
     denied(() -> images.upload(a, req, "replay"), 409);
     denied(() -> images.finalizeUpload(a, u.id(), "absent-version"), 409);
+    clock.now = assets.asset(u.id(), false).uploadSettles().plusSeconds(1);
     drainCleanup(a, u.id());
     var image = ready(b, "POST");
     var p = posts.publish(b, request("PUBLIC", null, List.of(), List.of(image)), null);

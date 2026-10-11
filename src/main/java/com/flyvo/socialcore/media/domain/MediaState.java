@@ -25,6 +25,11 @@ public final class MediaState {
     public boolean finalizable(UUID actor, Instant now) {
       return owner.equals(actor) && state.equals("UPLOAD_PENDING") && now.isBefore(uploadExpires);
     }
+
+    /** Covers all issued/reissued PUTs plus a conservative in-flight settling interval. */
+    public Instant uploadSettles() {
+      return uploadExpires.plusSeconds(900);
+    }
   }
 
   public record Variant(

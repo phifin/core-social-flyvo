@@ -219,6 +219,20 @@ public class DurableWorkStore implements DurableWork {
                 != 1) throw new IllegalStateException("JOB_LEASE_EXPIRED");
           });
       return true;
+    } catch (com.flyvo.socialcore.platform.api.ExternalJobHandler.Deferred wait) {
+      // The boundary may pass between prepare rollback and this transaction.
+      // Requeue immediately in that case, without stranding a valid timing wait.
+      var available = wait.until().isAfter(clock.instant()) ? wait.until() : clock.instant();
+      tx.executeWithoutResult(
+          s ->
+              jdbc.update(
+                  "UPDATE platform.job SET status='RETRY',available_at=?,attempts=attempts-1,lease_owner=NULL,lease_until=NULL,last_error_code=NULL WHERE id=? AND status='RUNNING' AND lease_owner=? AND lease_generation=? AND lease_until>?",
+                  time(available),
+                  claim.id(),
+                  owner,
+                  claim.lease().generation(),
+                  time(clock.instant())));
+      return true;
     } catch (RuntimeException failure) {
       tx.executeWithoutResult(
           s -> {

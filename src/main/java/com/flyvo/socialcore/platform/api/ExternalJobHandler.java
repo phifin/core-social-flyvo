@@ -6,6 +6,20 @@ import java.time.Instant;
 public interface ExternalJobHandler {
   record Lease(long generation, int attempt, Instant until) {}
 
+  /** Durable scheduling wait, not a failed external attempt. Prepare must have no effects. */
+  final class Deferred extends RuntimeException {
+    private final Instant until;
+
+    public Deferred(Instant until) {
+      super("EXTERNAL_JOB_DEFERRED", null, false, false);
+      this.until = java.util.Objects.requireNonNull(until);
+    }
+
+    public Instant until() {
+      return until;
+    }
+  }
+
   String kind();
 
   String prepare(String payload, Lease lease);

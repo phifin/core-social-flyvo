@@ -146,10 +146,12 @@ public class JdbcMediaRepository implements MediaRepository {
 
   public void state(UUID id, String state, String code, Instant now) {
     jdbc.update(
-        "UPDATE media.asset SET state=?,failure_code=?,updated_at=?,version=version+1 WHERE id=?",
+        "UPDATE media.asset SET state=?,failure_code=?,updated_at=?,orphan_expires_at=CASE WHEN ?='FAILED' THEN ? ELSE orphan_expires_at END,version=version+1 WHERE id=?",
         state,
         code,
         time(now),
+        state,
+        time(now.plusSeconds(86400)),
         id);
   }
 
@@ -235,5 +237,15 @@ public class JdbcMediaRepository implements MediaRepository {
         "SELECT COALESCE(sum(CASE WHEN retained_bytes=0 THEN declared_bytes ELSE 0 END),0),COALESCE(sum(retained_bytes),0) FROM media.asset WHERE owner_id=? AND state<>'DELETED'",
         (r, n) -> new Quota(r.getLong(1), r.getLong(2), null, 0),
         owner);
+  }
+
+  public List<UUID> settledAssets(UUID after, int size, Instant uploadsExpiredBefore) {
+    return jdbc.query(
+        "SELECT id FROM media.asset WHERE upload_expires_at<=? AND state NOT IN ('UPLOADED','PROCESSING') AND (?::uuid IS NULL OR id>?) ORDER BY id LIMIT ?",
+        (r, n) -> r.getObject(1, UUID.class),
+        time(uploadsExpiredBefore),
+        after,
+        after,
+        size);
   }
 }

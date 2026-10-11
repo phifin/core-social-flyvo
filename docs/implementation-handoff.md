@@ -1,6 +1,6 @@
 # HANDOFF TO IMPLEMENTATION MODEL
 
-This blueprint is the architectural source of truth. Phases 0–3 are implemented locally; Phase 3 is accepted after independent main review. See [foundation evidence](phases/phase-0.md), [identity evidence](phases/phase-1.md), [community evidence](phases/phase-2.md), [graph evidence](phases/phase-3.md) and README for the actual surface. Phase 4 onward remain planned and require assignment. Implement the **requested phase only**, preserving the decisions below.
+This blueprint is the architectural source of truth. Phases 0–3 are implemented and accepted after independent review. Phase 4 posts/privacy/revisions/basic moderation/images/avatar are implemented locally and awaiting main re-review, not accepted; see [Phase 4 evidence](phases/phase-4.md) and the [mailbox](agent-handoff.md) for findings and current verification. Phase 5 onward remain unimplemented; the proposed Phases 5–6 package is not activated. See [foundation evidence](phases/phase-0.md), [identity evidence](phases/phase-1.md), [community evidence](phases/phase-2.md), [graph evidence](phases/phase-3.md) and README for the actual surface. Implement the **requested task only**, preserving the decisions below.
 
 ## Read first
 

@@ -58,12 +58,19 @@ is not the future personal-only `/users/{id}/timeline` route. Ordering is immuta
 publishedAt DESC/UUID DESC. Encrypted cursor includes version, viewer/filter binding,
 asOf, last scanned candidate and 15-minute expiry. Tampering, different actor/filter
 or expiry gives 400. Short/empty pages may continue; no totals or cross-page snapshot.
-Four own-table hydration queries and bounded owner batches prevent per-post joins.
+One own-table aggregate statement loads roots, ordered recipients, attachments and
+mentions from the same PostgreSQL READ COMMITTED snapshot. Independent relation
+aggregations avoid Cartesian multiplication and per-post SQL; bounded owner API
+batches then recheck current authorization. It cannot combine an old CUSTOM grant
+with a new body or an incompatible audience-kind/mention/attachment version.
 
 History requires current ordinary visibility plus author or effective MODERATOR+
 authority. Staff reads are audited. Immutable revision snapshots include body,
 link, audience, attachment and mention data; snapshots never grant historical
-permission. HTTP history pages expose body/link/audience/media, sorted revision
+permission. History SQL is capped at the coherent post revision that was authorized,
+so a later committed edit cannot enter an already-authorized old response. A
+concurrent revocation can still race that old response, not grant a newer body.
+HTTP history pages expose body/link/audience/media, sorted revision
 ordinal descending with exclusive `before`, size 1–100. This ordinal is returned
 as nextCursor, not the encrypted post-list cursor. Thirty-day retention applies
 even if an old revision's audience would once have granted access.

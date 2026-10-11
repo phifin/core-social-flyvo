@@ -21,6 +21,8 @@ class MediaReconciliationScheduler {
   @Scheduled(fixedDelay = 3600000)
   @Transactional
   public void enqueue() {
+    String hour = Long.toString(clock.instant().getEpochSecond() / 3600);
+    work.job("MEDIA_STORAGE_RECONCILE", "hour:" + hour, hour, clock.instant());
     work.job(
         "MEDIA_QUOTA_RECONCILE",
         "hour:" + clock.instant().getEpochSecond() / 3600,

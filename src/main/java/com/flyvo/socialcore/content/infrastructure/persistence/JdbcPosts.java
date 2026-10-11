@@ -45,43 +45,22 @@ public class JdbcPosts implements PostRepository {
   public List<Post> load(List<UUID> ids) {
     if (ids.isEmpty()) return List.of();
     String params = String.join(",", Collections.nCopies(ids.size(), "?"));
-    var recipients = new HashMap<UUID, List<UUID>>();
-    var media = new HashMap<UUID, List<Post.Attachment>>();
-    var mentions = new HashMap<UUID, List<PostBody.Mention>>();
-    jdbc.query(
-        "SELECT * FROM content.post_recipient WHERE post_id IN (" + params + ") ORDER BY user_id",
-        r -> {
-          recipients
-              .computeIfAbsent(r.getObject("post_id", UUID.class), k -> new ArrayList<>())
-              .add(r.getObject("user_id", UUID.class));
-        },
-        ids.toArray());
-    jdbc.query(
-        "SELECT * FROM content.post_media WHERE post_id IN (" + params + ") ORDER BY position",
-        r -> {
-          media
-              .computeIfAbsent(r.getObject("post_id", UUID.class), k -> new ArrayList<>())
-              .add(
-                  new Post.Attachment(
-                      r.getObject("media_id", UUID.class), r.getString("alt_text")));
-        },
-        ids.toArray());
-    jdbc.query(
-        "SELECT * FROM content.post_mention WHERE post_id IN ("
-            + params
-            + ") ORDER BY start_offset",
-        r -> {
-          mentions
-              .computeIfAbsent(r.getObject("post_id", UUID.class), k -> new ArrayList<>())
-              .add(
-                  new PostBody.Mention(
-                      r.getObject("mentioned_user_id", UUID.class),
-                      r.getInt("start_offset"),
-                      r.getInt("end_offset")));
-        },
-        ids.toArray());
+    // One READ COMMITTED statement snapshot for root and all relations. Independent
+    // statements could combine an old CUSTOM grant with a newer private body.
+    // Aggregate each relation separately: no Cartesian expansion or per-post SQL.
     return jdbc.query(
-        "SELECT * FROM content.post WHERE id IN (" + params + ")",
+        """
+        SELECT p.*,
+          COALESCE((SELECT jsonb_agg(r.user_id ORDER BY r.user_id)
+            FROM content.post_recipient r WHERE r.post_id=p.id),'[]'::jsonb) recipients,
+          COALESCE((SELECT jsonb_agg(jsonb_build_object('id',m.media_id,'altText',m.alt_text) ORDER BY m.position)
+            FROM content.post_media m WHERE m.post_id=p.id),'[]'::jsonb) attachments,
+          COALESCE((SELECT jsonb_agg(jsonb_build_object('userId',m.mentioned_user_id,'start',m.start_offset,'end',m.end_offset) ORDER BY m.start_offset,m.mentioned_user_id)
+            FROM content.post_mention m WHERE m.post_id=p.id),'[]'::jsonb) mentions
+        FROM content.post p WHERE p.id IN (
+        """
+            + params
+            + ")",
         (r, n) -> {
           UUID id = r.getObject("id", UUID.class),
               author = r.getObject("author_id", UUID.class),
@@ -93,13 +72,13 @@ public class JdbcPosts implements PostRepository {
               new PostBody(
                   r.getString("body"),
                   r.getString("link_url"),
-                  mentions.getOrDefault(id, List.of())),
+                  List.of(json.readValue(r.getString("mentions"), PostBody.Mention[].class))),
               new PostAudience(
                   author,
                   community,
                   PostAudience.Type.valueOf(r.getString("audience")),
-                  recipients.getOrDefault(id, List.of())),
-              media.getOrDefault(id, List.of()),
+                  List.of(json.readValue(r.getString("recipients"), UUID[].class))),
+              List.of(json.readValue(r.getString("attachments"), Post.Attachment[].class)),
               r.getString("status"),
               r.getInt("revision_number"),
               instant(r, "published_at"),

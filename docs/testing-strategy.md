@@ -37,6 +37,15 @@ GitHub Actions on PR/push: checkout with least privilege, setup pinned Java 21, 
 
 CI cannot skip integration tests for convenience, swallow flaky failures, autoformat unrelated code or use a floating `latest` database image. Pin GitHub Actions to immutable commits, permissions `contents:read`, never give fork PRs deployment secrets. Dependency/security scanning begins with scheduled Dependabot and a secret scanner; before public launch add SBOM and container/dependency vulnerability review with an explicit exception process. Tests pass before image publishing. No production deployment workflow is implied by this blueprint.
 
+The CI-pinned Gitleaks 8.28.0 image scans full git history with redaction and default
+rules. `.gitleaksignore` contains only the reviewed P4-R5 commit/path/rule/line
+fingerprint: a historical code hash mistaken for a credential in handoff prose.
+No rule/path/directory exclusion or history rewrite is used. CI also runs
+`bash ops/ci/secret-scan-regression.sh`: an external temporary synthetic positive
+fixture must still produce generic-api-key/exit 1; the redacted control is not
+committed and is removed afterward. A clean staged-patch scan is not a substitute
+for the full-history gate.
+
 Track JaCoCo coverage as a diagnostic, especially policy/state branches; avoid vanity global percentages. Missing privacy/error branches cannot be excused by overall coverage. Performance verification records dataset distribution, hardware, concurrency, p50/p95/p99, query count, query plans and worker lag. Performance thresholds are established from measurements, then enforced for representative regressions; do not turn unstable microbenchmarks into every PR's gate.
 
 ## Definition of tested
@@ -52,7 +61,14 @@ executes actual isolated JPEG/PNG/static WebP decoding and hostile container/CRC
 dimension/metadata cases. PackagedImageProcessorIT repeats WebP using the built
 Boot jar/child launcher. FoundationIT upgrades V0014 with retained checksums/profile;
 the actual candidate SQL has a skewed 12,000-row indexed EXPLAIN and bounded hydrate
-query-count regression. The prior integration suite remains required, not replaced.
+query-count regression. R3 statement-completion barriers exercise recipient removal
+then a private body edit, audience-kind switches, attachment/mention replacement and
+history edits after staff departure. R4 uses real reusable/expired Silo PUTs, durable
+expiry/settling deferral, quota retention, deletion markers, lease-loss/crash retry,
+READY quarantine-only purge and terminal storage reconciliation. A synthetic late
+SDK write models an accepted-before-expiry completion beyond settling; it is not
+presented as an expired URL successfully starting a new upload. The prior integration
+suite remains required, not replaced.
 
 Phase 3 GraphIT covers real PostgreSQL relationship lifecycles, denied actor/IDOR,
 FRIENDS and bilateral block policy, opposite/duplicate requests, follow/block races,

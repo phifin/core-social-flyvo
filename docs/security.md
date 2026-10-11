@@ -151,7 +151,7 @@ against creation/transfer's shared owner account guard. See [community](communit
 | Media | Issue URL only via currently authorized post/profile; max 60-second capability lifetime; previously downloaded bytes cannot be recalled |
 | Lists/counts | Do not expose blocked actor names, graph edges or exact hidden-result counts through pagination metadata |
 
-Normal reads authorize against committed state near request time, not a global serializable timeline. A concurrent block/removal may race with an already-authorized response; subsequent requests must reflect it. Guarded writes serialize the relevant conflicting state. Do not promise revocation of in-flight responses or already issued storage URLs.
+Normal reads authorize against committed state near request time, not a global serializable timeline. The content aggregate (root, audience recipients, attachments and mentions) is loaded in one statement snapshot; history cannot hydrate revisions newer than that authorized aggregate. A concurrent block/removal may race with an already-authorized old response, never justify mixing an old grant with a newly committed body. Subsequent requests must reflect the change. Guarded writes serialize the relevant conflicting state. Do not promise revocation of in-flight responses or already issued storage URLs.
 
 ## Abuse controls and secrets
 

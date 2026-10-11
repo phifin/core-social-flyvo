@@ -431,7 +431,14 @@ public class Posts implements ContentCommands, ContentQueries, PostModeration {
     if (!p.author().equals(actor.userId()))
       work.auditScoped(
           actor.userId(), "POST_HISTORY_READ", "post", id, p.community(), "SUCCESS", null);
-    var rows = store.revisions(id, size, before, clock.instant().minusSeconds(30L * 86400));
+    // The history statement can see later commits, but must never return a body
+    // created after the coherent post version we just authorized.
+    var rows =
+        store.revisions(
+            id,
+            size,
+            Math.min(before, p.revision() + 1),
+            clock.instant().minusSeconds(30L * 86400));
     return new Page<>(rows, rows.size() == size ? Integer.toString(rows.getLast().number()) : null);
   }
 

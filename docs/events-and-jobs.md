@@ -55,13 +55,20 @@ Email jobs containing verification/reset links require recoverable secrets for d
 platform. Platform claims only registered kinds, fences by owner/generation/60-second
 lease, executes preparation in a short transaction, storage/decoder outside all
 business locks, then completion and acknowledgement in one fenced transaction.
-Failed/reclaimed workers cannot commit READY or deletion accounting. Each process
-handles one external job per tick. Ten attempts, exponential/jitter retry and DEAD
+Failed/reclaimed workers cannot commit READY or deletion accounting. A handler
+can durably defer a prepare-only timing wait on the same fenced job, setting RETRY/
+available_at and restoring the spent attempt, without resetting lease_generation.
+Deferral is not an external failure; lease loss/crash/storage failure still uses
+the ten-attempt retry/DEAD path. Preparation effects roll back on deferral.
+Each process handles one external job per tick. Ten attempts, exponential/jitter retry and DEAD
 metrics remain bounded; expired tenth external claims run terminal recovery.
 
 Media kinds: MEDIA_PROCESS, MEDIA_CLEANUP, MEDIA_GENERATION_PURGE,
-MEDIA_QUARANTINE_PURGE (external), MEDIA_QUOTA_RECONCILE (DB-only). Content/profile
-own POST_RETENTION, POST_BINDING_RECONCILE, AVATAR_BINDING_RECONCILE DB jobs.
+MEDIA_QUARANTINE_PURGE (external), MEDIA_QUOTA_RECONCILE and MEDIA_STORAGE_RECONCILE
+(DB-only). Storage sweeps carry their originating hour and a UUID keyset through
+twenty-asset pages, enqueue idempotent per-hour purge checks and include tombstones.
+They cannot grant access or erase an active binding/live processing generation.
+Content/profile own POST_RETENTION, POST_BINDING_RECONCILE, AVATAR_BINDING_RECONCILE DB jobs.
 Per-generation orphan jobs preserve current READY output; full cleanup confirms
 all versions/markers before releasing quota. Reconciliation does not grant access.
 Post retention deletes at most 500 old revisions per transaction, requeues a bounded

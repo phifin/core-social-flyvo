@@ -3,7 +3,8 @@
 Complete Phase 4 implementation is locally verified and delivered for main review,
 not accepted. Actual code/handoff hashes and routing are recorded in the
 [mailbox](../agent-handoff.md). Development cannot accept a phase.
-Reviewed resume baseline: `44bcc99`; earlier prerequisite code `8fe7738` was a
+Latest stabilization baseline: `8333028` (main round 2 CHANGES_REQUESTED);
+initial full-delivery resume baseline was `44bcc99`. Earlier prerequisite code `8fe7738` was a
 checkpoint only. Main accepted ADR-013 at `ab568554cf50cfa5c2024e84c90a16ed234a967c`.
 No Phase 5, home-feed/search/notification/video/document feature was introduced.
 
@@ -52,7 +53,82 @@ JPEG/PNG use JDK ImageIO. No broker/Redis/fork SDK/malware-format expansion.
 [database](../database-design.md) and [operations](../../ops/media.md) record exact
 limits, API/cursor/retention and operator replay refinements.
 
-## Verification evidence
+## Round 2 stabilization — P4-R3/R4/R5
+
+Findings remain OPEN until main independently checks these proposed fixes; their
+original text and per-ID developer responses remain in the mailbox. P4-R1/R2 were
+resolved by main at the latest review, not by development.
+
+- R3: one READ COMMITTED statement snapshot for post/ordered recipients/media/
+  mentions; batched owner authorization still applies afterward. History is capped
+  at the authorized aggregate revision. No old CUSTOM grant can hydrate a newer
+  private body, and kind/attachment/mention switches cannot form mixed aggregates.
+- R4: all cleanup states defer purge/accounting until upload expiry +15-minute
+  settling; prepare-only deferral persists RETRY/available_at without spending the
+  failure budget, retaining monotonically increasing lease_generation. Immediate
+  deletion/rejection still denies issuance/binding. Hourly bounded per-hour/keyset
+  storage reconciliation rechecks READY quarantine and DELETED tombstones, including
+  exceptional late completions, without releasing quota twice. FAILED retains its
+  full 24-hour operator recovery window from the terminal transition.
+- R5: a single reviewed historical fingerprint in `.gitleaksignore`, not rule/path
+  exclusions or history rewrite. CI keeps its exact pinned full-history/redacted
+  scan and adds an external, cleaned-up synthetic generic-api-key positive control.
+- README/implementation-handoff and ADR-013's current runtime status now describe
+  implemented Phase 4 awaiting review. No Phase 5–6 code, acceptance or push.
+
+Seven new regressions were executed against the old root/relation/history/cleanup
+implementations: **six assertion failures and one invalid-audience error**, then
+the implementations were restored. This is intentional red evidence, not a passing
+baseline or a skipped test. Log `/tmp/social-core-p4-r345-negative.log`; old direct
+CUSTOM read actually returned B-only text, old history returned a post-departure
+edit, and old cleanup completed/releases while the upload window remained open.
+The current implementation also tests a twenty-asset sweep/replay and FAILED hold.
+
+Settling is not a total PUT timeout: pinned Silo's rolling idle reads can admit a
+request before signature expiry that completes later. The tested durable sweep
+repairs an exceptional late SDK write; it is not a claim of synchronous bounded
+physical-byte erasure or that an expired presign starts a new write. Production
+must enforce the total ingress completion bound within settling and verify its
+provider; logical quotas/lifecycle alone remain insufficient for hostile traffic.
+
+Round 2 checks on Java 21, 2026-10-11:
+
+```bash
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 \
+PATH=/usr/lib/jvm/java-21-openjdk-amd64/bin:$PATH \
+  ./mvnw -B -ntp spotless:apply test \
+  -Dtest=OpenApiContractTest,ImageProcessorTest,PostPolicyTest,ArchitectureTest,PersistenceBoundaryTest \
+  failsafe:integration-test failsafe:verify \
+  -Dit.test=Phase4IT,StorageContractIT,ComposeSecretsIT,FoundationIT
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 \
+PATH=/usr/lib/jvm/java-21-openjdk-amd64/bin:$PATH \
+  ./mvnw -B -ntp spotless:apply verify
+docker run --rm -v "$PWD:/repo:ro" \
+  zricethezav/gitleaks:v8.28.0@sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854 \
+  git /repo --redact --no-banner
+bash ops/ci/secret-scan-regression.sh
+```
+
+PASS targeted **76** (18 unit/architecture/contract +58 integration); full verify
+**182** (39 unit/architecture/contract +143 integration), zero failures/errors/skips.
+Includes 33 Phase4IT, twelve real pinned storage contracts, Compose isolation,
+packaged decoder and all previous real PostgreSQL/Mailpit suites. Formatting,
+Enforcer/convergence, final OpenAPI parser/reference test, Compose config, script
+syntax and changed Markdown local links/whitespace pass. Logs:
+`/tmp/social-core-p4-r345-targeted.log`, `/tmp/social-core-p4-r345-verify.log`,
+`/tmp/social-core-p4-r345-doc-format.log`. No exclusions/migration edits/skip-to-green.
+
+Exact CI-pinned full-history scan is clean with the one fingerprint exception;
+repository is not shallow. The original 26-commit scan reproduced exactly one
+non-secret historical match before the exception; the same scan after it returns
+zero. The external positive control still detects generic-api-key/exit 1 and its
+wrapper passes. New committed history is rescanned after delivery; exact code
+hash/results are in the mailbox. Logs `/tmp/social-core-p4-r345-history.log` and
+`/tmp/social-core-p4-r5-positive-final.log`. Remote CI success is not claimed.
+Actual Compose startup/replay and Docker app image build below remain historical
+initial-delivery checks, not rerun in this stabilization; runtime config is unchanged.
+
+## Initial full-delivery verification evidence (historical)
 
 Use installed JDK 21 explicitly in this workspace (shell default is Java 8):
 
@@ -124,7 +200,8 @@ succeed; Snowball uses nonempty valid tar and signed extraction prefix. Before
 controls, denial asserts no object versions or extracted entry. Tampered presign
 keeps every other signed header. No vulnerable image or relaxed denial.
 
-Both findings remain OPEN until main reviews the verified delivery. Compose pins
+Main resolved P4-R1/P4-R2 at round 2; the checks above are initial development
+evidence, with the main disposition preserved in the mailbox. Compose pins
 the exact accepted PGSTY Silo digest, identical to Testcontainers, with AGPL notices.
 
 ## Material limitations and external gates

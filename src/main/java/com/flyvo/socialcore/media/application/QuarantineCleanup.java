@@ -27,8 +27,8 @@ public class QuarantineCleanup implements ExternalJobHandler {
   public String prepare(String payload, Lease lease) {
     var a = store.asset(UUID.fromString(payload), false);
     if (a == null || a.state().equals("DELETED") || a.state().equals("DELETING")) return "";
-    if (clock.instant().isBefore(a.uploadExpires()) || !a.state().equals("READY"))
-      throw new Failure(503, "QUARANTINE_NOT_SETTLED");
+    if (!a.state().equals("READY")) return "";
+    if (clock.instant().isBefore(a.uploadSettles())) throw new Deferred(a.uploadSettles());
     return a.key();
   }
 

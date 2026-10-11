@@ -36,16 +36,18 @@ public class ImageCleanup implements ExternalJobHandler {
     store.quota(first.owner(), clock.instant());
     var a = store.asset(first.id(), true);
     var b = store.binding(a.id());
-    if (a.state().equals("DELETED")) return "";
+    // Tombstones remain purgeable: a PUT accepted before expiry may finish late.
+    // Hourly storage reconciliation rechecks them without releasing quota twice.
+    if (a.state().equals("DELETED")) return json.writeValueAsString(a);
     if (b != null
         && (b.released() == null
             || a.purgeAfter() == null
             || clock.instant().isBefore(a.purgeAfter()))) return "";
     if (a.state().equals("PROCESSING") || a.state().equals("UPLOADED")) return "";
-    if (a.state().equals("UPLOAD_PENDING") && clock.instant().isBefore(a.uploadExpires()))
-      return "";
+    if (a.state().equals("FAILED") && clock.instant().isBefore(a.orphanExpires())) return "";
     if (a.state().equals("READY") && b == null && clock.instant().isBefore(a.orphanExpires()))
       return "";
+    if (clock.instant().isBefore(a.uploadSettles())) throw new Deferred(a.uploadSettles());
     store.state(a.id(), "DELETING", null, clock.instant());
     return json.writeValueAsString(a);
   }

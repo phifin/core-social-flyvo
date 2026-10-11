@@ -136,7 +136,7 @@ public class ImageWork implements ExternalJobHandler {
           "MEDIA_QUARANTINE_PURGE",
           a.id().toString(),
           a.id().toString(),
-          a.uploadExpires().isAfter(clock.instant()) ? a.uploadExpires() : clock.instant());
+          a.uploadSettles().isAfter(clock.instant()) ? a.uploadSettles() : clock.instant());
       work.job(
           "MEDIA_CLEANUP",
           a.id() + ":ready",

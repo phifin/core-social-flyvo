@@ -83,9 +83,27 @@ job ID/kind/status/attempts/lease_generation/last_error_code, not private conten
 presigned queries or keys. One external job/process/tick; ten attempts with bounded
 jittered retry. Expired final processing claims become FAILED/DEAD.
 
-Per-generation orphan jobs preserve current READY output. Quarantine purge waits
-until upload expiry; unbound READY expires after 24 hours; edit/deletion history
+Per-generation orphan jobs preserve current READY output. Full and quarantine-only
+purge wait until persisted upload expiry plus fifteen-minute settling, even after
+owner DELETE or early image rejection. A timing wait defers the same durable job
+without burning attempts; DELETING/reservations stay charged until confirmation.
+The hourly MEDIA_STORAGE_RECONCILE keyset sweep schedules twenty assets per DB job,
+preserves its sweep hour across pages/replays and includes DELETED tombstones.
+Late storage completions are repurged without a second quota decrement. FAILED
+keeps a 24-hour repair window from its terminal transition, not upload creation.
+Unbound READY expires after 24 hours; edit/deletion history
 after 30 days; moderation privately holds images for 30 days, not indefinitely.
+
+The pinned Silo [HTTP server](https://github.com/pgsty/silo/blob/RELEASE.2026-09-16T00-00-00Z/internal/http/server.go)
+uses rolling idle upload read deadlines; it does not supply an absolute inbound
+PUT duration. Fifteen-minute settling is conservative, not proof that every
+adversarial in-flight upload has ended. Hourly tombstone/READY reconciliation is
+the durable late-completion repair path; temporary bytes may persist until that
+sweep and storage outages/DEAD work require audited operator replay. Production
+must enforce a total upload duration within settling at ingress (and verify the
+selected provider's completion/cancellation behavior) before claiming bounded
+all-version erasure. The local developer node remains loopback-only/untrusted-
+traffic unsupported; lifecycle expiry is defense in depth, not finalization proof.
 Hourly MEDIA_QUOTA_RECONCILE scans twenty owners/job under ordered quota guards,
 computes logical non-DELETED charges and audits ACCOUNTING_DRIFT repairs.
 Source transitions durably enqueue POST_BINDING_RECONCILE/AVATAR_BINDING_RECONCILE.

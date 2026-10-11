@@ -78,7 +78,7 @@ GitHub Actions runs the same verify gate, validates Compose, builds the image af
 | `GET /actuator/health` | Aggregate status only; no database/component details |
 | `GET /actuator/health/liveness` | Process availability, independent of database health |
 | `GET /actuator/health/readiness` | Application availability plus PostgreSQL connectivity; database loss returns 503 |
-| Implemented Phase 1/2 routes | Explicit auth/privacy/scoped-role rules in OpenAPI; current PostgreSQL account/session/community checks |
+| Implemented Phase 1–4 routes | Explicit auth/privacy/scoped-role rules in OpenAPI; current PostgreSQL account/session/graph/community/content checks |
 | Unsupported GET requests | 401 without authentication, 403 with it; deny by default |
 | Unsafe methods without CSRF proof | 403 Problem Details |
 
@@ -86,7 +86,7 @@ Health probes and explicitly implemented auth/onboarding and visible-profile rou
 
 Responses carry `X-Request-ID`; safe incoming IDs up to 64 ASCII characters are retained and invalid IDs are replaced. Structured JSON logs include requestId from MDC during request handling. Errors expose stable code/requestId and sanitized details, not rejected values or exception messages. JDBC connect/read timeouts are five seconds, pool acquisition five seconds, and readiness is intentionally separate from liveness.
 
-Flyway `V0001`–`V0011` remain unchanged; `V0012`–`V0014` add graph relations/revisions/views, account ACTIVE view and FRIENDS profile visibility. Hibernate validates account/profile mappings; graph/community/identity/worker adapters use parameterized JDBC under the same local transaction manager. OSIV and auto-DDL remain off. Production must separate migration/runtime roles before launch. Phase 4 adds opt-in Silo/SDK storage prerequisites, not user-facing media routes yet. No Redis or broker is introduced.
+Flyway `V0001`–`V0014` remain unchanged; `V0015`–`V0021` add post/revision/audience/media schemas, avatar and integrity guards. Hibernate validates account/profile mappings; owned JDBC adapters share the same local transaction manager. OSIV and auto-DDL remain off. Production must separate migration/runtime roles before launch. Phase 4 implements post/privacy/history/scoped moderation, upload/finalize/status/deletion, source-authorized images and avatar routes; Silo is opt-in and disabled storage fails closed. Phase 4 is awaiting main re-review, not accepted. No Redis or broker is introduced.
 
 Graph flow: PUT/DELETE `/api/v1/me/following/{user}`, `/me/blocks/{user}` and `/me/mutes/{user}` manage distinct edges. POST `/friend-requests` with userId, then the addressee accepts/declines or requester cancels through its purpose-specific route. Block atomically removes conflicting relationships; unblock restores nothing. Profile FRIENDS uses current friendship; signed-in blocks override all scopes. Lists in [OpenAPI](docs/api/openapi.yaml) use bounded pages and opaque cursors; continue until nextCursor is null, including empty filtered pages. See [graph operations](ops/graph.md).
 
@@ -101,4 +101,4 @@ Community flow: create PRIVATE/INVITE_ONLY by default, or choose visibility and 
 - Java version failure: use JDK 21 for both IDE Maven runner and command line.
 - JDBC timeout after pausing PostgreSQL: expected; restore database connectivity and readiness recovers. Increasing pool size will not fix an unavailable database.
 
-The original repository contained only the Boot starter. Phase 0 intentionally renames/replaces that bootstrap and its context-only test; unrelated user changes and the git index are preserved. Completed, verified tasks are now committed locally under the standing authorization in [Git workflow](docs/git-workflow.md). Push and deployment require separate authorization.
+The original repository contained only the Boot starter. Phase 0 intentionally renames/replaces that bootstrap and its context-only test; unrelated user changes and the git index are preserved. Completed, verified tasks are committed locally under [Git workflow](docs/git-workflow.md). Only main may push reviewed checkpoints; development never pushes. Deployment is not authorized.

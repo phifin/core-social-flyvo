@@ -47,6 +47,25 @@ Object storage is not in the SQL transaction. Uploaded objects with no committed
 
 Cleanup uses database-driven state claims and storage listing reconciliation. Pending intents expire after 15 minutes; READY unbound assets expire after 24 hours. Claims use row lock/CAS to DELETING before external delete so attach cannot race cleanup. Processing leases have bounded retries before terminal state; never delete a live processing generation based solely on created time. Delete all object versions/delete markers where policy requires erasure; deleting only the latest version is insufficient. Retry DELETING jobs until deletion is confirmed, then mark DELETED. Keep tombstone metadata for reconciliation without serving content.
 
+Owner deletion immediately denies finalize/reissuance/binding but never releases
+quota while the upload capability can still start writes. Full purge and READY
+quarantine-only purge wait until the persisted 15-minute upload deadline **plus
+15 minutes settling**, in every state (including early REJECTED/DELETING). Early
+jobs durably defer the same job under its current lease fence to that boundary without spending the
+failure budget; crashes still spend bounded attempts. All-version confirmation
+then releases quota once only. Hourly bounded storage sweeps requeue full cleanup
+and READY quarantine purge, including DELETED tombstones, to remove exceptionally
+late completions or repair missed work; tombstone rechecks never release quota twice.
+FAILED retains its 24-hour operator repair window from the terminal transition.
+
+Settling is not an absolute ingress timeout: Silo uses rolling idle read deadlines,
+and S3 may accept an upload before signature expiry that finishes afterward.
+Outliers beyond settling are eventually swept, not claimed synchronously erased;
+temporary/version bytes remain subject to the existing external storage/ingress
+budget gate. A production ingress must enforce a total upload completion bound
+within the settling interval. Do not expose the developer Silo node to untrusted
+traffic or claim a fixed physical-byte bound from logical quotas.
+
 Post deletion/removal immediately denies media URL issuance. Soft-deleted post bindings are released/purged after the content retention window; moderation hold may retain private evidence. Avatar replacement releases the old binding in the same transaction; purge runs later. Reconciliation finds context references without matching binding and fails them closed, emitting an alert; it does not infer permission from storage existence. Owner-only metadata status endpoint does not return bound download URLs. An uploader cannot bypass post removal via `/media/{id}`.
 
 ## Download authorization and future scope
@@ -76,7 +95,7 @@ Thumbnails (e.g. max 320px) and display images (max 2048px) are generated togeth
   all-version purge. Quota reconciliation runs hourly, twenty owners per job.
 - External jobs have short fenced claim/prepare/ack transactions and out-of-TX
   effects. Every generation schedules a durable orphan check; READY schedules
-  quarantine purge after upload expiry and unbound cleanup after 24 hours.
+  quarantine purge after upload expiry plus settling and unbound cleanup after 24 hours.
   Retry is bounded to ten attempts; expired final leases become FAILED/DEAD rather
   than stuck PROCESSING. FAILED allows a 24-hour restricted operator repair window.
   DELETING/DEAD retains quota until confirmed deletion; replay never resets generation.

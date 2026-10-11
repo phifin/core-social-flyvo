@@ -1,0 +1,3 @@
+# P4-R5: reviewed non-secret code-commit hash in the historical handoff.
+# Exact commit/path/rule/line only; keep generic-api-key and all documentation scanned.
+abfd2552a557b8882ea63ea655656774e88e4bda:docs/agent-handoff.md:generic-api-key:228

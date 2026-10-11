@@ -36,5 +36,7 @@ public interface MediaRepository {
 
   List<UUID> owners(UUID after, int size);
 
+  List<UUID> settledAssets(UUID after, int size, Instant uploadsExpiredBefore);
+
   Quota actualQuota(UUID owner);
 }

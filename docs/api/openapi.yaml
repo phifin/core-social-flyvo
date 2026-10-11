@@ -2168,7 +2168,7 @@ paths:
       operationId: deleteUnboundImage
       summary: Owner claims unbound asset for durable all-version deletion
       security: [{BearerAuth: []}]
-      description: "Bound or processing assets cannot be deleted through the uploader path. DELETING/DELETED replay is idempotent. Accounting releases only after confirmed storage purge."
+      description: "Bound or processing assets cannot be deleted through the uploader path. DELETING/DELETED replay is idempotent. Issuance and binding are denied immediately; accounting releases only after upload intent expiry plus fifteen-minute settling and confirmed all-version purge. Durable reconciliation repurges exceptional late upload completions; deletion scheduling is not synchronous byte erasure."
       parameters:
         - {$ref: '#/components/parameters/Origin'}
         - {$ref: '#/components/parameters/Csrf'}
