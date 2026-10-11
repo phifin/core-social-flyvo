@@ -4,9 +4,9 @@
 
 - Task: phase-5-6-interactions-reports-feeds
 - Round: 1
-- State: BLOCKED — architecture decision P56-B1, package incomplete
-- Last writer: development, 2026-10-11 — verified content slice, decision handoff
-- Next owner: main — decide ADR-014/scope, then route development continuation
+- State: READY_FOR_IMPLEMENTATION — P56-B1 decided, resume incomplete package
+- Last writer: main, 2026-10-11 — architecture decision only, no executable changes
+- Next owner: development — resume the existing Phases 5–6 chat
 - Accepted Phase 4 code: `9bdc9996b546d73356f177759806296cea40bc43`.
 - Phase 4 acceptance commit: `26d60ce`.
 - Review history: [accepted Phase 4](handoffs/phase-4-posts-media.md); R1–R5 resolved.
@@ -80,7 +80,30 @@ their tests are unimplemented/unrun. Complete Phase 5 internal gate has not pass
 feed work and the representative benchmark cannot proceed through that gate.
 No self-acceptance, push, spawned agent or Phase 7 implementation occurred.
 
-### P56-B1 — pending architecture decision, not a resolved reviewer finding
+### P56-B1 — decision ACCEPTED by main; implementation pending
+
+Main decision (2026-10-11): accept [ADR-014](adr/014-report-user-target-proof.md).
+Retain POST/COMMENT/COMMUNITY/USER report scope; allow only moderation-to-profile
+owner API access for USER submission proof. No UUID-only proof, attribution bypass,
+foreign SQL or policy relay. The original blocker/developer response below is
+preserved as history; its pending-approval wording no longer controls routing.
+
+Resume the same development chat, set IN_PROGRESS and implement reports with the
+narrow ModuleRules map update and denied-access/concurrency regressions. Use the
+authorized summary as evidence, test privacy/block/account changes and idempotent
+replay, and keep USER cases out of community staff queues unless independently
+authorized as platform ADMIN. Do not add Phase 8 account suspension. Finish the
+full Phase 5 gate before Phase 6, then benchmark and final package delivery.
+
+Main checked the actual ProfileQueries/Profiles implementation, dependency map,
+ADR-002 and architecture/security/domain contracts at HEAD `030f18a`. This is a
+decision review, not independent acceptance of content code `870959d`. Developer's
+207-test evidence below remains developer-reported; no full suite rerun for this
+documentation-only decision. Main will review the complete package and both slices.
+Documentation diff/links/consistency are checked before committing. No push now:
+the newer executable slices have not completed main review.
+
+#### Original blocker evidence and developer response
 
 Evidence: domain-model.md's Report contract includes USER and requires access at
 submission; public user visibility is owned by `ProfileQueries.visible` (interface
@@ -141,8 +164,9 @@ development does not mark P56-B1 or prior findings resolved.
   EXPLAIN/query-count/latency/scan-ratio benchmark. No substitute capacity/gate claim.
 
 Material limitations: initial reaction serialization is per post or comment; page
-consistency is current source near read time, not a snapshot; report/feed scope is
-blocked by P56-B1. Accepted Phase 4 provider/storage/physical upload bound/decoder/
+consistency is current source near read time, not a snapshot; report/feed work was
+blocked at developer handoff, now unblocked by main's P56-B1 decision above.
+Accepted Phase 4 provider/storage/physical upload bound/decoder/
 legal retention/public launch gates remain, without newly claiming readiness.
 
 ### Concrete implementation plan
@@ -228,10 +252,9 @@ and external positive control are rerun before push.
 
 ## Next action
 
-Main reviews the concrete P56-B1 evidence/proposed ADR and the verified content
-slice. Decide the narrow dependency or explicitly narrow USER report scope, record
-the decision and route IN_PROGRESS back to `Develop Phases 5–6 — Interactions,
-Moderation & Feeds`. Development then completes reports → full Phase 5 gate → feeds
+Reuse `Develop Phases 5–6 — Interactions, Moderation & Feeds`; read accepted ADR-014
+and set IN_PROGRESS. P56-B1 needs no further approval. Development completes
+reports → full Phase 5 gate → feeds
 and benchmark → final package checks and READY_FOR_REVIEW in the same assignment.
 Use actual HEAD/migration maximum (currently V0022; next available V0023); preserve
 all delivered slices and prior acceptance history. No push or phase acceptance is

@@ -65,9 +65,16 @@ flowchart TD
   moderation --> content
   moderation --> community
   moderation --> account
+  moderation --> profile
 ```
 
 This is an allowlist, not a requirement to inject every API. `identity -> profile` is solely initial profile provisioning in registration; `identity -> community` is solely the ownership-blocker check during self-account closure. `identity.application.CloseAccount` performs recent reauthentication, takes the account lifecycle guard, checks active-community ownership through the community API, and invokes account's deletion-request command in one transaction. Account itself never depends on community/identity. Search may consume account lifecycle events for erasure. A module must not call back into a module above it, including through callbacks disguised as ports. Event types live in the publisher's `api.event`; consumers import those types in their application layer. Account status changes need no reverse call into identity: authentication always checks current account status. Owner-module deletion jobs are driven by account lifecycle events.
+
+Under [ADR-014](adr/014-report-user-target-proof.md), `moderation -> profile.api`
+is solely current USER report submission proof through `ProfileQueries.visible`.
+It does not permit profile writes, private-profile bypass, general staff lookup or
+foreign SQL. Development must align the test-owned dependency map when implementing
+reports; the decision alone does not claim that implementation is delivered.
 
 No module imports another module's JPA entities, domain objects, application implementations or repositories. A module API uses immutable records, enums and scalar IDs, never `Page`, `Specification`, lazy collections, `EntityManager` or Spring HTTP types. Java UUID is sufficient initially; introduce typed IDs only where repeated confusion proves useful.
 

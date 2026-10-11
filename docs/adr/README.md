@@ -17,14 +17,15 @@ Records 001–012 are **Accepted for implementation** as of 2026-10-08; ADR-013 
 | [011](011-search-and-caching.md) | PostgreSQL search, source authorization, conditional Redis/engine |
 | [012](012-quality-and-operations.md) | Real-PostgreSQL tests, architecture gates, observability and release discipline |
 | [013](013-local-object-storage-distribution.md) | Pinned PGSTY Silo for local Compose/Testcontainers; supersedes only ADR-008's local distribution |
+| [014](014-report-user-target-proof.md) | Accepted 2026-10-11: narrow moderation-to-profile API proof for USER reports; implementation pending |
 
 Future ADRs are required before approved-follow workflows, SaaS tenancy, native-client credential transport, account merging, rich HTML/documents/video, nonchronological ranking, broker introduction, service extraction, stricter media revocation, or changes to retention/privacy guarantees. Not every new endpoint needs an ADR.
 
-## Proposed decisions
+## Report target decision
 
-[Proposed ADR-014](014-report-user-target-proof.md) records the Phase 5 USER report
-target-proof conflict with the frozen moderation dependency DAG. It is **not
-accepted** and has not changed the production/architecture-test allowlist.
+[ADR-014](014-report-user-target-proof.md) resolves the Phase 5 USER report
+target-proof conflict. Main accepted the narrow architecture edge; development
+must implement and test it before package review. No phase acceptance is implied.
 
 ## Local storage decision
 

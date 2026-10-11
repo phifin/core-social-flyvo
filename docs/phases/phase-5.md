@@ -2,8 +2,8 @@
 
 Status: partial implementation, **not complete or accepted**. Comments/reactions
 are implemented; reports/evidence/action correlation are unimplemented. The package
-cannot reach its full Phase 5 gate before the architecture conflict in
-[proposed ADR-014](../adr/014-report-user-target-proof.md) is decided by main/user.
+must complete reports before its full Phase 5 gate. Main accepted
+[ADR-014](../adr/014-report-user-target-proof.md) on 2026-10-11 to unblock that work.
 Current routing and actual code hash: [mailbox](../agent-handoff.md).
 
 ## Delivered content slice
@@ -110,10 +110,9 @@ contracts. They are not passing baseline evidence or weakened denial paths.
 
 Reports, concurrent unresolved-case uniqueness, encrypted evidence, staff queue/
 resolution/action audit rollback and report-specific privacy/races are **unrun**.
-No full Phase 5 completion/gate or acceptance is claimed. USER target proof currently
-requires a module dependency excluded by the frozen DAG; proposed ADR-014 offers
-one narrow owner-policy dependency or an explicit scope deferral. No approval has
-been inferred from elapsed time. Phase 6 must wait for the full internal Phase 5 gate.
+No full Phase 5 completion/gate or acceptance is claimed. Main accepted ADR-014's
+narrow owner-policy dependency for USER target proof; development must implement
+and verify it. Phase 6 must wait for the full internal Phase 5 gate.
 
 Content interaction delivery does not claim production load capacity. Reaction writes
 initially serialize on a post or target comment; future narrowing requires measured

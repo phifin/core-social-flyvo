@@ -2,9 +2,13 @@
 
 Status: ACTIVATED by main on 2026-10-11 at the user's request to review and continue.
 Phase 4 code `9bdc999` was accepted in `26d60ce`; see the fixed mailbox and
-[accepted review](../handoffs/phase-4-posts-media.md). Phase 5/6 remain unimplemented.
+[accepted review](../handoffs/phase-4-posts-media.md). Phase 5 interactions are
+implemented pending review; reports and Phase 6 remain unimplemented. Main accepted
+[ADR-014](../adr/014-report-user-target-proof.md) on 2026-10-11 to unblock USER
+report proof. Retain all four target types and implement the narrow dependency,
+current owner proof and scoped evidence tests before the full Phase 5 gate.
 
-New development chat to open: `Develop Phases 5–6 — Interactions, Moderation & Feeds`.
+Reuse development chat: `Develop Phases 5–6 — Interactions, Moderation & Feeds`.
 One chat implements the entire package sequentially; no spawned agents or pushes.
 This doubles the roadmap-phase scope of a normal assignment, not a promise of
 twice the throughput. Keep internal slices green without frequent user handoffs.
