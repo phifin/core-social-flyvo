@@ -4,9 +4,9 @@
 
 - Task: phase-5-6-interactions-reports-feeds
 - Round: 1
-- State: READY_FOR_REVIEW — full Phase 5–6 package, not accepted
-- Last writer: development, 2026-10-11 — completed after decision `7e4d083`
-- Next owner: main — independent package review, including the measured latency gap
+- State: CHANGES_REQUESTED — P56-R1 open; package not accepted
+- Last writer: main, 2026-10-11 — independent round 1 review
+- Next owner: development — same Phases 5–6 chat, stabilization package below
 - Accepted Phase 4 code: `9bdc9996b546d73356f177759806296cea40bc43`.
 - Phase 4 acceptance commit: `26d60ce`.
 - Review history: [accepted Phase 4](handoffs/phase-4-posts-media.md); R1–R5 resolved.
@@ -20,6 +20,95 @@
 - Main coordinates/reviews/pushes; the user manually opens the named development chat.
 
 ## Assignment and execution order
+
+### Main round 1 verdict — code 26dec38, handoff e7f9065
+
+**CHANGES_REQUESTED.** Reviewed the interaction/report/feed implementation and
+security, transaction, SQL, migration, HTTP and test changes from the accepted
+Phase 4 baseline. P56-B1 implementation is resolved: the guarded profile owner
+proof uses the current authorized summary, preserves the narrow ADR-014 dependency
+and has real privacy/block/account ordering and replay regressions. No additional
+blocking privacy/atomicity finding was identified in this round. This does not
+accept Phase 5 or Phase 6; keep the combined package pending stabilization review.
+
+Main independently ran Java 21 `./mvnw -B -ntp verify`: **248 PASS** (47 fast +201
+integration), zero failures/errors/skips, BUILD SUCCESS in 2m41s. Log:
+`/tmp/social-p56-main-review-verify.log`. App/media Compose config and whitespace
+pass; applied V0001–V0021 are unchanged. Pinned redacted Gitleaks full history:
+**39 commits, no leaks**, unchanged two exact fingerprints; external synthetic
+positive control passes. Logs `/tmp/social-p56-main-review-secrets.log` and
+`/tmp/social-p56-main-review-positive.log`. Main inspected the developer benchmark
+tool/results but did not rerun its full 50-reader fixture; the independent sparse
+source probe below is separate evidence, not a replacement benchmark.
+
+#### P56-R1 — P1 OPEN: sparse/empty home feed scans unrelated global history
+
+Anchors: `JdbcPosts.java:151–177` (feedCandidates), `Feeds.java:120–129`,
+`FeedBenchmarkTool.java:267–270`. HOME leaves the root scoped predicate empty,
+walks the global published chronology, then runs the per-candidate LATERAL owner
+proof until it finds 100 eligible rows or reaches the end. A new user with no
+sources therefore visits unrelated history; a sparse source or exhausted cursor
+has the same risk. The 1,000/200ms application budget cannot stop this first SQL
+call, which has not returned any candidates/progress yet. No full-sort is needed
+for the bad plan, so the existing no-sort regression does not catch it.
+
+**Independent reproduction:** fresh isolated pinned PostgreSQL 18.6, all V0001–23
+DDL, two synthetic active accounts, 1,000,000 PUBLISHED/PUBLIC personal posts by
+one account; viewer has no posts/follows/friends/memberships/recipients/mutes/blocks.
+Called the actual compiled `JdbcPosts.feedCandidates` with HOME/limit 100/current
+cutoff; no copied policy/query, application edits or user database were involved.
+With the production-equivalent server `statement_timeout=5000` and no JDBC timeout,
+two serial calls returned zero rows in **4811.932 /4929.024ms**. **All four concurrent
+calls failed with PostgreSQL statement timeout**, at 5025–5027ms. This already
+occurs with only four requests, not the 50-reader goal. An earlier JDBC 5s run
+timed out both serial/four concurrent calls; timing variation is reported honestly.
+At 200k posts, the same empty query took 735/861ms. This is a reproducible request
+failure/scaling defect, not merely the developer's p95 goal miss.
+
+Probe source `/tmp/P56SparseProbe.java`; logs
+`/tmp/social-p56-main-sparse-probe.log`,
+`/tmp/social-p56-main-sparse-million.log`,
+`/tmp/social-p56-main-sparse-server-timeout.log`. The probe's temporary container
+and synthetic database are disposable; port/container need recreating to rerun.
+Development must add a permanent isolated regression/tooling scenario, not depend
+on these temporary artifacts or benchmark only repeated dense first pages.
+
+Required outcome: source-selective HOME planning that does not linearly traverse
+unrelated global history for absent/rare/exhausted sources. Preserve every source
+branch, dedup-before-pagination, owner privacy before eligible LIMIT, coherent
+hydrate and last-examined continuation. A source-driven indexed union/EXISTS plan
+is an option to measure, not a prescribed untested rewrite. No empty-result catch
+on timeout, pre-visibility LIMIT with false exhaustion, timeout increases, graph
+materialization in Java, authorization cache, Redis or fan-out workaround.
+
+Regression/measurement must include no sources, one rare source with old posts,
+exhausted continuation, mostly blocked/muted/private candidates and overlapping
+sources on the million-row fixture. Record actual EXPLAIN/physical rows/buffers,
+SQL counts, successful result/continuation and concurrent latency; retain current
+privacy/race/cursor/parity checks. Cover the ordinary default pool 10 as well as
+the explicitly labeled benchmark pool 50. Avoid flaky wall-clock-only unit gates;
+use meaningful query-plan/work assertions plus explicit heavy performance evidence.
+
+#### Latency decision and next development package
+
+The dense benchmark p95 1723.410/821.781ms remains an honest unmet initial goal;
+it is not proof of a production SLA and does not justify removing a test or raising
+timeouts. The assigned package allowed reporting the goal outcome, so that number
+alone is not a new architecture blocker. P56-R1 is independently blocking. Profile
+planning/execution/pool waits while fixing it, rerun both dense bursts and the new
+sparse/deep-page cases, and retain all misses in evidence. Main will evaluate any
+residual latency gap separately after correctness/work-bounding is fixed.
+
+Reuse `Develop Phases 5–6 — Interactions, Moderation & Feeds`, set IN_PROGRESS and
+deliver one coherent stabilization assignment: (1) source-query optimization and
+necessary measured indexes, (2) permanent regressions plus expanded benchmark and
+profiling, (3) full package verification and updated evidence. New migrations start
+after actual max V0023; never edit applied files. No repeated small handoffs; stop
+only for a concrete new contract/external blocker. Commit verified slices, then a
+separate real-hash mailbox, respond to P56-R1 and return READY_FOR_REVIEW. Main alone
+resolves/accepts/pushes. No implementation fixes in main, no Phase 7, no push now.
+
+### Original package assignment
 
 Execute the entire linked two-phase package in one development assignment. Read
 AGENTS, thread/git workflow, implementation handoff, architecture, roadmap Phases
@@ -201,7 +290,12 @@ their tests are unimplemented/unrun. Complete Phase 5 internal gate has not pass
 feed work and the representative benchmark cannot proceed through that gate.
 No self-acceptance, push, spawned agent or Phase 7 implementation occurred.
 
-### P56-B1 — decision ACCEPTED by main; implementation pending
+### P56-B1 — RESOLVED by main round 1 (decision and implementation)
+
+Disposition: actual guarded owner proof, narrow dependency enforcement and real
+ReportsIT regressions checked at `26dec38`; full independent verify passes. The
+decision/developer history below is preserved. Resolution does not accept the
+package while P56-R1 is open.
 
 Main decision (2026-10-11): accept [ADR-014](adr/014-report-user-target-proof.md).
 Retain POST/COMMENT/COMMUNITY/USER report scope; allow only moderation-to-profile
@@ -387,11 +481,8 @@ and external positive control are rerun before push.
 
 ## Next action
 
-Main reviews report `19849c96307d687958ede54df0b4fbd9cbf132a7` and final package
-`26dec3845f13f2f1536170b37586ea4287f20aa1`, both separate phase records and the
-P56-B1 developer response. Independently check current evidence/privacy/lock order,
-source SQL/object parity/cursors/races and recorded benchmark/latency limitation.
-Only main decides findings/acceptance and any authorized push. No automatic Phase 7
-start. If changes are requested, route named findings to this same development chat;
-do not implement review fixes in main. Actual maximum V0023, earlier migrations
-unchanged. This is the full assigned package handoff, not a small-feature stop.
+Development resumes the existing Phases 5–6 chat and addresses P56-R1 plus the
+three-part stabilization assignment above, starting from code `26dec38` and this
+documentation-only review. Preserve all previous findings/evidence and resolved
+P56-B1. Return the full verified package for round 2; no Phase 7 or push. Main
+will review the fix and residual benchmark gap before accepting/publishing.

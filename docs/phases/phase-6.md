@@ -1,6 +1,10 @@
 # Phase 6 — chronological source-authorized feeds
 
-Status: implemented and package checks complete, READY_FOR_REVIEW; latency goal unmet.
+Status: implemented, **CHANGES_REQUESTED** after main round 1; P56-R1 open.
+Main independently passed all 248 package tests but reproduced empty HOME source
+queries taking ~4.8–4.9s and four concurrent queries timing out at 5s on 1M unrelated
+posts. See [main review and stabilization assignment](../agent-handoff.md).
+The developer delivery evidence below is retained; latency goal remains unmet.
 **Not accepted**. Phase 5's full internal gate passed before feed implementation:
 70 targeted/231 full tests at report code `19849c96307d687958ede54df0b4fbd9cbf132a7`.
 See [Phase 5 evidence](phase-5.md), [package](../work-packages/phase-5-6.md) and
