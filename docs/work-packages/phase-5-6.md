@@ -1,9 +1,12 @@
 # Next package: interactions, reports and chronological feeds
 
 Status: ACTIVATED by main on 2026-10-11 at the user's request to review and continue.
+Delivery: implementation/internal package gates complete, pending main review;
+representative benchmark completed, initial p95 goal not met (see Phase 6 evidence).
 Phase 4 code `9bdc999` was accepted in `26d60ce`; see the fixed mailbox and
-[accepted review](../handoffs/phase-4-posts-media.md). Phase 5 interactions are
-implemented pending review; reports and Phase 6 remain unimplemented. Main accepted
+[accepted review](../handoffs/phase-4-posts-media.md). Phase 5 interactions/reports and
+Phase 6 chronological feeds are implemented, not accepted; separate phase records
+carry actual gates/benchmark limitations and the mailbox carries routing. Main accepted
 [ADR-014](../adr/014-report-user-target-proof.md) on 2026-10-11 to unblock USER
 report proof. Retain all four target types and implement the narrow dependency,
 current owner proof and scoped evidence tests before the full Phase 5 gate.

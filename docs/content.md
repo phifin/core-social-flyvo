@@ -3,7 +3,8 @@
 Implemented routes and DTOs: [OpenAPI](api/openapi.yaml). Completion/review state:
 [Phase 4](phases/phase-4.md), [Phase 5](phases/phase-5.md), [mailbox](agent-handoff.md).
 Posts, comments/reactions and [reports](moderation.md) are implemented; the complete
-Phase 5 gate has passed. Phase 6 home feeds are the next in-package implementation.
+Phase 5 gate has passed. Phase 6 home/community/timeline orchestration is implemented
+through source-owner APIs; exact verification is in [Phase 6](phases/phase-6.md).
 
 ## Commands and invariants
 
@@ -150,3 +151,19 @@ the lifecycle UUID/version. Post retention redacts at most 500 descendants per j
 after parent deletion reaches 30 days, emits monotonic CommentDeleted tombstones/audit
 atomically and durably requeues the next bounded batch. Removal is still private,
 not author deletion; restoration cannot undo the author's deletion.
+
+## Phase 6 source queries
+
+ContentQueries.authorizeFeed checks current scope even for empty results;
+feedCutoff reads PostgreSQL time. scanCandidates returns at most 100 lightweight
+keys, reusing canonical SQL facts/eligibility and the published view allowlist.
+Home union is personal own/follow/friend/CUSTOM plus effective joined communities,
+deduplicated before pagination and home-only mute filtering. Timeline is personal
+only. No full graph list is passed through Java.
+
+hydrateAuthorized bounds IDs to 100 and validates current source membership/
+relations/mute and ordinary policy in the same statement as body/relations.
+Subsequent owner-policy batches may remove already selected old bodies, never
+reload newer text. Attribution and engagement are batched after eligibility.
+Feed owns rank/cursor/refill/metrics, not content authorization; [feed](feed.md)
+records chronology, continuation and query-budget semantics.

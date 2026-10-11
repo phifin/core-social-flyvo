@@ -101,6 +101,13 @@ Synchronous: authenticate, authorize, validate state, enforce uniqueness, change
 
 Batch module APIs are the default. High-cardinality feed/content queries cannot ship every followed user ID into Java or do a per-row membership call. Owners therefore publish a small, versioned set of **read-only SQL views** in `account_api`, `graph_api`, `community_api` schemas. Content query infrastructure may join these documented views; it must never join their private base tables. Views expose only IDs, status and relationship facts, never credentials or profile PII. They reflect committed base state without async projection lag.
 
+Phase 6 implements feed orchestration through content API only (plus existing
+platform crypto/clock/metrics); content owns SQL candidates, explicit empty-scope
+authorization and coherent current source hydration. The published-view consumer
+allowlist is unchanged. Profile attribution and content engagement are bounded
+owner APIs after eligibility. No additional library, feed table, projection, cache,
+graph ID materialization or future consumer is introduced.
+
 These are explicitly sanctioned module APIs, with SQL source ownership, compatibility tests and an allowlist in architecture tests. Only content's query adapter consumes these views initially. Other modules call `ContentQueries`. JPA is the default persistence tool; named native SQL/JDBC is appropriate for keyset queries, view joins, outbox claims, and UPSERT. Keep SQL inside an owning infrastructure adapter. Views alone do not authorize results; content applies the canonical policy. Service extraction must replace a published view with another deliberate consistency contract.
 
 ## Proposed repository tree

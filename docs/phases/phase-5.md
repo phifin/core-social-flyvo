@@ -7,6 +7,7 @@ Current routing and actual code hash: [mailbox](../agent-handoff.md).
 
 ## Report delivery and resumed verification
 
+Verified report slice `19849c96307d687958ede54df0b4fbd9cbf132a7`:
 V0023 implements four owner-proven targets, immutable bounded encrypted evidence
 (including detail), unresolved uniqueness, scoped reporter/staff/ADMIN metadata and
 audited evidence, current-authority review/resolve/dismiss, correlated typed actions
@@ -54,9 +55,26 @@ identity/community/graph regressions. Formatting/Enforcer/convergence/architectu
 SQL boundary/OpenAPI PASS. Compose app/media config and diff whitespace PASS.
 Pinned redacted full-history scan at resume: 36 commits/no leaks, only the two
 accepted exact historical fingerprints (`/tmp/social-p56-resume-history.log`).
-Staged/new-code history checks follow before/after the verified report commit.
+Report staged patch scan PASS (`/tmp/social-p56-reports-staged.log`); resumed package
+history scan through that code commit PASS, 37 commits/no leaks
+(`/tmp/social-p56-package-history-before.log`). Only the two exact accepted
+fingerprints remain; final delivery scans and actual hashes are in the mailbox.
 The successful prior 230-test run is historical, not substituted for this final gate.
-Development now continues Phase 6 in the same package; no phase acceptance.
+That gate allowed Phase 6 in the same package; no phase acceptance.
+
+Final package regressions additionally map a missing USER target to resource 404,
+not authentication 401, and deny an inactive reporter with 401. This preserves
+sorted owner account guards; no denial path is relaxed. Package targeted verification
+is **93 pass** (23 fast +70 real PG: 22 interactions, 22 reports, 12 feeds,
+14 foundation), zero failures/errors/skips; `/tmp/social-p56-package-targeted.log`.
+It includes cross-phase report removal before feed hydration and the final feed
+candidate no-full-sort plan regression. Final full-package `./mvnw -B -ntp verify`:
+**248 PASS** (47 fast +201 integration), zero failures/errors/skips;
+`/tmp/social-p56-package-verify.log`. Formatting, architecture/SQL boundary, OpenAPI,
+app/media Compose, changed local document links and whitespace PASS. Positive
+control PASS; final staged/new-history scans/hashes are in the mailbox. Separate
+[Phase 6](phase-6.md) records completed representative benchmark and its unmet
+p95 goal; this is neither phase acceptance nor production capacity.
 
 ## Delivered content slice
 
@@ -64,8 +82,8 @@ V0022 adds owned comments/reactions with typed FKs, two-level same-post roots,
 immutable identity, status/deletion precedence and stable actor/target uniqueness
 including inactive reactions. V0001–V0021 are unchanged. No library/dependency,
 new module or published SQL view was introduced. CommentModeration is an internal
-transaction-required owner seam; complete moderation action/report orchestration
-and HTTP workflow remain pending, not represented as delivered.
+transaction-required owner seam; the resumed reports slice above now supplies
+complete action/report orchestration and scoped HTTP workflow.
 
 Comments support roots/replies, normalization of reply-to-reply, edits/If-Match,
 logical create idempotency and deletion. Hidden roots become non-identifying
@@ -85,7 +103,7 @@ tombstone events/audit and durable continuation. Existing worker retry/fencing a
 Implemented APIs/HTTP/details: [content](../content.md), [OpenAPI](../api/openapi.yaml),
 [schema](../database-design.md), [events](../events-and-jobs.md).
 
-## Verification evidence — 2026-10-11, Java 21
+## Historical content-slice verification — 2026-10-11, Java 21
 
 ```bash
 JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 \
@@ -160,11 +178,12 @@ contracts. They are not passing baseline evidence or weakened denial paths.
 
 ## Historical blocker and material limitations
 
-At baseline `870959d`, reports, concurrent unresolved-case uniqueness, encrypted evidence, staff queue/
-resolution/action audit rollback and report-specific privacy/races are **unrun**.
-No full Phase 5 completion/gate or acceptance is claimed. Main accepted ADR-014's
-narrow owner-policy dependency for USER target proof; development must implement
-and verify it. Phase 6 must wait for the full internal Phase 5 gate.
+At baseline `870959d`, reports, concurrent unresolved-case uniqueness, encrypted
+evidence, staff queue/resolution/action rollback and report-specific privacy/races
+were unrun; no full Phase 5 gate was claimed. Main subsequently accepted ADR-014,
+then the resumed report implementation and full internal gate above unblocked
+Phase 6 in this same assignment. This history is not the current delivery state;
+only main can accept either phase.
 
 Content interaction delivery does not claim production load capacity. Reaction writes
 initially serialize on a post or target comment; future narrowing requires measured

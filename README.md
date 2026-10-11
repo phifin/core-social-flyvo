@@ -2,7 +2,7 @@
 
 A reusable Java backend core for social networks and communities. The core has no family, university, alumni, employer, or other application-specific domain concepts.
 
-**Current status: Phases 1–4 accepted; Phase 5 interactions/reports implemented pending verification/review.** Phase 6 feeds are not implemented yet. Production readiness remains separately gated. The application is `social-core`, root package `com.flyvo.socialcore`; the checkout may remain `fly-social`. See [Phase 5 evidence](docs/phases/phase-5.md), [Phase 4 evidence](docs/phases/phase-4.md), [content](docs/content.md), [moderation](docs/moderation.md), [community](docs/community.md), [graph](docs/graph.md) and [media](docs/media.md). Architecture documents describe the target; phase records describe delivery.
+**Current status: Phases 1–4 accepted; Phase 5 interactions/reports and Phase 6 chronological feeds implemented, not yet accepted.** Production readiness remains separately gated. The application is `social-core`, root package `com.flyvo.socialcore`; the checkout may remain `fly-social`. See separate [Phase 5 evidence](docs/phases/phase-5.md)/[Phase 6 evidence](docs/phases/phase-6.md), [Phase 4 evidence](docs/phases/phase-4.md), [content](docs/content.md), [moderation](docs/moderation.md), [community](docs/community.md), [graph](docs/graph.md) and [media](docs/media.md). Architecture documents describe the target; phase records describe delivery and exact verification/review state.
 
 ## Start here
 
@@ -16,7 +16,12 @@ and community write membership apply to every path; [OpenAPI](docs/api/openapi.y
 documents the exact surface. V0022 adds interactions and V0023 adds reports without
 changing V0001–V0021. Reports support all four owner-proven target types, encrypted
 private evidence, scoped staff/global ADMIN queues and atomic actions/resolution.
-Feeds are not advertised as complete.
+Phase 6 supplies home/community/personal timeline with source-authorized batched
+hydration, scoped expiring cursors and bounded refill. [Feed](docs/feed.md) documents
+current-state privacy/weak consistency; [benchmark evidence](docs/phases/phase-6.md)
+records representative load and limitations, including the unmet initial p95
+<500ms goal on local hardware, not production capacity. Phase 7
+notifications/SSE and later roadmap phases are unimplemented.
 
 For sequential development/review threads, read the fixed [agent handoff](docs/agent-handoff.md) and [thread workflow](docs/thread-workflow.md).
 

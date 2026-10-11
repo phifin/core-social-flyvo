@@ -321,6 +321,114 @@ public class Posts implements ContentCommands, ContentQueries, PostModeration {
     return ids.stream().distinct().filter(mapped::containsKey).map(mapped::get).toList();
   }
 
+  private void feedScope(FeedScope scope) {
+    if (scope == null
+        || scope.mode() == null
+        || (scope.mode() == FeedMode.HOME) != (scope.id() == null)) throw Failure.invalid();
+  }
+
+  @Transactional(readOnly = true)
+  public void authorizeFeed(ActorContext actor, FeedScope scope) {
+    feedScope(scope);
+    UUID viewer = viewer(actor);
+    if (scope.mode() == FeedMode.HOME) {
+      if (viewer == null) throw Failure.unauthorized();
+      return;
+    }
+    if (scope.mode() == FeedMode.TIMELINE) {
+      var a = accounts.find(scope.id());
+      if (a == null
+          || !a.active()
+          || viewer != null
+              && !viewer.equals(scope.id())
+              && graph.facts(viewer, List.of(scope.id())).getFirst().blocked())
+        throw new Failure(404, "NOT_FOUND");
+      return;
+    }
+    var cs = communities.scopes(List.of(scope.id()));
+    if (cs.isEmpty()) throw new Failure(404, "NOT_FOUND");
+    var c = cs.getFirst();
+    var ms =
+        viewer == null
+            ? List.<MembershipQueries.Facts>of()
+            : communities.facts(viewer, List.of(scope.id()));
+    var m = ms.isEmpty() ? null : ms.getFirst();
+    var f =
+        new Facts(
+            true,
+            viewer != null,
+            false,
+            false,
+            false,
+            false,
+            false,
+            c.visibility(),
+            c.status(),
+            m == null ? null : m.status(),
+            m == null ? null : m.role(),
+            m == null ? null : m.suspendedUntil());
+    if (!ContentAccessPolicy.canRead(
+        viewer,
+        new PostFacts(c.ownerId(), c.communityId(), "COMMUNITY", "PUBLISHED"),
+        f,
+        clock.instant())) throw new Failure(404, "NOT_FOUND");
+  }
+
+  @Transactional(readOnly = true)
+  public Instant feedCutoff() {
+    return store.databaseTime();
+  }
+
+  @Transactional(readOnly = true)
+  public List<Candidate> scanCandidates(
+      ActorContext actor, FeedScope scope, int limit, Instant asOf, Candidate after) {
+    authorizeFeed(actor, scope);
+    if (limit < 1 || limit > 100 || asOf == null) throw Failure.invalid();
+    return store
+        .feedCandidates(
+            viewer(actor),
+            scope,
+            limit,
+            asOf,
+            after == null ? null : new PostRepository.Key(after.id(), after.publishedAt()),
+            clock.instant())
+        .stream()
+        .map(k -> new Candidate(k.id(), k.published()))
+        .toList();
+  }
+
+  @Transactional(readOnly = true)
+  public List<PostView> hydrateAuthorized(ActorContext actor, FeedScope scope, List<UUID> ids) {
+    authorizeFeed(actor, scope);
+    if (ids == null || ids.size() > 100 || ids.stream().anyMatch(Objects::isNull))
+      throw Failure.invalid();
+    UUID viewer = viewer(actor);
+    var source = store.feedLoad(viewer, scope, ids, clock.instant());
+    // Body, relations, source eligibility and privacy share the source statement;
+    // subsequent owner checks can only remove, never load a newer body.
+    var current = facts(viewer, source);
+    var eligible =
+        source.stream()
+            .filter(
+                p ->
+                    ContentAccessPolicy.canRead(
+                        viewer, postFacts(p), current.get(p.id()), clock.instant()))
+            .toList();
+    var names =
+        profiles
+            .attributionSummaries(eligible.stream().map(Post::author).distinct().toList())
+            .stream()
+            .collect(
+                java.util.stream.Collectors.toMap(
+                    ProfileQueries.Attribution::userId, ProfileQueries.Attribution::displayName));
+    var mapped =
+        eligible.stream()
+            .collect(
+                java.util.stream.Collectors.toMap(
+                    Post::id, p -> representation(actor, p, names.get(p.author()))));
+    return ids.stream().distinct().filter(mapped::containsKey).map(mapped::get).toList();
+  }
+
   private UUID viewer(ActorContext actor) {
     if (actor != null && actor.authenticated()) {
       require(actor);

@@ -76,6 +76,11 @@ class SecurityConfiguration {
                     .requestMatchers(HttpMethod.GET, "/api/v1/posts", "/api/v1/posts/*")
                     .permitAll()
                     .requestMatchers(
+                        HttpMethod.GET, "/api/v1/communities/*/feed", "/api/v1/users/*/timeline")
+                    .permitAll()
+                    .requestMatchers(HttpMethod.GET, "/api/v1/feeds/home")
+                    .authenticated()
+                    .requestMatchers(
                         HttpMethod.GET,
                         "/api/v1/me/reports",
                         "/api/v1/communities/*/moderation/reports",

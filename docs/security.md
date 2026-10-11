@@ -170,7 +170,17 @@ Reporter metadata contains no evidence. Community MODERATOR+ and platform ADMIN
 global-case endpoints have separate current authority; successful evidence reads
 are audited. USER reports never acquire caller community scope. Owner action,
 case/action/audit/outbox are atomic; no account suspension or general staff profile
-bypass. See [moderation](moderation.md). Feed implementation remains pending.
+bypass. See [moderation](moderation.md).
+
+Phase 6 feeds authorize even empty scopes, enforce current source/audience/account/
+block state at candidate and coherent body hydration, and never treat a candidate,
+count, profile summary or cursor as a grant. Home alone filters mutes; timeline is
+personal-only. Unfollow/unfriend/membership/mute changes suppress stale home sources.
+Hydration cannot combine an old CUSTOM grant with newly private text. Viewer/scope/
+mode/size-bound authenticated encrypted cursors expire after 30 minutes without
+renewal; bounded empty pages advance at the last examined candidate, with no totals.
+Anonymous explicit community/timeline routes expose only current public content;
+supplied invalid/revoked Bearer remains denied. See [feed](feed.md).
 
 Phase 1 uses bounded per-instance token buckets and deployment-edge limits, plus DB-backed per-email verification/reset issuance windows. Initial limits: login 10/min/IP and 5/min/account key; registration/reset email 3/hour/address and 20/hour/IP; API writes 60/min/user; uploads 10/min/user with storage quotas; search 30/min/user. These are tunable defaults, not account lockouts an attacker can trigger indefinitely. Hash normalized emails in limiter keys. Trust forwarded IP headers only from configured proxies. Introduce shared Redis limits before multi-instance public traffic.
 

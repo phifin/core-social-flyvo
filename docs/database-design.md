@@ -148,8 +148,9 @@ Reactions enforce exactly one post/comment FK, typed values and actor/target uni
 indexes including inactive rows. Target/actor/ID/creation time cannot be reassigned;
 active count indexes and FK traversal indexes are explicit. No counters or new SQL
 views are added. The existing parent SQL policy is shared privately between content
-adapters; the consumer allowlist is unchanged. Reports/actions remain pending V0023,
-and Phase 6 indexes require measurements before allocation.
+adapters; the consumer allowlist is unchanged. Reports/actions are delivered in
+V0023 below. Phase 6 reuses existing chronology/author/community, relationship and
+recipient indexes; its measured SQL refinements do not allocate a new migration.
 
 COMMENT_RETENTION redacts one deleted comment after 30 days, retaining stable identity.
 POST_RETENTION additionally redacts at most 500 descendants for a sufficiently old

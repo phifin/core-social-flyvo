@@ -1,8 +1,8 @@
 openapi: "3.1.0"
 info:
-  title: "social-core accounts, communities, graph, content and images"
-  version: "0.5.0"
-  description: "Phases 0–4 accepted; Phase 5 comments/reactions/reports verified pending review; Phase 6 feeds pending. All unsafe API calls require CSRF cookie/header and exact trusted Origin, including Bearer and anonymous capability requests. Every Bearer validates current PostgreSQL session/account; dependency outage is 503. Auth/API responses are no-store. Unsupported routes remain deny-by-default. Browser deployment is same-site TLS."
+  title: "social-core accounts, communities, graph, content, moderation and feeds"
+  version: "0.6.0"
+  description: "Phases 0–4 accepted; Phase 5 comments/reactions/reports and Phase 6 chronological feeds implemented pending main review. All unsafe API calls require CSRF cookie/header and exact trusted Origin, including Bearer and anonymous capability requests. Every Bearer validates current PostgreSQL session/account; dependency outage is 503. Auth/API responses are no-store. Unsupported routes remain deny-by-default. Browser deployment is same-site TLS."
 paths:
   "/actuator/health":
     get:
@@ -2485,6 +2485,46 @@ paths:
       responses:
         '200': {description: Private no-store case representation, content: {application/json: {schema: {$ref: '#/components/schemas/ReportResult'}}}}
         default: {$ref: '#/components/responses/Problem'}
+  /api/v1/feeds/home:
+    get:
+      operationId: getHomeFeed
+      summary: Authenticated current home source union
+      security: [{BearerAuth: []}]
+      parameters:
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 50, default: 20}}
+        - {name: after, in: query, schema: {type: string, maxLength: 4096}}
+      description: Database-time cutoff, immutable time/UUID descending, encrypted viewer/scope/size-bound 30-minute cursor. Continue until nextCursor is null, including empty pages. Position is last examined, not prefetched tail. At most 100-candidate batches, 1000 examined, 200ms query-work refill budget (an in-flight query can overshoot). Current source and privacy are rechecked at hydration. Mute filters home only. No filtered total or cross-page snapshot.
+      responses:
+        '200': {description: Current source-authorized private no-store feed, content: {application/json: {schema: {$ref: '#/components/schemas/FeedPage'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/communities/{community}/feed:
+    parameters:
+      - {name: community, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: getCommunityFeed
+      summary: Current inherited community scope, including empty-feed denial
+      security: [{BearerAuth: []}, {}]
+      parameters:
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 50, default: 20}}
+        - {name: after, in: query, schema: {type: string, maxLength: 4096}}
+      description: Database-time cutoff, immutable time/UUID descending, encrypted viewer/scope/size-bound 30-minute cursor. Continue until nextCursor is null, including empty pages. Position is last examined, not prefetched tail. At most 100-candidate batches, 1000 examined, 200ms query-work refill budget (an in-flight query can overshoot). Current source and privacy are rechecked at hydration. Mute filters home only. No filtered total or cross-page snapshot.
+      responses:
+        '200': {description: Current source-authorized private no-store feed, content: {application/json: {schema: {$ref: '#/components/schemas/FeedPage'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/users/{user}/timeline:
+    parameters:
+      - {name: user, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: getUserTimeline
+      summary: Current personal posts only; profile privacy does not expand post permission
+      security: [{BearerAuth: []}, {}]
+      parameters:
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 50, default: 20}}
+        - {name: after, in: query, schema: {type: string, maxLength: 4096}}
+      description: Database-time cutoff, immutable time/UUID descending, encrypted viewer/scope/size-bound 30-minute cursor. Continue until nextCursor is null, including empty pages. Position is last examined, not prefetched tail. At most 100-candidate batches, 1000 examined, 200ms query-work refill budget (an in-flight query can overshoot). Current source and privacy are rechecked at hydration. Mute filters home only. No filtered total or cross-page snapshot.
+      responses:
+        '200': {description: Current source-authorized private no-store feed, content: {application/json: {schema: {$ref: '#/components/schemas/FeedPage'}}}}
+        default: {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
     BearerAuth:
@@ -2583,6 +2623,28 @@ components:
           schema:
             "$ref": "#/components/schemas/Problem"
   schemas:
+    FeedPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/FeedItem'}}
+        nextCursor: {type: [string, 'null']}
+    FeedItem:
+      type: object
+      required: [post, engagement]
+      properties:
+        post: {$ref: '#/components/schemas/Post'}
+        engagement:
+          oneOf:
+            - {$ref: '#/components/schemas/FeedEngagement'}
+            - {type: 'null'}
+    FeedEngagement:
+      type: object
+      required: [comments, reactions]
+      properties:
+        comments: {type: integer, minimum: 0}
+        reactions: {type: object, additionalProperties: {type: integer, minimum: 0}}
+      description: Viewer-filtered current optional display data, never authorization. Null if the parent becomes inaccessible after its coherent authorized body read.
     ReportTarget:
       type: string
       enum: [POST, COMMENT, COMMUNITY, USER]

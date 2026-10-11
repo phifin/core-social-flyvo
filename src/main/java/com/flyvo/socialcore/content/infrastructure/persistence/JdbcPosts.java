@@ -43,6 +43,10 @@ public class JdbcPosts implements PostRepository {
   }
 
   public List<Post> load(List<UUID> ids) {
+    return loadWhere(ids, "", List.of());
+  }
+
+  private List<Post> loadWhere(List<UUID> ids, String extra, List<Object> extraArgs) {
     if (ids.isEmpty()) return List.of();
     String params = String.join(",", Collections.nCopies(ids.size(), "?"));
     // One READ COMMITTED statement snapshot for root and all relations. Independent
@@ -60,7 +64,8 @@ public class JdbcPosts implements PostRepository {
         FROM content.post p WHERE p.id IN (
         """
             + params
-            + ")",
+            + ")"
+            + extra,
         (r, n) -> {
           UUID id = r.getObject("id", UUID.class),
               author = r.getObject("author_id", UUID.class),
@@ -88,7 +93,112 @@ public class JdbcPosts implements PostRepository {
               r.getObject("removal_action_id", UUID.class),
               r.getLong("version"));
         },
-        ids.toArray());
+        java.util.stream.Stream.concat(ids.stream(), extraArgs.stream()).toArray());
+  }
+
+  public Instant databaseTime() {
+    return jdbc.queryForObject("SELECT clock_timestamp()", OffsetDateTime.class).toInstant();
+  }
+
+  private List<Object> policyArgs(UUID viewer, Instant now) {
+    return new ArrayList<>(
+        Arrays.asList(
+            viewer, time(now), viewer, viewer, time(now), viewer, time(now), viewer, viewer));
+  }
+
+  private String feedSource(
+      UUID viewer, ContentQueries.FeedScope scope, Instant now, List<Object> args) {
+    return switch (scope.mode()) {
+      case COMMUNITY -> {
+        args.add(scope.id());
+        yield "community_id=?";
+      }
+      case TIMELINE -> {
+        args.add(scope.id());
+        yield "community_id IS NULL AND author_id=?";
+      }
+      case HOME -> {
+        args.add(viewer);
+        args.add(time(now));
+        args.add(viewer);
+        yield """
+          ((community_id IS NULL AND (author_id=? OR following OR friends OR (audience='CUSTOM' AND recipient)))
+            OR (community_id IS NOT NULL AND membership_status='ACTIVE' AND (suspended_until IS NULL OR suspended_until<=?)))
+          AND NOT EXISTS(SELECT 1 FROM graph_api.mutes_v1 mute WHERE mute.muter_id=? AND mute.muted_id=facts.author_id)
+          """;
+      }
+    };
+  }
+
+  public List<Key> feedCandidates(
+      UUID viewer,
+      ContentQueries.FeedScope scope,
+      int limit,
+      Instant asOf,
+      Key after,
+      Instant now) {
+    var args = new ArrayList<Object>();
+    args.add(time(asOf));
+    // Preserve a streamed ordered index path before the policy lookups, with no
+    // LIMIT before visibility. Outer LIMIT stops this stream after 100 eligible
+    // keys; it must not require sorting all eligible rows in the database.
+    String seek = "";
+    if (after != null) {
+      seek = " AND (published_at,id)<(?,?)";
+      args.add(time(after.published()));
+      args.add(after.id());
+    }
+    String scoped = "";
+    if (scope.mode() != ContentQueries.FeedMode.HOME) {
+      scoped =
+          scope.mode() == ContentQueries.FeedMode.COMMUNITY
+              ? " AND community_id=?"
+              : " AND community_id IS NULL AND author_id=?";
+      args.add(scope.id());
+    }
+    String root =
+        "(SELECT * FROM content.post WHERE status='PUBLISHED' AND published_at<=?"
+            + seek
+            + scoped
+            + " ORDER BY published_at DESC,id DESC OFFSET 0)";
+    args.addAll(policyArgs(viewer, now));
+    String source = feedSource(viewer, scope, now, args);
+    args.add(limit);
+    return jdbc.query(
+        "SELECT candidate.id,candidate.published_at FROM "
+            + root
+            + " candidate CROSS JOIN LATERAL (SELECT 1 FROM ("
+            + FACTS
+            + " WHERE p.id=candidate.id) facts WHERE "
+            + ELIGIBLE
+            + " AND ("
+            + source
+            + ") OFFSET 0) authorized"
+            + " ORDER BY candidate.published_at DESC,candidate.id DESC LIMIT ?",
+        (r, n) -> new Key(r.getObject("id", UUID.class), instant(r, "published_at")),
+        args.toArray());
+  }
+
+  public List<Post> feedLoad(
+      UUID viewer, ContentQueries.FeedScope scope, List<UUID> ids, Instant now) {
+    if (ids.isEmpty()) return List.of();
+    var policy = policyArgs(viewer, now);
+    var args = new ArrayList<>(policy.subList(0, 2));
+    args.addAll(ids);
+    args.addAll(policy.subList(2, policy.size()));
+    var source = feedSource(viewer, scope, now, args);
+    return loadWhere(
+        ids,
+        " AND p.id IN (SELECT id FROM ("
+            + FEED_FACTS
+            + " WHERE p.id IN ("
+            + String.join(",", Collections.nCopies(ids.size(), "?"))
+            + ")) facts WHERE "
+            + ELIGIBLE
+            + " AND ("
+            + source
+            + "))",
+        args);
   }
 
   public void create(Post p) {
@@ -198,23 +308,48 @@ public class JdbcPosts implements PostRepository {
         limit);
   }
 
-  static final String FACTS =
-      """
+  static final String FACTS = facts(false);
+  // Parameterized per-post lookups preserve the chronological index's path order.
+  // OFFSET 0 prevents flattening these tiny lookups into a million-row hash/sort;
+  // the fact fields and ELIGIBLE policy remain exactly the shared owner policy.
+  static final String FEED_FACTS = facts(true);
+
+  private static String facts(boolean orderedLookups) {
+    return facts(orderedLookups, "content.post");
+  }
+
+  private static String facts(boolean orderedLookups, String root) {
+    return """
       WITH viewer AS (SELECT ?::uuid id, ?::timestamptz now)
       SELECT p.id,p.author_id,p.community_id,p.audience,p.status,p.published_at,
-        (aa.user_id IS NOT NULL) author_active,(va.user_id IS NOT NULL) viewer_active,
+        (aa.user_id IS NOT NULL) author_active,%s viewer_active,
         EXISTS(SELECT 1 FROM graph_api.blocks_v1 b WHERE (b.blocker_id=v.id AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=v.id)) blocked,
         EXISTS(SELECT 1 FROM graph_api.follows_v1 f WHERE f.follower_id=v.id AND f.followed_id=p.author_id) following,
         EXISTS(SELECT 1 FROM graph_api.friendships_v1 f WHERE f.low_user_id=LEAST(v.id,p.author_id) AND f.high_user_id=GREATEST(v.id,p.author_id) AND v.id<>p.author_id) friends,
         EXISTS(SELECT 1 FROM content.post_recipient r WHERE r.post_id=p.id AND r.user_id=v.id) recipient,
         c.visibility community_visibility,c.status community_status,m.status membership_status,
         CASE WHEN c.owner_user_id=v.id THEN 'OWNER' ELSE m.role END membership_role,m.suspended_until
-      FROM content.post p CROSS JOIN viewer v
-      LEFT JOIN account_api.active_users_v1 aa ON aa.user_id=p.author_id
-      LEFT JOIN account_api.active_users_v1 va ON va.user_id=v.id
-      LEFT JOIN community_api.communities_v1 c ON c.community_id=p.community_id
-      LEFT JOIN community_api.memberships_v1 m ON m.community_id=p.community_id AND m.user_id=v.id
-      """;
+      FROM %s p CROSS JOIN viewer v
+      """
+            .formatted(
+                orderedLookups
+                    ? "EXISTS(SELECT 1 FROM account_api.active_users_v1 WHERE user_id=v.id)"
+                    : "(va.user_id IS NOT NULL)",
+                root)
+        + (orderedLookups
+            ? """
+        LEFT JOIN LATERAL (SELECT user_id FROM account_api.active_users_v1 WHERE user_id=p.author_id OFFSET 0) aa ON true
+        LEFT JOIN LATERAL (SELECT * FROM community_api.communities_v1 WHERE community_id=p.community_id OFFSET 0) c ON true
+        LEFT JOIN LATERAL (SELECT * FROM community_api.memberships_v1 WHERE community_id=p.community_id AND user_id=v.id OFFSET 0) m ON true
+        """
+            : """
+        LEFT JOIN account_api.active_users_v1 aa ON aa.user_id=p.author_id
+        LEFT JOIN account_api.active_users_v1 va ON va.user_id=v.id
+        LEFT JOIN community_api.communities_v1 c ON c.community_id=p.community_id
+        LEFT JOIN community_api.memberships_v1 m ON m.community_id=p.community_id AND m.user_id=v.id
+        """);
+  }
+
   static final String ELIGIBLE =
       """
       author_active AND status='PUBLISHED' AND (?::uuid IS NULL OR (viewer_active AND NOT blocked)) AND

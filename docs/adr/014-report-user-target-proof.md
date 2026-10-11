@@ -1,7 +1,8 @@
 # ADR-014 — Profile authorization for user report submission
 
 Status: Accepted for implementation by main, 2026-10-11 (P56-B1).
-Implementation and phase acceptance remain pending development and review.
+Implementation is delivered in the [Phase 5 record](../phases/phase-5.md);
+phase/package acceptance remains pending main review.
 
 ## Conflict and evidence
 

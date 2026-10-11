@@ -35,6 +35,27 @@ public interface ContentQueries {
 
   record Page<T>(List<T> items, String nextCursor) {}
 
+  enum FeedMode {
+    HOME,
+    COMMUNITY,
+    TIMELINE
+  }
+
+  record FeedScope(FeedMode mode, UUID id) {}
+
+  record Candidate(UUID id, Instant publishedAt) {}
+
+  /** Current scope policy, including an empty community/timeline. */
+  void authorizeFeed(ActorContext actor, FeedScope scope);
+
+  Instant feedCutoff();
+
+  List<Candidate> scanCandidates(
+      ActorContext actor, FeedScope scope, int limit, Instant asOf, Candidate after);
+
+  /** Rechecks source eligibility and current content in one coherent statement. */
+  List<PostView> hydrateAuthorized(ActorContext actor, FeedScope scope, List<UUID> ids);
+
   PostView read(ActorContext actor, UUID post);
 
   Page<PostView> posts(ActorContext actor, UUID author, UUID community, int size, String after);

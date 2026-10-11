@@ -22,6 +22,9 @@ class OpenApiContractTest {
     var paths = (Map<?, ?>) api.get("paths");
     Map.ofEntries(
             Map.entry("/api/v1/posts", List.of("get", "post")),
+            Map.entry("/api/v1/feeds/home", List.of("get")),
+            Map.entry("/api/v1/communities/{community}/feed", List.of("get")),
+            Map.entry("/api/v1/users/{user}/timeline", List.of("get")),
             Map.entry("/api/v1/reports", List.of("post")),
             Map.entry("/api/v1/me/reports", List.of("get")),
             Map.entry("/api/v1/communities/{community}/moderation/reports", List.of("get")),

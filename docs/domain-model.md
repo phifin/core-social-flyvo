@@ -69,7 +69,7 @@ Phase 4 implements the post aggregate, persisted audience/mention/hashtag/media
 relations and immutable revisions. [Content](content.md) records guarded commands,
 batched SQL/current-source policy, HTTP and retention; [media](media.md) records the
 secure image and avatar lifecycle. Phase 5's comment/reaction slice implements the
-following lifecycles; report workflow is implemented pending its full gate/review.
+following lifecycles; report workflow passed its full internal gate, pending review.
 See [content](content.md) and [Phase 5 evidence](phases/phase-5.md) for actual checks.
 
 `Post` is an aggregate: author, optional community, body (plain text initially, max 10,000 characters), optional one HTTP(S) link, content kind (`STANDARD` initially), audience, media references (max 10), timestamps, version and state (`PUBLISHED`, `DELETED`, `REMOVED`). Nonempty body, link or media is required. Create directly as PUBLISHED; server drafts are deferred. `deleted_at` is owner soft deletion; moderation removal uses separate reason/action reference. Neither is returned in normal lists. A deleted post has no readable comments or attachments through the application.
@@ -96,7 +96,7 @@ Extensions add explicit subtype data (`post_poll`, `poll_option`, etc.) and vers
 
 `MediaAsset` is uploader-owned until binding to one post or avatar context; it has a durable processing lifecycle and immutable object versions. A post may have many media assets; an asset has at most one active binding. Reusing an asset elsewhere requires an explicit clone workflow later. Attachment access follows its binding context, never “knows UUID.” See [media](media.md).
 
-`Feed` is initially a query subsystem, not a domain aggregate or table of duplicated posts. Candidate providers, ranking strategy and cursor contract are explicit seams with concrete chronological implementations. Source content remains authoritative at every read. See [feed](feed.md).
+`Feed` is initially a query subsystem, not a domain aggregate or table of duplicated posts. Phase 6 implements bounded source query APIs, a concrete chronological ranker and scoped expiring cursor; no speculative scoring interface or feed aggregate/table is added. Source content remains authoritative at every read. See [feed](feed.md).
 
 `Notification` is a recipient-owned semantic record with kind, target references, bounded grouping window and activity/read versions. Actor contributions are stored separately so repeat delivery is idempotent and block/privacy changes can suppress them. It is not a rendered English sentence. Preferences and access are evaluated at delivery/read time. SSE sends invalidation signals, not permanently trusted content bodies. See [events and jobs](events-and-jobs.md).
 

@@ -65,7 +65,18 @@ public class Profiles implements ProfileCommands, ProfileQueries {
             .distinct()
             .sorted(java.util.Comparator.comparing(UUID::toString))
             .toList()) {
-      if (!accounts.guard(user, false).active()) throw new Failure(404, "NOT_FOUND");
+      AccountQueries.Account account;
+      try {
+        account = accounts.guard(user, false);
+      } catch (Failure failure) {
+        if (!user.equals(actor.userId()) && failure.status() == 401)
+          throw new Failure(404, "NOT_FOUND");
+        throw failure;
+      }
+      if (!account.active()) {
+        if (user.equals(actor.userId())) throw Failure.unauthorized();
+        throw new Failure(404, "NOT_FOUND");
+      }
     }
     graph.guardInteractions(
         actor, id.equals(actor.userId()) ? java.util.List.of() : java.util.List.of(id));

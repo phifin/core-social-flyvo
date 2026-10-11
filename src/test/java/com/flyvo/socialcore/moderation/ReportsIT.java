@@ -166,6 +166,15 @@ class ReportsIT {
   }
 
   @Test
+  void missingUserTargetIsNotAnAuthenticationFailureAndInactiveReporterCannotSubmit() {
+    var actor = user();
+    denied(() -> report(actor, Reports.Target.USER, UUID.randomUUID()), 404);
+    var target = user();
+    tx.executeWithoutResult(s -> accounts.requestDeletion(actor.userId()));
+    denied(() -> report(actor, Reports.Target.USER, target.userId()), 401);
+  }
+
+  @Test
   void guardedUserProofRefreshesAnEarlierManagedProfileInsteadOfUsingOldPrivacyGrant()
       throws Exception {
     var target = user();

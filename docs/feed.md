@@ -1,5 +1,11 @@
 # Feed design and evolution
 
+Phase 6 implementation/package gates are complete after the full Phase 5 internal
+gate, pending main review. Source API/HTTP, privacy/cursor/refill tests and completed
+isolated representative benchmark are in [Phase 6 evidence](phases/phase-6.md).
+The measured 50-reader p95 target <500ms is **not met** on this recorded environment.
+No acceptance or production capacity is implied.
+
 `feed` is a first-class query module. It owns `GetHomeFeed`, `GetCommunityFeed`, `GetUserTimeline`, candidate orchestration, ranking and cursor encoding. Content owns visibility and hydration. A feed candidate is a post ID, immutable published timestamp and optional scoring facts; it is never a pre-authorized post body.
 
 ## Initial read-time implementation (Phase 6)
@@ -17,6 +23,51 @@ Scan in batches of 100, at most 1,000 examined candidates or 200 ms of query wor
 Use SQL EXISTS to exploit pair indexes; avoid loading the full social graph into application memory. Profile/engagement enrichment must use batch APIs. Query plans should be measured on 1 million posts, 10,000 follows for a test user, skewed communities and a high block/filter ratio. These are load-test fixtures, not claimed production capacity. Set measured latency goals with the deployment hardware before launch; initially target p95 feed latency under 500 ms at 50 concurrent active readers on the recorded test environment.
 
 Counts are optional decoration. Do not delay authorization for an unavailable ranking/enrichment provider. Fail required source authorization closed; fall back to chronological ranking if optional ranker fails. Return no filtered total. A database-backed source-only feed is complete without Redis.
+
+## Implemented Phase 6 refinements
+
+`FeedQueries` provides home/community/personal timeline. `ContentQueries` provides
+current scope authorization (also for empty feeds), database-time cutoff, lightweight
+scans and scoped authorized hydration. Only the sanctioned content SQL adapter reads
+account/graph/community views. The home source union is an EXISTS/OR union over each
+post, naturally deduplicated before pagination without a Java graph ID list; ordinary
+content policy and mute are applied in the same candidate SQL. Follow/friend sources
+are personal-only; joined effective communities and direct CUSTOM are separate.
+
+Hydration rechecks both current source eligibility (unfollow/membership/mute) and
+ordinary privacy with the body/recipients/attachments/mentions in one statement.
+Later batched owner checks can only remove a selected old response, never reload
+newer text using an old grant. Profile attribution and engagement are batched after
+eligibility. Media descriptors are not capabilities. Engagement is optional/null
+if its source becomes inaccessible after the coherent body statement.
+
+Cursors use existing authenticated encryption (integrity plus concealment), binding
+viewer/mode/scope/requested size. Cutoff is PostgreSQL clock_timestamp(), expiry is
+fixed at first-page time +30 minutes and never renewed during traversal. The concrete
+ChronologicalRanker sorts timestamp and PostgreSQL-compatible UUID order descending;
+no speculative scoring interface/provider is added. Scan batches/refill and maximum
+examined count are the documented 100/1,000. The 200ms measured owner-query-work budget
+stops further refill; it is not cancellation of an in-flight SQL/hydration call.
+Existing five-second DB timeout remains. Always permit one scan to obtain a progress
+position; no zero-progress cursor is issued. Unknown/nonadvancing source order fails
+closed, not an infinite loop. Short/empty pages continue at last examined, including
+rejects but excluding unexamined prefetched tail.
+
+Low-cardinality `feed.requests`, candidates.examined, items.returned, scan.ratio,
+query.calls, query.duration, request.duration and budget.exhausted use mode, and kind
+where necessary, never viewer/community/post IDs. query.calls counts owner query API
+calls; the benchmark separately instruments executed JDBC statements (including JPA)
+for actual SQL count and records actual parameterized candidate/hydration EXPLAIN.
+No hidden totals, authorization cache, feed table, Redis, fan-out or Phase 7 consumer.
+
+Feed SQL retains the common owner FACTS/ELIGIBLE predicate. Candidate traversal
+orders cutoff/seek/scope through existing indexes and parameterizes the entire
+owner proof by candidate ID beneath a LATERAL/OFFSET 0 barrier. There is no LIMIT
+before visibility: outer LIMIT stops the ordered stream after eligible keys.
+This prevents account/relationship joins from forcing a full eligible-set sort;
+it is one statement, not per-post JDBC calls. Hydration explicitly bounds the fact
+subquery to selected IDs and uses point lookups. No timeout relaxation, policy
+shortcut or new index is introduced; representative EXPLAIN is in the phase record.
 
 ## Later ranking
 

@@ -11,8 +11,19 @@ existing restricted audited worker runbook. Reports reuse the external platform
 encryption key and bounded evidence, attributable staff reads and atomic owner
 actions; [moderation](moderation.md) records limits and operational gates. Restrict
 database/case access and retain encryption keys for existing evidence; case key
-rotation/redaction/legal retention remain launch gates. Feeds remain unimplemented;
-no benchmark/capacity claim is made.
+rotation/redaction/legal retention remain launch gates. Chronological feeds use
+read-time owner APIs/SQL and the same external cursor encryption key, no new service
+or projection. Requests are bounded at 20 default/50 max, 100-row batches,
+1,000 examined candidates and a 200ms measured owner-query refill budget (not hard
+cancellation of an in-flight query); existing 5s statement timeout is unchanged.
+Monitor low-cardinality feed request/query duration, examined/returned scan ratio,
+query calls and budget exhaustion; never label by viewer/resource IDs. Query calls
+are owner API calls, not JDBC statement counts. [Phase 6](phases/phase-6.md) records
+the exact isolated 1M-post/10k-follow/50-reader benchmark command, hardware, actual
+SQL counts/EXPLAIN, target result and limitations. It is not production capacity,
+and its test-only pool size does not change the production pool default. The initial
+50-reader p95 <500ms goal is unmet on this host; profile/tune/revalidate on target
+hardware and the actual production pool before a public latency SLA.
 
 Phase 4 [media operations](../ops/media.md) covers real local enablement, individual
 secret mounts, SDK endpoint split, bounded isolated processing, quota/reconciliation,

@@ -13,6 +13,13 @@ public interface PostRepository {
 
   List<Post> load(List<UUID> ids);
 
+  Instant databaseTime();
+
+  List<Key> feedCandidates(
+      UUID viewer, ContentQueries.FeedScope scope, int limit, Instant asOf, Key after, Instant now);
+
+  List<Post> feedLoad(UUID viewer, ContentQueries.FeedScope scope, List<UUID> ids, Instant now);
+
   void create(Post post);
 
   void save(Post post);

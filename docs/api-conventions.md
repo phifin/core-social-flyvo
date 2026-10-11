@@ -41,8 +41,8 @@ start returns a URL in JSON; callbacks redirect with a marker, never credentials
 
 ## Pagination
 
-Phase 5 implements comments/reactions and [reports](moderation.md), pending full
-verification/review. Reporter/staff queues use bounded offset pages, no totals;
+Phase 5 implements comments/reactions and [reports](moderation.md), with its internal
+gate passed, pending review. Reporter/staff queues use bounded offset pages, no totals;
 separate audited staff evidence paths and case If-Match/sourceVersion actions.
 Global USER cases require platform ADMIN, never community membership alone.
 Comment root/reply pages are separately
@@ -53,6 +53,14 @@ the same lifetime/bounds; counts are current viewer-filtered typed counts, witho
 global totals. Comment edit/delete require strong If-Match; set-style reactions do
 not. Comment JSON is capped at 64 KiB for 5,000 Unicode code points plus escaping.
 Tombstone fields/nulls are explicit in OpenAPI; no ETag is returned for a tombstone.
+
+Phase 6 implements GET /feeds/home (authenticated), /communities/{id}/feed and
+/users/{id}/timeline (anonymous only where current source policy permits).
+Feeds return PostView plus nullable current viewer-filtered engagement; no totals
+or embedded media URL. Default 20/max 50, encrypted viewer/mode/scope/size-bound
+30-minute cursors, database-time cutoff and last examined continuation, including
+rejected candidates. Empty continued pages are valid; INVALID_CURSOR is 400,
+inaccessible/missing scope is 404 and required source failure fails closed.
 
 Phase 4 implemented contracts are in [OpenAPI](api/openapi.yaml) and [content](content.md).
 Post create/edit JSON is capped at 256 KiB to fit 10,000 Unicode code points and
