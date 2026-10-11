@@ -4,15 +4,18 @@
 
 - Task: phase-5-6-interactions-reports-feeds
 - Round: 1
-- State: READY_FOR_IMPLEMENTATION — P56-B1 decided, resume incomplete package
-- Last writer: main, 2026-10-11 — architecture decision only, no executable changes
-- Next owner: development — resume the existing Phases 5–6 chat
+- State: READY_FOR_REVIEW — full Phase 5–6 package, not accepted
+- Last writer: development, 2026-10-11 — completed after decision `7e4d083`
+- Next owner: main — independent package review, including the measured latency gap
 - Accepted Phase 4 code: `9bdc9996b546d73356f177759806296cea40bc43`.
 - Phase 4 acceptance commit: `26d60ce`.
 - Review history: [accepted Phase 4](handoffs/phase-4-posts-media.md); R1–R5 resolved.
 - Content slice commit: `a75885e09bf752e018ccf51a6de6573dda6856e0`.
-- Final verified code/test baseline: `870959d876c0928898bf35d75bf48149fe3b896d`.
-- Reports and Phase 6 feeds remain unimplemented; no complete package acceptance.
+- Prior interaction regression: `870959d876c0928898bf35d75bf48149fe3b896d`.
+- Verified report code: `19849c96307d687958ede54df0b4fbd9cbf132a7`.
+- Final feed/package code: `26dec3845f13f2f1536170b37586ea4287f20aa1`.
+- Comments/reactions/reports/feeds are implemented and verified; no phase acceptance.
+- Benchmark complete; p95 <500ms goal unmet on recorded hardware (details below).
 - Full assignment: [Phases 5–6 package](work-packages/phase-5-6.md).
 - Main coordinates/reviews/pushes; the user manually opens the named development chat.
 
@@ -64,6 +67,124 @@ concurrent writers, push or Phase 7 implementation.
 
 ## Implementation report and findings
 
+### Full package delivery and actual checks — 2026-10-11
+
+Completed the entire assignment sequentially, not a per-module handoff. Preserved
+the delivered interaction slices, implemented four-target reports at `19849c9`,
+passed the complete internal Phase 5 gate before feed implementation, then delivered
+home/community/personal timeline and final regressions at `26dec38`. Only accepted
+ADR-014's narrow moderation→ProfileQueries.visible edge is added, enforced by the
+architecture test; no new library/service, foreign SQL consumer, exemption,
+authorization cache or Phase 7 implementation. V0022/V0023 are new; previously
+applied migrations remain unchanged. Feed reuses measured existing indexes, no V0024.
+
+Reports use exact current guarded owner proofs, bounded encrypted private evidence,
+unresolved uniqueness, current scoped staff/ADMIN authority, attributable evidence
+audit and atomic source/case/action/audit/outbox. USER cases remain global-only and
+do not enable account suspension or private profile lookup bypass. The final narrow
+guard regression distinguishes missing target 404 from inactive reporter 401.
+Feed uses scoped owner API candidates/current coherent hydration, immutable
+chronology, DB cutoff, encrypted 30-minute viewer/scope/mode/size-bound cursors,
+examined-key continuation and 100/1,000/200ms refill bounds. Candidate-ID LATERAL
+owner proof preserves index traversal without a pre-visibility LIMIT. Counts/names
+are batch-authorized decoration, never permission. No cached/private fallback.
+
+- Internal Phase 5: **70 targeted /231 full PASS**, zero failure/error/skip before
+  feeds, logs `/tmp/social-p56-phase5-targeted.log`,
+  `/tmp/social-p56-phase5-verify.log` at report code above.
+- Final package targeted: **93 PASS** (23 fast +70 real PG: 22 interactions,
+  22 reports, 12 feeds, 14 foundation), no failure/error/skip;
+  `/tmp/social-p56-package-targeted.log`. Actual commands/test matrix in separate
+  [Phase 5](phases/phase-5.md)/[Phase 6](phases/phase-6.md) evidence.
+- Final Java 21 `./mvnw -B -ntp verify`: **248 PASS** (47 fast +201 integration),
+  zero failure/error/skip; `/tmp/social-p56-package-verify.log`. All 33 Phase4IT,
+  12 real pinned Silo StorageContractIT, packaged decoder, Compose secret isolation,
+  prior identity/community/graph and migration upgrades included. Formatting,
+  Enforcer/convergence, architecture/SQL allowlist and OpenAPI PASS, no exclusions.
+- App/media Compose config, changed-doc local links and staged/unstaged whitespace
+  PASS. No production/provider smoke, remote CI, deployment or push claim.
+- Pinned isolated benchmark: **1 heavy test PASS +14 fast prerequisites**, 1M posts,
+  10k follows/4k blocks/1k mutes per reader, skewed communities, **50 readers and
+  1,000 measured requests**, each returning 20; actual SQL **10/request**, app scan
+  ratio 1.000. First/steady burst p50 386.772/393.154ms, p95
+  **1723.410/821.781ms**, p99 2564.168/1216.902ms; 74.766/101.817 req/s.
+  **Initial p95 <500ms target NOT MET in either burst**; not an unrun benchmark or
+  successful capacity/SLA claim. Completed earlier run also missed (1156.072ms).
+  Full fixtures/hardware/commands/probes/plans/failed attempts in Phase 6 evidence;
+  `/tmp/social-p56-feed-benchmark.log`. Test-only pool 50, production default 10
+  unchanged. SQL/statement timeout remains 5s; no constraint relaxation.
+- Measured home candidate EXPLAIN: Limit → Nested Loop → post_chronology, 295
+  physical rows/100 eligible keys, no full eligible-set sort; 12.347ms execution,
+  5,053 hits/0 reads. Hydration bounds 100 IDs, 7.551ms, 2,545 hits/0 reads.
+  Actual JDBC count/plan and current SQL/object policy parity regressions pass.
+- CI-pinned Gitleaks 8.28.0 redacted report/feed staged scans PASS; full history
+  through final code **38 commits/no leaks**, only the two accepted exact historical
+  fingerprints, no rule/exclusion change; `/tmp/social-p56-package-history-code.log`,
+  `/tmp/social-p56-feed-staged.log`, `/tmp/social-p56-reports-staged.log`.
+  External generic-api-key positive control PASS (detector exit 1, wrapper 0,
+  redacted/outside git/cleaned), `/tmp/social-p56-package-secret-positive.log`.
+  This separate handoff is scanned after commit; its own hash is not embedded here.
+
+Material limitations: **latency goal remains unmet** on the shared i7-1165G7/8-CPU,
+~7.5GiB host; test pool/load are not production capacity. Before a public SLA,
+profile statement planning/JVM/PG waits, tune measured owner SQL and revalidate on
+target hardware and actual production pool. Do not add unassigned cache/fan-out to
+mask it. The work package explicitly requires recording goal outcome; main must
+review this gap. The 200ms query-work budget stops refill, not in-flight SQL; cutoff
+pagination is not a frozen snapshot, and already authorized old responses cannot
+be revoked. Initial reaction serialization and accepted Phase 4 storage/provider/
+physical upload bound/decoder/key/legal-retention/public-launch gates remain.
+No required verification is unrun; no acceptance or Phase 7 authorization is implied.
+
+### Resumed execution plan recorded at IN_PROGRESS — ADR-014 accepted
+
+Internal Phase 5 gate PASS at report commit
+`19849c96307d687958ede54df0b4fbd9cbf132a7`: 70 targeted /231 full verify tests,
+zero failures/errors/skips. Phase 5 evidence updated; no acceptance. Continue
+Phase 6 now. Scoped feed candidates/hydration stay in the approved content SQL
+adapter; lightweight HOME/COMMUNITY/TIMELINE scopes recheck both current audience
+and current source eligibility in the coherent body statement. Feeds never import
+SQL/repositories or materialize the graph. Database cutoff, encrypted 30-minute
+viewer/scope/size-bound cursor, examined-key continuation, 100/1000/200ms bounds,
+batched attribution/engagement and low-cardinality metrics are the concrete plan.
+Only measured query evidence may justify V0024; no feed table/new infrastructure.
+
+Clean HEAD `7e4d083`; preserve delivered content slices and all migrations through
+V0022. Implement V0023 reports with OPEN/IN_REVIEW/RESOLVED/DISMISSED versions,
+partial unresolved reporter/typed-target uniqueness, bounded encrypted owner-returned
+evidence and report/action FK correlation. Reporter endpoints expose case metadata,
+never evidence; separate community MODERATOR+ and platform ADMIN queues/evidence/
+review/resolution endpoints recheck current scope and audit evidence reads. USER
+cases have no caller community scope. Global case handling has no account sanction.
+
+Add only the ADR-014 moderation→profile API edge. Extend existing owner proof APIs
+as necessary for transaction-required target guards; moderation never imports graph
+or owner internals/SQL. USER proof uses the exact authorized ProfileQueries.visible
+summary inside the command, including on logical idempotency replay. Evidence is
+encrypted with existing Secrets, contains no storage URL, and never enters outbox.
+
+For report submit: complete sorted shared account set → community read guard when
+scoped → owner graph guards → source post/comment/profile → idempotency/report row.
+For case actions: pre-read immutable owner lock set, sorted shared accounts → final
+community mode (exclusive for sanctions) → owner post/comment → report row; resolve
+only after owner transitions, with expected case/source versions so conflicting
+resolutions roll back the entire action. No upgrades, automatic command replay,
+network effects or reverse lock callbacks. Audit/outbox/action/case are atomic.
+
+Tests include four owner-proof target matrices, USER privacy/block/account orderings
+and replay, reporter/wrong-scope/staff/ADMIN IDOR, evidence after source deletion,
+concurrent unresolved submission, hierarchy/self/owner denial, author deletion versus
+restore, both staff revocation orders and injected audit rollback. Add fresh/upgrade
+V0022 checksums. Run targeted, formatting and full Phase 5 verify before feed code.
+Continue existing feed plan and representative 1M/10k/skew/50-reader benchmark,
+then final package gates and separate real-hash READY_FOR_REVIEW handoff. No agents,
+push, self-acceptance or Phase 7.
+
+### Historical interaction-only delivery at blocker handoff
+
+The following report/checks were recorded at `870959d`, before main's ADR decision;
+its partial/unimplemented wording is preserved as history, not current routing.
+
 Started from clean `03f8a98`, set IN_PROGRESS and recorded the concrete plan below
 before code. V0022 implements content comments/reactions, normalized two-level
 roots, non-identifying tombstones, versioned own edits/deletion, stable typed reaction
@@ -103,6 +224,20 @@ documentation-only decision. Main will review the complete package and both slic
 Documentation diff/links/consistency are checked before committing. No push now:
 the newer executable slices have not completed main review.
 
+#### Developer completion response to P56-B1 — pending main review
+
+Implemented the accepted ADR without widening its scope. Moderation calls only
+guarded ProfileQueries.visible and authorized Summary accessors; the architecture
+regression explicitly enforces that restriction. Sorted account → graph → exclusive
+profile guards capture the same current summary used for evidence, including on
+idempotent replay; a locked refresh prevents an earlier managed entity from retaining
+an old privacy grant. ReportsIT tests PUBLIC/AUTHENTICATED/FRIENDS/PRIVATE, bilateral
+blocks/inactive targets, privacy/block/account changes in both real lock-wait orders,
+IDOR/global versus community isolation, encryption/no-public-evidence and audited
+staff scope revocation. Report code `19849c9` and final regression `26dec38` pass
+the gates above. Request main independently verify this implementation response;
+development does not mark P56-B1 resolved or accept either phase.
+
 #### Original blocker evidence and developer response
 
 Evidence: domain-model.md's Report contract includes USER and requires access at
@@ -132,7 +267,7 @@ gate complete. Main must decide P56-B1, then route this same package back to the
 named development thread. Accepted Phase 4 R1–R5 remain in the unchanged archive;
 development does not mark P56-B1 or prior findings resolved.
 
-### Actual checks — final baseline 870959d
+### Historical checks — interaction-only baseline 870959d
 
 - Java 21 targeted: **46 pass** (11 unit/architecture/OpenAPI +35 real PG ITs:
   22 InteractionsIT, 13 FoundationIT), zero failures/errors/skips. Command in Phase 5
@@ -252,11 +387,11 @@ and external positive control are rerun before push.
 
 ## Next action
 
-Reuse `Develop Phases 5–6 — Interactions, Moderation & Feeds`; read accepted ADR-014
-and set IN_PROGRESS. P56-B1 needs no further approval. Development completes
-reports → full Phase 5 gate → feeds
-and benchmark → final package checks and READY_FOR_REVIEW in the same assignment.
-Use actual HEAD/migration maximum (currently V0022; next available V0023); preserve
-all delivered slices and prior acceptance history. No push or phase acceptance is
-authorized for development. This handoff is for a concrete architecture blocker,
-not a routine per-feature stopping point.
+Main reviews report `19849c96307d687958ede54df0b4fbd9cbf132a7` and final package
+`26dec3845f13f2f1536170b37586ea4287f20aa1`, both separate phase records and the
+P56-B1 developer response. Independently check current evidence/privacy/lock order,
+source SQL/object parity/cursors/races and recorded benchmark/latency limitation.
+Only main decides findings/acceptance and any authorized push. No automatic Phase 7
+start. If changes are requested, route named findings to this same development chat;
+do not implement review fixes in main. Actual maximum V0023, earlier migrations
+unchanged. This is the full assigned package handoff, not a small-feature stop.
