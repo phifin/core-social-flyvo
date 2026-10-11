@@ -198,7 +198,7 @@ public class JdbcPosts implements PostRepository {
         limit);
   }
 
-  private static final String FACTS =
+  static final String FACTS =
       """
       WITH viewer AS (SELECT ?::uuid id, ?::timestamptz now)
       SELECT p.id,p.author_id,p.community_id,p.audience,p.status,p.published_at,
@@ -215,7 +215,7 @@ public class JdbcPosts implements PostRepository {
       LEFT JOIN community_api.communities_v1 c ON c.community_id=p.community_id
       LEFT JOIN community_api.memberships_v1 m ON m.community_id=p.community_id AND m.user_id=v.id
       """;
-  private static final String ELIGIBLE =
+  static final String ELIGIBLE =
       """
       author_active AND status='PUBLISHED' AND (?::uuid IS NULL OR (viewer_active AND NOT blocked)) AND
       ((community_id IS NOT NULL AND audience='COMMUNITY' AND community_status IN ('ACTIVE','ARCHIVED')

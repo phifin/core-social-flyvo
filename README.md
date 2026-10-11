@@ -2,13 +2,19 @@
 
 A reusable Java backend core for social networks and communities. The core has no family, university, alumni, employer, or other application-specific domain concepts.
 
-**Current status: Phases 1–4 accepted after independent main review, including posts/privacy/revisions/basic moderation/images/avatar.** Production readiness remains separately gated. Phase 5 onward is not implemented. The application is `social-core`, root package `com.flyvo.socialcore`; the checkout may remain `fly-social`. See [Phase 4 evidence](docs/phases/phase-4.md), [content](docs/content.md), [community](docs/community.md), [graph](docs/graph.md) and [media](docs/media.md). Architecture documents describe the target; phase records describe delivery.
+**Current status: Phases 1–4 accepted; Phase 5 comments/reactions implemented pending review.** Reports and full Phase 5 completion are pending an architecture decision; Phase 6 feeds are not implemented. Production readiness remains separately gated. The application is `social-core`, root package `com.flyvo.socialcore`; the checkout may remain `fly-social`. See [Phase 5 evidence](docs/phases/phase-5.md), [Phase 4 evidence](docs/phases/phase-4.md), [content](docs/content.md), [community](docs/community.md), [graph](docs/graph.md) and [media](docs/media.md). Architecture documents describe the target; phase records describe delivery.
 
 ## Start here
 
 Phase 4 exposes bounded post publication/query/history, current-policy variant access
 and versioned avatar replacement. [Local storage operations](ops/media.md) explains
 enabling the real Silo pipeline; there is no fake storage fallback.
+
+Phase 5's content slice adds bounded roots/replies/tombstones, versioned own edits/
+deletion, typed stable reactions and viewer-filtered counts. Current parent privacy
+and community write membership apply to every path; [OpenAPI](docs/api/openapi.yaml)
+documents the exact surface. V0022 adds the interaction schema without changing
+V0001–V0021. Reports/feeds are not advertised as complete.
 
 For sequential development/review threads, read the fixed [agent handoff](docs/agent-handoff.md) and [thread workflow](docs/thread-workflow.md).
 

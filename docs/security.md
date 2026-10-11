@@ -155,6 +155,17 @@ Normal reads authorize against committed state near request time, not a global s
 
 ## Abuse controls and secrets
 
+Phase 5 interactions reuse current parent source policy and owner guards. Returned
+comment text and parent/actor SQL eligibility share one statement snapshot. Hidden
+root tombstones expose no author/body/version/reply context; visible child attribution
+is batched only after eligibility, and blocked/inactive addressed user IDs are hidden.
+Reaction counts/lists and 100-parent engagement batches exclude inactive/blocked
+actors and inaccessible parents. Public-community nonmembers cannot interact.
+Post/comment final lock modes are requested initially; source deletion/removal,
+community membership changes and bilateral blocks serialize against mutations.
+Reports/evidence and feed implementation remain pending; no broad staff bypass is
+introduced by the ordinary interaction endpoints.
+
 Phase 1 uses bounded per-instance token buckets and deployment-edge limits, plus DB-backed per-email verification/reset issuance windows. Initial limits: login 10/min/IP and 5/min/account key; registration/reset email 3/hour/address and 20/hour/IP; API writes 60/min/user; uploads 10/min/user with storage quotas; search 30/min/user. These are tunable defaults, not account lockouts an attacker can trigger indefinitely. Hash normalized emails in limiter keys. Trust forwarded IP headers only from configured proxies. Introduce shared Redis limits before multi-instance public traffic.
 
 Public OAuth GETs have separate per-IP budgets: authorize 10/minute and callback

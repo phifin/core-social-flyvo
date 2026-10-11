@@ -12,8 +12,7 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 class OpenApiContractTest {
   @Test
-  void implementedPhaseFourRoutesParseWithoutDuplicateKeysAndAllLocalReferencesResolve()
-      throws Exception {
+  void implementedRoutesParseWithoutDuplicateKeysAndAllLocalReferencesResolve() throws Exception {
     var options = new LoaderOptions();
     options.setAllowDuplicateKeys(false);
     Map<String, Object> api =
@@ -23,6 +22,13 @@ class OpenApiContractTest {
     var paths = (Map<?, ?>) api.get("paths");
     Map.ofEntries(
             Map.entry("/api/v1/posts", List.of("get", "post")),
+            Map.entry("/api/v1/posts/{id}/comments", List.of("get", "post")),
+            Map.entry("/api/v1/comments/{id}", List.of("get", "patch", "delete")),
+            Map.entry("/api/v1/comments/{id}/replies", List.of("get", "post")),
+            Map.entry("/api/v1/posts/{id}/reactions/me", List.of("put", "delete")),
+            Map.entry("/api/v1/comments/{id}/reactions/me", List.of("put", "delete")),
+            Map.entry("/api/v1/posts/{id}/reactions", List.of("get")),
+            Map.entry("/api/v1/comments/{id}/reactions", List.of("get")),
             Map.entry("/api/v1/posts/{id}", List.of("get", "patch", "delete")),
             Map.entry("/api/v1/posts/{id}/audience", List.of("put")),
             Map.entry("/api/v1/posts/{id}/revisions", List.of("get")),

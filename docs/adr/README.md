@@ -22,6 +22,10 @@ Future ADRs are required before approved-follow workflows, SaaS tenancy, native-
 
 ## Local storage decision
 
+[Proposed ADR-014](014-report-user-target-proof.md) records the Phase 5 USER report
+target-proof conflict with the frozen moderation dependency DAG. It is **not
+accepted** and has not changed the production/architecture-test allowlist.
+
 [ADR-013 — Maintained local object-storage distribution](013-local-object-storage-distribution.md)
 records a Phase 4 infrastructure blocker and a concrete local-storage replacement
 decision accepted by main on 2026-10-10. Phase 4's real storage/security tests

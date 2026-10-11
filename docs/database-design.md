@@ -137,6 +137,26 @@ A constraint trigger enforces that a non-null root references a root (root_comme
 
 No synchronous hot-row reaction/comment counters initially. Compute grouped counts for a bounded page, then introduce a rebuildable projection after evidence. `count(*)` is viewer-filtered for block/account restrictions; an eventual global count must never replace it on private/blocked-sensitive surfaces.
 
+### Phase 5 content slice schema
+
+V0022 implements content.comment and content.reaction; V0001–V0021 remain unchanged.
+Comments have composite same-post root FK, a root-only/immutable-identity trigger,
+status/deletion/removal precedence, UTC timestamps and explicit versions. Deleted
+body may be empty after retention; visible bodies must remain nonempty. Root/reply,
+post/actor/reply-user indexes support bounded traversal and grouped enrichment.
+Reactions enforce exactly one post/comment FK, typed values and actor/target unique
+indexes including inactive rows. Target/actor/ID/creation time cannot be reassigned;
+active count indexes and FK traversal indexes are explicit. No counters or new SQL
+views are added. The existing parent SQL policy is shared privately between content
+adapters; the consumer allowlist is unchanged. Reports/actions remain pending V0023,
+and Phase 6 indexes require measurements before allocation.
+
+COMMENT_RETENTION redacts one deleted comment after 30 days, retaining stable identity.
+POST_RETENTION additionally redacts at most 500 descendants for a sufficiently old
+deleted parent under post → comment locks, retaining precedence and incrementing
+versions with atomic CommentDeleted outbox/audit. A full batch schedules another job;
+retry does not re-redact or repeat events for already empty bodies.
+
 ## Media
 
 | Table | Important columns | Constraints / indexes |

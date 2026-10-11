@@ -2,6 +2,14 @@
 
 ## Deployment baseline
 
+Phase 5's content interaction slice uses existing PostgreSQL/outbox/jobs and the
+platform encryption key, without a new dependency/service. [Content](content.md)
+records 30-minute interaction cursors, 64 KiB comment bodies, 100-row page/batch
+bounds, guards and 30-day durable redaction. COMMENT_RETENTION is a bounded DB-only
+job; POST_RETENTION can requeue 500-descendant batches. DEAD/retry recovery uses the
+existing restricted audited worker runbook. Reports/evidence and feeds remain
+unimplemented pending the package gate; no benchmark/capacity claim is made.
+
 Phase 4 [media operations](../ops/media.md) covers real local enablement, individual
 secret mounts, SDK endpoint split, bounded isolated processing, quota/reconciliation,
 lease recovery and restricted audited replay. Post/avatar APIs are implemented;

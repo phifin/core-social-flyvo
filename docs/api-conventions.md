@@ -41,6 +41,16 @@ start returns a URL in JSON; callbacks redirect with a marker, never credentials
 
 ## Pagination
 
+Phase 5 content interactions implement the comment/reaction paths below; reports
+and complete Phase 5 remain pending. Comment root/reply pages are separately
+timestamp/UUID ascending, default 20/max 100, with 30-minute viewer/post/root-bound
+authenticated encrypted cursors. Hidden candidates may yield an empty continued
+page. Reaction actor pages use UUID ascending and viewer/target-bound cursors with
+the same lifetime/bounds; counts are current viewer-filtered typed counts, without
+global totals. Comment edit/delete require strong If-Match; set-style reactions do
+not. Comment JSON is capped at 64 KiB for 5,000 Unicode code points plus escaping.
+Tombstone fields/nulls are explicit in OpenAPI; no ETag is returned for a tombstone.
+
 Phase 4 implemented contracts are in [OpenAPI](api/openapi.yaml) and [content](content.md).
 Post create/edit JSON is capped at 256 KiB to fit 10,000 Unicode code points and
 ten alt texts, including JSON escaping; other API bodies remain capped at 16 KiB.

@@ -76,6 +76,30 @@ class SecurityConfiguration {
                     .requestMatchers(HttpMethod.GET, "/api/v1/posts", "/api/v1/posts/*")
                     .permitAll()
                     .requestMatchers(
+                        HttpMethod.GET,
+                        "/api/v1/posts/*/comments",
+                        "/api/v1/comments/*",
+                        "/api/v1/comments/*/replies",
+                        "/api/v1/posts/*/reactions",
+                        "/api/v1/comments/*/reactions")
+                    .permitAll()
+                    .requestMatchers(
+                        HttpMethod.POST, "/api/v1/posts/*/comments", "/api/v1/comments/*/replies")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.PATCH, "/api/v1/comments/*")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.DELETE,
+                        "/api/v1/comments/*",
+                        "/api/v1/posts/*/reactions/me",
+                        "/api/v1/comments/*/reactions/me")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.PUT,
+                        "/api/v1/posts/*/reactions/me",
+                        "/api/v1/comments/*/reactions/me")
+                    .authenticated()
+                    .requestMatchers(
                         HttpMethod.POST,
                         "/api/v1/posts/*/media/*/access",
                         "/api/v1/users/*/avatar/access")

@@ -1,8 +1,8 @@
 openapi: "3.1.0"
 info:
-  title: "social-core accounts, communities, graph, posts and images"
-  version: "0.4.0"
-  description: "Implemented Phases 0–4, pending independent Phase 4 review. All unsafe API calls require CSRF cookie/header and exact trusted Origin, including Bearer and anonymous capability requests. Every Bearer validates current PostgreSQL session/account; dependency outage is 503. Auth/API responses are no-store. Unsupported routes remain deny-by-default. Browser deployment is same-site TLS; Phase 5 onward is not implemented."
+  title: "social-core accounts, communities, graph, content and images"
+  version: "0.5.0-interactions"
+  description: "Phases 0–4 accepted; Phase 5 comments/reactions implemented pending review, reports and Phase 6 feeds pending. All unsafe API calls require CSRF cookie/header and exact trusted Origin, including Bearer and anonymous capability requests. Every Bearer validates current PostgreSQL session/account; dependency outage is 503. Auth/API responses are no-store. Unsupported routes remain deny-by-default. Browser deployment is same-site TLS."
 paths:
   "/actuator/health":
     get:
@@ -2216,6 +2216,171 @@ paths:
       responses:
         '200': {description: Action committed with post ETag, content: {application/json: {schema: {type: object, additionalProperties: false, required: [actionId, version, status], properties: {actionId: {type: string, format: uuid}, version: {type: integer, minimum: 0}, status: {type: string, enum: [PUBLISHED, REMOVED]}}}}}}
         default: {$ref: '#/components/responses/Problem'}
+  /api/v1/posts/{id}/comments:
+    parameters:
+      - {$ref: '#/components/parameters/PostId'}
+    get:
+      operationId: listPostComments
+      summary: Oldest-first roots with non-identifying tombstones when visible replies remain
+      security: [{}, {BearerAuth: []}]
+      description: Current post audience/account/block/community policy. size 1–100, default 20; authenticated encrypted viewer/post/root-bound cursor expires in 30 minutes. Hidden roots without eligible children are omitted; an empty page may continue. No filtered total. Inactive/blocked/deleted roots expose neither author nor body nor version.
+      parameters:
+        - {$ref: '#/components/parameters/InteractionSize'}
+        - {$ref: '#/components/parameters/InteractionAfter'}
+      responses:
+        '200': {description: Current source-authorized roots, content: {application/json: {schema: {$ref: '#/components/schemas/CommentPage'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+    post:
+      operationId: createPostComment
+      summary: Add a root comment as the authenticated actor
+      security: [{BearerAuth: []}]
+      description: Requires current parent read policy, active account and community write membership. Plain text 1–5,000 Unicode characters; JSON body at most 64 KiB. Optional 24-hour logical idempotency reauthorizes replay. No author/status/role fields.
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CommentText'}}}}
+      responses:
+        '201': {description: Created with Location and version ETag, content: {application/json: {schema: {$ref: '#/components/schemas/Comment'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/comments/{id}:
+    parameters:
+      - {$ref: '#/components/parameters/CommentId'}
+    get:
+      operationId: readComment
+      summary: Read a currently visible comment or an eligible root tombstone
+      security: [{}, {BearerAuth: []}]
+      responses:
+        '200': {description: Private no-store; ETag only for visible comment, content: {application/json: {schema: {$ref: '#/components/schemas/Comment'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+    patch:
+      operationId: editOwnComment
+      summary: Edit own visible comment without a revision history
+      security: [{BearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CommentText'}}}}
+      responses:
+        '200': {description: Edited or unchanged; version ETag, content: {application/json: {schema: {$ref: '#/components/schemas/Comment'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+    delete:
+      operationId: deleteOwnComment
+      summary: Soft-delete own comment under current parent write permission
+      security: [{BearerAuth: []}]
+      description: Parent deletion/removal and loss of current community membership deny mutations. Deleted roots remain non-identifying tombstones only while visible replies need context. Deleted text redacts after 30 days through a durable job.
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      responses:
+        '204': {description: Soft deletion committed}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/comments/{id}/replies:
+    parameters:
+      - {$ref: '#/components/parameters/CommentId'}
+    get:
+      operationId: listCommentReplies
+      summary: Oldest-first visible replies under a root and current parent post policy
+      security: [{}, {BearerAuth: []}]
+      description: id must reference a root. Deleted/blocked root identity/text is suppressed; visible replies remain. replyToUserId is null for blocked or inactive users. Cursor and bounds match root pagination.
+      parameters:
+        - {$ref: '#/components/parameters/InteractionSize'}
+        - {$ref: '#/components/parameters/InteractionAfter'}
+      responses:
+        '200': {description: Source-authorized replies, content: {application/json: {schema: {$ref: '#/components/schemas/CommentPage'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+    post:
+      operationId: replyToComment
+      summary: Reply to a root or reply, normalizing to the same root
+      security: [{BearerAuth: []}]
+      description: Target and root must remain visible/unblocked in the same post. No third level is created. Reply context never grants access.
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CommentText'}}}}
+      responses:
+        '201': {description: Reply created with Location and version ETag, content: {application/json: {schema: {$ref: '#/components/schemas/Comment'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/posts/{id}/reactions/me:
+    parameters:
+      - {$ref: '#/components/parameters/PostId'}
+    put:
+      operationId: reactToPost
+      summary: Replace or reactivate the actor's single current post reaction
+      security: [{BearerAuth: []}]
+      description: Current parent read/write scope and bilateral block checks. Stable ID/version survives inactive tombstone. Repeating the active type emits no effect. No ETag required.
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ReactionInput'}}}}
+      responses:
+        '200': {description: Current stable reaction, content: {application/json: {schema: {$ref: '#/components/schemas/Reaction'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+    delete:
+      operationId: removePostReaction
+      summary: Idempotently deactivate own reaction under current target permission
+      security: [{BearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+      responses:
+        '204': {description: Inactive or already absent}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/comments/{id}/reactions/me:
+    parameters:
+      - {$ref: '#/components/parameters/CommentId'}
+    put:
+      operationId: reactToComment
+      summary: Replace or reactivate the actor's single current visible-comment reaction
+      security: [{BearerAuth: []}]
+      description: Same lifecycle and permission rules as post reaction; the current comment must also be visible. A root tombstone cannot receive a reaction.
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ReactionInput'}}}}
+      responses:
+        '200': {description: Current stable reaction, content: {application/json: {schema: {$ref: '#/components/schemas/Reaction'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+    delete:
+      operationId: removeCommentReaction
+      summary: Idempotently deactivate own reaction under current comment/post permission
+      security: [{BearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+      responses:
+        '204': {description: Inactive or already absent}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/posts/{id}/reactions:
+    parameters:
+      - {$ref: '#/components/parameters/PostId'}
+    get:
+      operationId: listPostReactions
+      summary: Viewer-filtered typed counts and bounded actor list
+      security: [{}, {BearerAuth: []}]
+      description: Current parent visibility; only active reactions from active/unblocked actors count or appear. No hidden global total. UUID-ascending actor cursor is authenticated encrypted, viewer/target-bound and expires in 30 minutes.
+      parameters:
+        - {$ref: '#/components/parameters/InteractionSize'}
+        - {$ref: '#/components/parameters/InteractionAfter'}
+      responses:
+        '200': {description: Current counts and actor page, content: {application/json: {schema: {$ref: '#/components/schemas/ReactionPage'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/comments/{id}/reactions:
+    parameters:
+      - {$ref: '#/components/parameters/CommentId'}
+    get:
+      operationId: listCommentReactions
+      summary: Viewer-filtered reaction counts and actors on a currently visible comment
+      security: [{}, {BearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/InteractionSize'}
+        - {$ref: '#/components/parameters/InteractionAfter'}
+      responses:
+        '200': {description: Current counts and actor page, content: {application/json: {schema: {$ref: '#/components/schemas/ReactionPage'}}}}
+        default: {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
     BearerAuth:
@@ -2228,6 +2393,19 @@ components:
       name: "refresh"
       description: "Host-only Secure HttpOnly SameSite=Strict; Path=/api/v1/auth. Local localhost profile alone allows HTTP."
   parameters:
+    CommentId:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    InteractionSize:
+      name: size
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+    InteractionAfter:
+      name: after
+      in: query
+      schema: {type: string, maxLength: 4096}
     PostId:
       name: id
       in: path
@@ -2301,6 +2479,79 @@ components:
           schema:
             "$ref": "#/components/schemas/Problem"
   schemas:
+    CommentText:
+      type: object
+      additionalProperties: false
+      required: [body]
+      properties:
+        body: {type: string, minLength: 1, maxLength: 5000, description: Plain text; whitespace-only is invalid}
+    Comment:
+      type: object
+      additionalProperties: false
+      required: [id, postId, rootId, authorId, displayName, replyToUserId, body, tombstone, createdAt, editedAt, version]
+      properties:
+        id: {type: string, format: uuid}
+        postId: {type: string, format: uuid}
+        rootId: {type: [string, 'null'], format: uuid}
+        authorId: {type: [string, 'null'], format: uuid}
+        displayName: {type: [string, 'null']}
+        replyToUserId: {type: [string, 'null'], format: uuid}
+        body: {type: [string, 'null'], maxLength: 5000}
+        tombstone: {type: boolean}
+        createdAt: {type: string, format: date-time}
+        editedAt: {type: [string, 'null'], format: date-time}
+        version: {type: [integer, 'null'], minimum: 0}
+      description: Tombstones expose only root ID, post ID, chronological position and tombstone=true; all author/text/edit/version/reply context fields are null.
+    CommentPage:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Comment'}}
+        nextCursor: {type: [string, 'null']}
+    ReactionType:
+      type: string
+      enum: [LIKE, LOVE, CELEBRATE, SUPPORT, INSIGHTFUL]
+    ReactionInput:
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type: {$ref: '#/components/schemas/ReactionType'}
+    Reaction:
+      type: object
+      additionalProperties: false
+      required: [id, type, version]
+      properties:
+        id: {type: string, format: uuid}
+        type: {$ref: '#/components/schemas/ReactionType'}
+        version: {type: integer, minimum: 0}
+    ReactionCounts:
+      type: object
+      additionalProperties: false
+      properties:
+        LIKE: {type: integer, minimum: 0}
+        LOVE: {type: integer, minimum: 0}
+        CELEBRATE: {type: integer, minimum: 0}
+        SUPPORT: {type: integer, minimum: 0}
+        INSIGHTFUL: {type: integer, minimum: 0}
+    ReactionPage:
+      type: object
+      additionalProperties: false
+      required: [counts, items, nextCursor]
+      properties:
+        counts: {$ref: '#/components/schemas/ReactionCounts'}
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [actorId, displayName, type]
+            properties:
+              actorId: {type: string, format: uuid}
+              displayName: {type: string}
+              type: {$ref: '#/components/schemas/ReactionType'}
+        nextCursor: {type: [string, 'null']}
     GraphTarget:
       "type": "object"
       "additionalProperties": false

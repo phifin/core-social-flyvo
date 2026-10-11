@@ -1,8 +1,9 @@
-# Phase 4 posts and current privacy
+# Posts, interactions and current privacy
 
 Implemented routes and DTOs: [OpenAPI](api/openapi.yaml). Completion/review state:
-[Phase 4](phases/phase-4.md), [mailbox](agent-handoff.md). This is a bounded post
-query/publication capability, not Phase 5 interactions or the Phase 6 home feed.
+[Phase 4](phases/phase-4.md), [Phase 5](phases/phase-5.md), [mailbox](agent-handoff.md).
+Posts and Phase 5's comment/reaction slice are implemented; reports and the complete
+Phase 5 gate are pending. Phase 6 home feeds are still unimplemented.
 
 ## Commands and invariants
 
@@ -94,3 +95,57 @@ fails closed). This is a bounded default, not an indefinite legal evidence hold.
 Missing/wrong binding fails synchronous signing and emits technical audit alerts
 when the owner reconciliation job runs. Restore drills requeue checks in bounded
 source batches; media never reverse-joins content/profile internals.
+
+## Comments and reactions — Phase 5 content slice
+
+`Interactions` is the content owner API. Root/reply comments use plain text 1–5,000
+Unicode code points, immutable parent/author/creation IDs, oldest-first timestamp/UUID
+ordering and independent 20 default/100 maximum pages. A reply to a reply resolves
+the same root and records addressed author context. Cross-post or third-level roots
+are rejected by the command and PostgreSQL composite FK/root trigger. Edits require
+ownership/current parent scope/If-Match and set editedAt; no revision history.
+Same-body edit is a no-op. Create has optional 24-hour logical idempotency, replay
+reauthorization and changed-body conflict. Comment create/edit JSON is capped at
+64 KiB to accommodate Unicode/JSON escaping; other preexisting limits remain.
+
+Every read/mutation checks the containing post and current account/block/community
+facts. Community writes require effective membership even for PUBLIC communities;
+archive and loss of membership deny writes. Comment-specific actor filtering is
+additional to parent policy. A blocked/inactive/deleted/removed root appears only
+when visible replies need context, with author/name/body/version/edit/reply context
+all null. Replies from visible actors remain readable; their replyToUserId is null
+when that addressed user is blocked/inactive. No reaction/reply can target a hidden
+root. Post deletion/removal denies all descendants.
+
+Comment list text and its parent/actor eligibility are selected in one READ COMMITTED
+statement snapshot using the existing canonical content SQL predicate. Subsequent
+attribution batches never reload newer comment text. An in-flight old response may
+race a new revocation; it cannot combine that old grant with a new private body.
+Current reads/counts consume only the published view allowlist. Mute is not an
+ordinary read denial. Cursor authenticated encryption conceals hidden candidate IDs,
+binds viewer/post/root or viewer/reaction target, expires in 30 minutes and advances
+by the last examined candidate. Short/empty continued pages and no totals are explicit.
+
+Typed post/comment reactions are LIKE/LOVE/CELEBRATE/SUPPORT/INSIGHTFUL. PUT replaces
+or reactivates a single actor/target row; same active type emits nothing. DELETE sets
+active=false; absent/inactive is a no-op. Row ID survives and versions increase across
+replacement/deletion/reactivation. Exactly-one typed FK and uniqueness include
+inactive rows; identity columns are immutable. All effects/outbox are transactional.
+Actor lists and grouped counts filter active/unblocked accounts and current source
+eligibility. `engagement` batches at most 100 parent IDs in one grouped SQL statement;
+counts describe visible comments/reactions, are optional display data and grant no access.
+
+Write order: sorted shared actor/post/comment/root author account guards, shared
+community write guard, sorted shared graph pairs, post, then comments. Comment create
+locks addressed/root comments shared in UUID order; edit/delete locks target exclusive.
+Post reaction requests exclusive post mode initially; comment reaction requests shared
+post then exclusive comment. No mode upgrade, network under locks or command retry is
+introduced. `CommentModeration` is a transaction-required owner seam with scoped staff
+authority and deletion precedence; report/action orchestration is still pending.
+
+Own deletion schedules durable COMMENT_RETENTION for +30 days. Its idempotent owner
+maintenance locks account → post → comment and redacts deleted text while retaining
+the lifecycle UUID/version. Post retention redacts at most 500 descendants per job
+after parent deletion reaches 30 days, emits monotonic CommentDeleted tombstones/audit
+atomically and durably requeues the next bounded batch. Removal is still private,
+not author deletion; restoration cannot undo the author's deletion.

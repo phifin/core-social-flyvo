@@ -23,6 +23,17 @@ Graph events use the stable `graph.pair_revision` ID and increment its sequence 
 
 ## Minimal worker implementation
 
+Phase 5's content slice produces CommentCreated/Updated/Deleted/Removed/Restored v1
+with commentId/postId/authorId/status only; no body or attribution text. Each envelope
+uses the retained comment ID and increasing source version. ReactionChanged v1 uses
+the stable reaction ID/version and reactionId/actorId/targetType/targetId/previousType/
+type; null type denotes inactive state. Same-type PUT and repeated DELETE emit no
+event. Unreact/react retains one source sequence so a future consumer can reject
+older updates; no notification/projection consumer is registered in this slice.
+Existing real delivery/receipt retry tests remain required, not replaced by a toy
+consumer. COMMENT_RETENTION is a DB-only registered job; parent retention emits
+bounded monotonic comment tombstones with redaction/audit in the same transaction.
+
 Phase 3 adds graph pair-revision events and FRIEND_REQUEST_EXPIRY jobs through the
 existing worker. Event aggregate ID/version belongs to a retained canonical pair;
 block's after-state captures removal of both follows/friendship/pending request.
