@@ -77,6 +77,20 @@ class SecurityConfiguration {
                     .permitAll()
                     .requestMatchers(
                         HttpMethod.GET,
+                        "/api/v1/me/reports",
+                        "/api/v1/communities/*/moderation/reports",
+                        "/api/v1/communities/*/moderation/reports/*",
+                        "/api/v1/admin/moderation/reports",
+                        "/api/v1/admin/moderation/reports/*")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.POST,
+                        "/api/v1/reports",
+                        "/api/v1/communities/*/moderation/reports/*/actions",
+                        "/api/v1/admin/moderation/reports/*/actions")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.GET,
                         "/api/v1/posts/*/comments",
                         "/api/v1/comments/*",
                         "/api/v1/comments/*/replies",

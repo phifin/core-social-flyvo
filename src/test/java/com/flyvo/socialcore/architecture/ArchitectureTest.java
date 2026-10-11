@@ -25,6 +25,29 @@ class ArchitectureTest {
   }
 
   @Test
+  void moderationProfileDependencyIsOnlyVisibleReportProof() {
+    var calls =
+        PRODUCTION.stream()
+            .filter(c -> c.getPackageName().contains(".moderation."))
+            .flatMap(c -> c.getMethodCallsFromSelf().stream())
+            .filter(c -> c.getTargetOwner().getPackageName().contains(".profile."))
+            .toList();
+    assertThat(calls)
+        .allSatisfy(
+            call ->
+                assertThat(call.getTargetOwner().getName())
+                    .isIn(
+                        ROOT + ".profile.api.ProfileQueries",
+                        ROOT + ".profile.api.ProfileQueries$Summary"));
+    var ownerCalls =
+        calls.stream().filter(c -> !c.getTargetOwner().getName().contains("$")).toList();
+    assertThat(ownerCalls).hasSize(1);
+    assertThat(ownerCalls.getFirst().getTargetOwner().getName())
+        .isEqualTo(ROOT + ".profile.api.ProfileQueries");
+    assertThat(ownerCalls.getFirst().getTarget().getName()).isEqualTo("visible");
+  }
+
+  @Test
   void deliberatelyForbiddenFixtureIsDetected() {
     var fixtures = new ClassFileImporter().importPackages("com.flyvo.archfixtures");
     var result = ModuleRules.boundaries("com.flyvo.archfixtures").evaluate(fixtures);

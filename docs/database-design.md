@@ -157,6 +157,18 @@ deleted parent under post → comment locks, retaining precedence and incrementi
 versions with atomic CommentDeleted outbox/audit. A full batch schedules another job;
 retry does not re-redact or repeat events for already empty bodies.
 
+### Phase 5 reports — V0023
+
+V0023 adds moderation.report with immutable typed target/scope/source actor IDs,
+partial unresolved reporter/target uniqueness, explicit lifecycle/version checks,
+reporter/scope/global queue and FK indexes. Evidence and detail are one authenticated
+encrypted bounded snapshot (64 KiB ciphertext, external key ID); no plaintext detail
+column or public evidence. Append-only moderation.action gains report FK, generated
+COMMENT/REPORT FK targets and typed action constraints; global REPORT actions may
+have null scope, MEMBER/POST/COMMENT actions remain community scoped. No assignment,
+account suspension or foreign SQL/view is added. V0001–V0022 remain unchanged.
+Guard/retry/evidence contracts: [moderation](moderation.md).
+
 ## Media
 
 | Table | Important columns | Constraints / indexes |

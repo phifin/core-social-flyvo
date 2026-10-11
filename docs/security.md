@@ -163,8 +163,14 @@ Reaction counts/lists and 100-parent engagement batches exclude inactive/blocked
 actors and inaccessible parents. Public-community nonmembers cannot interact.
 Post/comment final lock modes are requested initially; source deletion/removal,
 community membership changes and bilateral blocks serialize against mutations.
-Reports/evidence and feed implementation remain pending; no broad staff bypass is
-introduced by the ordinary interaction endpoints.
+Reports capture bounded encrypted owner-authorized evidence, including USER proof
+through the narrow accepted ADR-014 dependency. Current source/account/block guards
+serialize submission and replay against revocation; profile privacy is guarded too.
+Reporter metadata contains no evidence. Community MODERATOR+ and platform ADMIN
+global-case endpoints have separate current authority; successful evidence reads
+are audited. USER reports never acquire caller community scope. Owner action,
+case/action/audit/outbox are atomic; no account suspension or general staff profile
+bypass. See [moderation](moderation.md). Feed implementation remains pending.
 
 Phase 1 uses bounded per-instance token buckets and deployment-edge limits, plus DB-backed per-email verification/reset issuance windows. Initial limits: login 10/min/IP and 5/min/account key; registration/reset email 3/hour/address and 20/hour/IP; API writes 60/min/user; uploads 10/min/user with storage quotas; search 30/min/user. These are tunable defaults, not account lockouts an attacker can trigger indefinitely. Hash normalized emails in limiter keys. Trust forwarded IP headers only from configured proxies. Introduce shared Redis limits before multi-instance public traffic.
 

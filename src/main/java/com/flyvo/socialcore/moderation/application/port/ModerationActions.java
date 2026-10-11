@@ -4,6 +4,20 @@ import java.time.Instant;
 import java.util.UUID;
 
 public interface ModerationActions {
+  void appendCase(
+      UUID id,
+      UUID report,
+      UUID actor,
+      UUID community,
+      String targetType,
+      UUID target,
+      String action,
+      String reason,
+      String before,
+      String after,
+      String requestId,
+      Instant now);
+
   void append(
       UUID id,
       UUID actor,

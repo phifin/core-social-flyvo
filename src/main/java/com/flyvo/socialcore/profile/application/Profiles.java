@@ -53,8 +53,28 @@ public class Profiles implements ProfileCommands, ProfileQueries {
 
   @Transactional(readOnly = true)
   public Summary visible(ActorContext actor, UUID id) {
+    return visibleSummary(actor, id, false);
+  }
+
+  @Transactional(propagation = Propagation.MANDATORY)
+  public Summary visible(ActorContext actor, UUID id, boolean reportProof) {
+    if (!reportProof || id == null) throw Failure.invalid();
+    requireActor(actor);
+    for (var user :
+        java.util.stream.Stream.of(actor.userId(), id)
+            .distinct()
+            .sorted(java.util.Comparator.comparing(UUID::toString))
+            .toList()) {
+      if (!accounts.guard(user, false).active()) throw new Failure(404, "NOT_FOUND");
+    }
+    graph.guardInteractions(
+        actor, id.equals(actor.userId()) ? java.util.List.of() : java.util.List.of(id));
+    return visibleSummary(actor, id, true);
+  }
+
+  private Summary visibleSummary(ActorContext actor, UUID id, boolean lock) {
     var account = accounts.find(id);
-    var profile = entities.find(id, false);
+    var profile = entities.find(id, lock);
     if (account == null || !account.active() || profile == null)
       throw new Failure(404, "NOT_FOUND");
     if (actor.authenticated()) requireActor(actor);

@@ -23,7 +23,7 @@ final class ModuleRules {
           Map.entry("feed", Set.of("content", "graph", "community", "profile")),
           Map.entry("notification", Set.of("content", "community", "graph", "profile", "account")),
           Map.entry("search", Set.of("content", "community", "profile", "account")),
-          Map.entry("moderation", Set.of("content", "community", "account")),
+          Map.entry("moderation", Set.of("content", "community", "account", "profile")),
           Map.entry("platform", Set.of()));
 
   private ModuleRules() {}

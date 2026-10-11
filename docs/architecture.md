@@ -74,7 +74,8 @@ Under [ADR-014](adr/014-report-user-target-proof.md), `moderation -> profile.api
 is solely current USER report submission proof through `ProfileQueries.visible`.
 It does not permit profile writes, private-profile bypass, general staff lookup or
 foreign SQL. Development must align the test-owned dependency map when implementing
-reports; the decision alone does not claim that implementation is delivered.
+reports. The implementation now uses only guarded `visible` and its authorized
+Summary; a dedicated architecture regression rejects broader profile calls.
 
 No module imports another module's JPA entities, domain objects, application implementations or repositories. A module API uses immutable records, enums and scalar IDs, never `Page`, `Specification`, lazy collections, `EntityManager` or Spring HTTP types. Java UUID is sufficient initially; introduce typed IDs only where repeated confusion proves useful.
 

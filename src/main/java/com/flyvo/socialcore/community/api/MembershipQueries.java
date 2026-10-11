@@ -23,6 +23,10 @@ public interface MembershipQueries {
   /** Current scope guard; staff requires effective MODERATOR+, write denies archive. */
   Scope guardScope(ActorContext actor, UUID communityId, boolean staff, boolean write);
 
+  /** Final lock mode for case actions, requested before any source/report lock. */
+  Scope guardScope(
+      ActorContext actor, UUID communityId, boolean staff, boolean write, boolean exclusive);
+
   /**
    * Requires a transaction and all relevant account guards acquired before this community guard.
    */

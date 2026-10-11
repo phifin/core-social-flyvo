@@ -41,8 +41,11 @@ start returns a URL in JSON; callbacks redirect with a marker, never credentials
 
 ## Pagination
 
-Phase 5 content interactions implement the comment/reaction paths below; reports
-and complete Phase 5 remain pending. Comment root/reply pages are separately
+Phase 5 implements comments/reactions and [reports](moderation.md), pending full
+verification/review. Reporter/staff queues use bounded offset pages, no totals;
+separate audited staff evidence paths and case If-Match/sourceVersion actions.
+Global USER cases require platform ADMIN, never community membership alone.
+Comment root/reply pages are separately
 timestamp/UUID ascending, default 20/max 100, with 30-minute viewer/post/root-bound
 authenticated encrypted cursors. Hidden candidates may yield an empty continued
 page. Reaction actor pages use UUID ascending and viewer/target-bound cursors with

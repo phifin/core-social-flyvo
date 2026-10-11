@@ -19,9 +19,13 @@ class JpaProfileRepository implements ProfileRepository {
   }
 
   public Profile find(UUID user, boolean lock) {
-    return lock
-        ? entities.find(Profile.class, user, LockModeType.PESSIMISTIC_WRITE)
-        : entities.find(Profile.class, user);
+    if (!lock) return entities.find(Profile.class, user);
+    var profile = entities.find(Profile.class, user);
+    // A caller's transaction may already contain an earlier unlocked read.
+    // Refresh acquires the lock and reads current state; locking an already
+    // managed old version first would raise an optimistic conflict before reload.
+    if (profile != null) entities.refresh(profile, LockModeType.PESSIMISTIC_WRITE);
+    return profile;
   }
 
   public Preferences preferences(UUID user, boolean lock) {

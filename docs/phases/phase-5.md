@@ -1,10 +1,62 @@
-# Phase 5 — content interaction slice, report workflow pending
+# Phase 5 — conversations, reactions and report workflow
 
-Status: partial implementation, **not complete or accepted**. Comments/reactions
-are implemented; reports/evidence/action correlation are unimplemented. The package
-must complete reports before its full Phase 5 gate. Main accepted
-[ADR-014](../adr/014-report-user-target-proof.md) on 2026-10-11 to unblock that work.
+Status: implemented, full internal Phase 5 gate PASS; **not accepted**.
+Comments/reactions and reports/evidence/action correlation are implemented. Main accepted
+[ADR-014](../adr/014-report-user-target-proof.md) on 2026-10-11 to unblock USER proof.
 Current routing and actual code hash: [mailbox](../agent-handoff.md).
+
+## Report delivery and resumed verification
+
+V0023 implements four owner-proven targets, immutable bounded encrypted evidence
+(including detail), unresolved uniqueness, scoped reporter/staff/ADMIN metadata and
+audited evidence, current-authority review/resolve/dismiss, correlated typed actions
+and atomic owner source/case/action/audit/outbox. Only ADR-014's narrow profile API
+edge is added; the architecture suite explicitly limits profile owner calls to visible.
+No foreign SQL, broad staff lookup, source authorization cache or Phase 8 operation.
+See [moderation](../moderation.md) for exact bounds, lock order, endpoints and limits.
+
+Guarded ProfileQueries.visible returns the exact summary used for USER evidence;
+sorted account → graph → profile locks serialize privacy/block/account changes in
+both orders. A real older managed-entity read followed by privacy change proves
+the locked owner read refreshes Hibernate state, denying instead of retaining an
+old profile grant. Owner APIs stay in their modules and join the report transaction.
+
+Resumed targeted command:
+
+```bash
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 \
+PATH=/usr/lib/jvm/java-21-openjdk-amd64/bin:$PATH \
+  ./mvnw -B -ntp spotless:apply test \
+  -Dtest=ReportTest,CommentTest,OpenApiContractTest,ArchitectureTest,PersistenceBoundaryTest \
+  failsafe:integration-test failsafe:verify -Dit.test=ReportsIT,InteractionsIT,FoundationIT
+```
+
+**70 pass**: 13 unit/architecture/OpenAPI +57 real PG tests (21 ReportsIT,
+22 InteractionsIT, 14 FoundationIT), zero failures/errors/skips. Log
+`/tmp/social-p56-phase5-targeted.log`. New V0022 upgrade preserves all 22 applied
+checksums; every prior migration upgrade remains green.
+
+ReportsIT covers four targets, USER PUBLIC/AUTHENTICATED/FRIENDS/PRIVATE, friendship,
+bilateral blocks/inactive target, privacy/block/account changes in both actual lock
+wait orders and idempotent replay; no plaintext/public/event evidence, bounds/IDOR,
+wrong-community/global USER isolation, deleted-source evidence and current staff
+revocation. Concurrent duplicates commit one case/event; concurrent resolutions
+commit one source/action. Review/terminal versions, self/owner/hierarchy denial,
+member sanction, restore versus author deletion, both staff-sanction/action orders,
+evidence/removal orders and audit failures before/after action append prove rollback.
+HTTP checks CSRF, current session, unknown caller scope and required preconditions;
+raw SQL rejects evidence/identity mutation and append-only action deletion.
+
+Final Java 21 `./mvnw -B -ntp verify`: **231 pass** (43 unit/architecture/OpenAPI
++188 integration), zero failures/errors/skips. Log `/tmp/social-p56-phase5-verify.log`.
+Includes all 33 Phase4IT, real pinned Silo/storage/packaged decoder and all previous
+identity/community/graph regressions. Formatting/Enforcer/convergence/architecture/
+SQL boundary/OpenAPI PASS. Compose app/media config and diff whitespace PASS.
+Pinned redacted full-history scan at resume: 36 commits/no leaks, only the two
+accepted exact historical fingerprints (`/tmp/social-p56-resume-history.log`).
+Staged/new-code history checks follow before/after the verified report commit.
+The successful prior 230-test run is historical, not substituted for this final gate.
+Development now continues Phase 6 in the same package; no phase acceptance.
 
 ## Delivered content slice
 
@@ -106,9 +158,9 @@ graph's lowercase action/404 semantics, JSON job comparison, audit spy transacti
 and session revoke-reason constraint); these were corrected against existing
 contracts. They are not passing baseline evidence or weakened denial paths.
 
-## Missing gate and limitations
+## Historical blocker and material limitations
 
-Reports, concurrent unresolved-case uniqueness, encrypted evidence, staff queue/
+At baseline `870959d`, reports, concurrent unresolved-case uniqueness, encrypted evidence, staff queue/
 resolution/action audit rollback and report-specific privacy/races are **unrun**.
 No full Phase 5 completion/gate or acceptance is claimed. Main accepted ADR-014's
 narrow owner-policy dependency for USER target proof; development must implement

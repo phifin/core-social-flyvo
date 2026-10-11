@@ -23,6 +23,12 @@ Graph events use the stable `graph.pair_revision` ID and increment its sequence 
 
 ## Minimal worker implementation
 
+Phase 5 reports append ReportSubmitted v1 (reportId/targetType/targetId), ReportReviewed
+and ReportResolved v1 (reportId/status), each using case ID/version. Case actions
+append ModerationActionApplied with actionId/reportId/typed targetId/action. Existing
+post/member action payloads are unchanged. Captured evidence/detail/reason/profile
+text never enters events. No new consumer/job or Phase 7 notification is registered.
+
 Phase 5's content slice produces CommentCreated/Updated/Deleted/Removed/Restored v1
 with commentId/postId/authorId/status only; no body or attribution text. Each envelope
 uses the retained comment ID and increasing source version. ReactionChanged v1 uses

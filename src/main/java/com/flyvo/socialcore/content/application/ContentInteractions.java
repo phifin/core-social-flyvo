@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.*;
 
 @Service
-public class ContentInteractions implements Interactions, CommentModeration {
+public class ContentInteractions implements Interactions, CommentModeration, ContentReportProof {
   private final InteractionRepository store;
   private final PostRepository posts;
   private final ContentQueries content;
@@ -82,6 +82,42 @@ public class ContentInteractions implements Interactions, CommentModeration {
     } catch (IllegalArgumentException e) {
       throw Failure.invalid();
     }
+  }
+
+  @Transactional(propagation = Propagation.MANDATORY)
+  public Proof reportProof(ActorContext actor, UUID postId, UUID commentId) {
+    if ((postId == null) == (commentId == null)) throw Failure.invalid();
+    var c = commentId == null ? null : existing(commentId);
+    var p = post(c == null ? postId : c.post());
+    if (actor == null || !actor.authenticated()) throw Failure.unauthorized();
+    var ids = new HashSet<UUID>(List.of(actor.userId(), p.author()));
+    if (c != null) ids.add(c.author());
+    for (var id : ids.stream().sorted(Comparator.comparing(UUID::toString)).toList()) {
+      if (!accounts.guard(id, false).active()) {
+        if (id.equals(actor.userId())) throw Failure.unauthorized();
+        throw new Failure(404, "NOT_FOUND");
+      }
+    }
+    if (p.community() != null) communities.guardScope(actor, p.community(), false, false);
+    graph.guardInteractions(actor, ids.stream().filter(id -> !id.equals(actor.userId())).toList());
+    store.lockPost(p.id(), false);
+    if (c != null) store.lockComment(c.id(), false);
+    var source = content.read(actor, p.id());
+    if (c == null)
+      return new Proof(
+          source.communityId(),
+          source.authorId(),
+          source.authorId(),
+          source.body(),
+          source.version());
+    var comment = readComment(actor, c.id());
+    if (comment.tombstone()) throw new Failure(404, "NOT_FOUND");
+    return new Proof(
+        source.communityId(),
+        comment.authorId(),
+        source.authorId(),
+        comment.body(),
+        comment.version());
   }
 
   private void guard(ActorContext actor, Post p, List<UUID> authors, boolean staff) {

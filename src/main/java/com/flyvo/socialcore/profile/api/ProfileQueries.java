@@ -15,6 +15,9 @@ public interface ProfileQueries {
 
   Summary visible(ActorContext actor, UUID userId);
 
+  /** Guarded USER report proof: originating transaction required; no staff bypass. */
+  Summary visible(ActorContext actor, UUID userId, boolean reportProof);
+
   record Attribution(UUID userId, String displayName) {}
 
   /** Internal minimal attribution only AFTER containing-content authorization. */

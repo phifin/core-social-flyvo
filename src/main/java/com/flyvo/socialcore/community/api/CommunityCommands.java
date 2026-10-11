@@ -15,6 +15,9 @@ public interface CommunityCommands {
       UUID ownerId,
       long version) {}
 
+  /** Transaction-required submission proof using ordinary discovery/read policy. */
+  Info reportProof(ActorContext actor, UUID id);
+
   Info create(
       ActorContext actor,
       String slug,

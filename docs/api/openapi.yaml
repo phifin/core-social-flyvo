@@ -1,8 +1,8 @@
 openapi: "3.1.0"
 info:
   title: "social-core accounts, communities, graph, content and images"
-  version: "0.5.0-interactions"
-  description: "Phases 0–4 accepted; Phase 5 comments/reactions implemented pending review, reports and Phase 6 feeds pending. All unsafe API calls require CSRF cookie/header and exact trusted Origin, including Bearer and anonymous capability requests. Every Bearer validates current PostgreSQL session/account; dependency outage is 503. Auth/API responses are no-store. Unsupported routes remain deny-by-default. Browser deployment is same-site TLS."
+  version: "0.5.0"
+  description: "Phases 0–4 accepted; Phase 5 comments/reactions/reports verified pending review; Phase 6 feeds pending. All unsafe API calls require CSRF cookie/header and exact trusted Origin, including Bearer and anonymous capability requests. Every Bearer validates current PostgreSQL session/account; dependency outage is 503. Auth/API responses are no-store. Unsupported routes remain deny-by-default. Browser deployment is same-site TLS."
 paths:
   "/actuator/health":
     get:
@@ -2381,6 +2381,110 @@ paths:
       responses:
         '200': {description: Current counts and actor page, content: {application/json: {schema: {$ref: '#/components/schemas/ReactionPage'}}}}
         default: {$ref: '#/components/responses/Problem'}
+  /api/v1/reports:
+    post:
+      operationId: submitReport
+      summary: Submit a current-owner-authorized case; logical replay rechecks access
+      security: [{BearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ReportSubmit'}}}}
+      responses:
+        '201': {description: Private no-store case representation, content: {application/json: {schema: {$ref: '#/components/schemas/Report'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/me/reports:
+    get:
+      operationId: getOwnReports
+      summary: Own case metadata only, never evidence
+      security: [{BearerAuth: []}]
+      parameters:
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, maximum: 10000, default: 0}}
+      responses:
+        '200': {description: Private no-store case representation, content: {application/json: {schema: {$ref: '#/components/schemas/ReportPage'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/communities/{community}/moderation/reports:
+    parameters:
+      - {name: community, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: getCommunityReports
+      summary: Current effective MODERATOR+ queue in this exact community
+      security: [{BearerAuth: []}]
+      parameters:
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, maximum: 10000, default: 0}}
+      responses:
+        '200': {description: Private no-store case representation, content: {application/json: {schema: {$ref: '#/components/schemas/ReportPage'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/admin/moderation/reports:
+    get:
+      operationId: getGlobalReports
+      summary: Current platform ADMIN global cases only
+      security: [{BearerAuth: []}]
+      parameters:
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, maximum: 10000, default: 0}}
+      responses:
+        '200': {description: Private no-store case representation, content: {application/json: {schema: {$ref: '#/components/schemas/ReportPage'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/communities/{community}/moderation/reports/{report}:
+    parameters:
+      - {name: community, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: report, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: getCommunityReportEvidence
+      summary: Audited private evidence; current scoped staff authority
+      security: [{BearerAuth: []}]
+      parameters:
+        - {name: X-Request-ID, in: header, schema: {type: string, maxLength: 64}}
+      responses:
+        '200': {description: Private no-store case representation, content: {application/json: {schema: {$ref: '#/components/schemas/ReportEvidence'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/admin/moderation/reports/{report}:
+    parameters:
+      - {name: report, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: getGlobalReportEvidence
+      summary: Audited global evidence; current platform ADMIN only
+      security: [{BearerAuth: []}]
+      parameters:
+        - {name: X-Request-ID, in: header, schema: {type: string, maxLength: 64}}
+      responses:
+        '200': {description: Private no-store case representation, content: {application/json: {schema: {$ref: '#/components/schemas/ReportEvidence'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/communities/{community}/moderation/reports/{report}/actions:
+    parameters:
+      - {name: community, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: report, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: applyCommunityReportAction
+      summary: Atomic source action, case transition, append-only action, audit and outbox
+      security: [{BearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ReportAction'}}}}
+      responses:
+        '200': {description: Private no-store case representation, content: {application/json: {schema: {$ref: '#/components/schemas/ReportResult'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/admin/moderation/reports/{report}/actions:
+    parameters:
+      - {name: report, in: path, required: true, schema: {type: string, format: uuid}}
+    post:
+      operationId: applyGlobalReportAction
+      summary: Global review, resolve or dismiss only; no account sanction
+      security: [{BearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ReportAction'}}}}
+      responses:
+        '200': {description: Private no-store case representation, content: {application/json: {schema: {$ref: '#/components/schemas/ReportResult'}}}}
+        default: {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
     BearerAuth:
@@ -2479,6 +2583,68 @@ components:
           schema:
             "$ref": "#/components/schemas/Problem"
   schemas:
+    ReportTarget:
+      type: string
+      enum: [POST, COMMENT, COMMUNITY, USER]
+    ReportCategory:
+      type: string
+      enum: [SPAM, HARASSMENT, HATE, VIOLENCE, SEXUAL_CONTENT, OTHER]
+    ReportSubmit:
+      type: object
+      additionalProperties: false
+      required: [targetType, targetId, category]
+      properties:
+        targetType: {$ref: '#/components/schemas/ReportTarget'}
+        targetId: {type: string, format: uuid}
+        category: {$ref: '#/components/schemas/ReportCategory'}
+        detail: {type: [string, 'null'], maxLength: 4000}
+      description: No reporter, scope, status, role or evidence fields. Evidence is owner-captured and encrypted, summary capped at 2000 code points; detail is encrypted with it. USER scope is always global. JSON capped at 64 KiB.
+    Report:
+      type: object
+      additionalProperties: false
+      required: [id, targetType, targetId, communityId, category, status, createdAt, resolvedAt, version]
+      properties:
+        id: {type: string, format: uuid}
+        targetType: {$ref: '#/components/schemas/ReportTarget'}
+        targetId: {type: string, format: uuid}
+        communityId: {type: [string, 'null'], format: uuid}
+        category: {$ref: '#/components/schemas/ReportCategory'}
+        status: {type: string, enum: [OPEN, IN_REVIEW, RESOLVED, DISMISSED]}
+        createdAt: {type: string, format: date-time}
+        resolvedAt: {type: [string, 'null'], format: date-time}
+        version: {type: integer, minimum: 0}
+    ReportPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/Report'}}
+        nextCursor: {type: 'null'}
+      description: Bounded administration offset page, newest-first time/UUID; no totals or snapshot. Caller explicitly advances offset.
+    ReportEvidence:
+      type: object
+      required: [report, detail, capturedAt, summary]
+      properties:
+        report: {$ref: '#/components/schemas/Report'}
+        detail: {type: [string, 'null'], maxLength: 4000}
+        capturedAt: {type: string, format: date-time}
+        summary: {type: string, maxLength: 2000}
+      description: Only current scoped staff or platform ADMIN global case endpoints; every successful read is audited. Not ordinary target authority. Survives source deletion; no media URLs or raw objects.
+    ReportAction:
+      type: object
+      additionalProperties: false
+      required: [action, reason]
+      properties:
+        action: {type: string, enum: [REVIEW_REPORT, RESOLVE_REPORT, DISMISS_REPORT, REMOVE_CONTENT, RESTORE_CONTENT, SUSPEND_MEMBER, BAN_MEMBER, UNBAN_MEMBER]}
+        reason: {type: string, minLength: 1, maxLength: 2000}
+        sourceVersion: {type: [integer, 'null'], minimum: 0}
+        suspendedUntil: {type: [string, 'null'], format: date-time}
+      description: If-Match is case version. Content/member actions also require sourceVersion. Sanction acts on immutable reported content author, current hierarchy applies. Global endpoints only review/resolve/dismiss. Restore cannot undo author deletion. No implicit command retry.
+    ReportResult:
+      type: object
+      required: [actionId, report]
+      properties:
+        actionId: {type: string, format: uuid}
+        report: {$ref: '#/components/schemas/Report'}
     CommentText:
       type: object
       additionalProperties: false

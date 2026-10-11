@@ -89,6 +89,13 @@ public class CommunityLifecycle implements CommunityCommands, MembershipQueries 
         c.version());
   }
 
+  @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+  public Info reportProof(ActorContext actor, UUID id) {
+    access.guardAccounts(actor);
+    access.guard(id, false);
+    return read(actor, id);
+  }
+
   @Transactional(readOnly = true)
   public List<Info> discover(ActorContext actor, int size, int offset) {
     CommunityAccess.page(size, offset);
@@ -212,8 +219,14 @@ public class CommunityLifecycle implements CommunityCommands, MembershipQueries 
 
   @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
   public Scope guardScope(ActorContext actor, UUID id, boolean staff, boolean write) {
+    return guardScope(actor, id, staff, write, false);
+  }
+
+  @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+  public Scope guardScope(
+      ActorContext actor, UUID id, boolean staff, boolean write, boolean exclusive) {
     access.actor(actor);
-    var c = access.guard(id, false);
+    var c = access.guard(id, exclusive);
     if (write) CommunityPermissionPolicy.active(c);
     if (staff)
       CommunityPermissionPolicy.require(

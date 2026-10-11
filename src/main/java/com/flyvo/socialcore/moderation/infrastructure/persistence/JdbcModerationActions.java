@@ -15,6 +15,35 @@ class JdbcModerationActions implements ModerationActions {
     this.jdbc = jdbc;
   }
 
+  public void appendCase(
+      UUID id,
+      UUID report,
+      UUID actor,
+      UUID community,
+      String targetType,
+      UUID target,
+      String action,
+      String reason,
+      String before,
+      String after,
+      String request,
+      Instant now) {
+    jdbc.update(
+        "INSERT INTO moderation.action(id,report_id,actor_id,community_id,target_type,target_id,action,reason,before_state,after_state,request_id,created_at) VALUES (?,?,?,?,?,?,?, ?,?::jsonb,?::jsonb,?,?)",
+        id,
+        report,
+        actor,
+        community,
+        targetType,
+        target,
+        action,
+        reason,
+        before,
+        after,
+        request,
+        now.atOffset(ZoneOffset.UTC));
+  }
+
   public void append(
       UUID id,
       UUID actor,

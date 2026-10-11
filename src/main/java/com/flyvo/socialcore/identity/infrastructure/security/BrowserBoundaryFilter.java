@@ -117,7 +117,7 @@ public class BrowserBoundaryFilter extends OncePerRequestFilter {
       int bodyLimit =
           path.matches("/api/v1/posts(?:/[^/]+)?")
               ? 262144
-              : path.matches("/api/v1/(?:posts/[^/]+/comments|comments/[^/]+(?:/replies)?)")
+              : path.matches("/api/v1/(?:reports|posts/[^/]+/comments|comments/[^/]+(?:/replies)?)")
                   ? 65536
                   : 16384;
       if (request.getContentLengthLong() > bodyLimit) {

@@ -2,8 +2,8 @@
 
 Implemented routes and DTOs: [OpenAPI](api/openapi.yaml). Completion/review state:
 [Phase 4](phases/phase-4.md), [Phase 5](phases/phase-5.md), [mailbox](agent-handoff.md).
-Posts and Phase 5's comment/reaction slice are implemented; reports and the complete
-Phase 5 gate are pending. Phase 6 home feeds are still unimplemented.
+Posts, comments/reactions and [reports](moderation.md) are implemented; the complete
+Phase 5 gate has passed. Phase 6 home feeds are the next in-package implementation.
 
 ## Commands and invariants
 
@@ -141,7 +141,8 @@ locks addressed/root comments shared in UUID order; edit/delete locks target exc
 Post reaction requests exclusive post mode initially; comment reaction requests shared
 post then exclusive comment. No mode upgrade, network under locks or command retry is
 introduced. `CommentModeration` is a transaction-required owner seam with scoped staff
-authority and deletion precedence; report/action orchestration is still pending.
+authority and deletion precedence; [report/action orchestration](moderation.md)
+uses it within the originating case transaction.
 
 Own deletion schedules durable COMMENT_RETENTION for +30 days. Its idempotent owner
 maintenance locks account → post → comment and redacts deleted text while retaining

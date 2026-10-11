@@ -58,13 +58,40 @@ class FoundationIT {
                 "select count(*) from information_schema.schemata where schema_name = 'platform'",
                 Integer.class))
         .isEqualTo(1);
-    assertThat(flyway.info().applied()).hasSize(22);
+    assertThat(flyway.info().applied()).hasSize(23);
     flyway.validate();
     assertThat(flyway.migrate().migrationsExecuted).isZero();
     assertThat(entityManagerFactory.getProperties())
         .containsEntry("hibernate.hbm2ddl.auto", "validate");
     assertThat(environment.getProperty("spring.jpa.open-in-view", Boolean.class)).isFalse();
     assertThat(jdbc.queryForObject("show timezone", String.class)).isEqualTo("UTC");
+  }
+
+  @Test
+  void interactionSchemaUpgradePreservesAllTwentyTwoChecksums() {
+    var name = "reports_upgrade_" + java.util.UUID.randomUUID().toString().replace("-", "");
+    new JdbcTemplate(dataSource).execute("CREATE DATABASE " + name);
+    String url = POSTGRES.getJdbcUrl().replace("/test?", "/" + name + "?");
+    var prior =
+        Flyway.configure()
+            .dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword())
+            .target("0022")
+            .load();
+    assertThat(prior.migrate().migrationsExecuted).isEqualTo(22);
+    var checksums =
+        java.util.Arrays.stream(prior.info().applied())
+            .map(org.flywaydb.core.api.MigrationInfo::getChecksum)
+            .toList();
+    var upgrade =
+        Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(1);
+    upgrade.validate();
+    assertThat(
+            java.util.Arrays.stream(upgrade.info().applied())
+                .limit(22)
+                .map(org.flywaydb.core.api.MigrationInfo::getChecksum)
+                .toList())
+        .isEqualTo(checksums);
   }
 
   @Test
@@ -84,7 +111,7 @@ class FoundationIT {
             .toList();
     var upgrade =
         Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
-    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(1);
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(2);
     upgrade.validate();
     assertThat(
             java.util.Arrays.stream(upgrade.info().applied())
@@ -132,7 +159,7 @@ class FoundationIT {
     var checksum = phaseZero.info().applied()[0].getChecksum();
     var upgrade =
         Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
-    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(21);
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(22);
     assertThat(upgrade.info().applied()[0].getChecksum()).isEqualTo(checksum);
     upgrade.validate();
   }
@@ -165,7 +192,7 @@ class FoundationIT {
         id);
     var upgrade =
         Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
-    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(8);
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(9);
     upgrade.validate();
     assertThat(
             java.util.Arrays.stream(upgrade.info().applied())
@@ -239,7 +266,7 @@ class FoundationIT {
         id);
     var upgrade =
         Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
-    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(14);
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(15);
     upgrade.validate();
     assertThat(
             java.util.Arrays.stream(upgrade.info().applied())
@@ -281,7 +308,7 @@ class FoundationIT {
         id);
     var upgrade =
         Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
-    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(11);
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(12);
     upgrade.validate();
     assertThat(
             java.util.Arrays.stream(upgrade.info().applied())
