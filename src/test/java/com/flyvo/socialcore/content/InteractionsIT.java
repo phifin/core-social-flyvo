@@ -719,6 +719,45 @@ class InteractionsIT {
   }
 
   @Test
+  void revokedParentGrantBeforeCommentStatementCannotReadNewPrivateBody() throws Exception {
+    var author = user();
+    var viewer = user();
+    var p = publish(author, "CUSTOM", null, List.of(viewer.userId()));
+    var c = interactions.create(author, p.id(), null, "previous allowed text", null);
+    var held = new CountDownLatch(1);
+    var finish = new CountDownLatch(1);
+    doAnswer(
+            call -> {
+              if (viewer.userId().equals(call.getArgument(0))
+                  && c.id().equals(call.getArgument(3))) {
+                // Existing parent read has finished; delay the real comment source statement.
+                held.countDown();
+                release(finish);
+              }
+              return call.callRealMethod();
+            })
+        .when(store)
+        .comments(any(), eq(p.id()), isNull(), eq(c.id()), anyInt(), any(), isNull(), any());
+    try (var pool = Executors.newSingleThreadExecutor()) {
+      var read =
+          pool.submit(
+              () -> {
+                denied(() -> interactions.readComment(viewer, c.id()), 404);
+                return true;
+              });
+      assertThat(held.await(5, TimeUnit.SECONDS)).isTrue();
+      posts.audience(
+          author, p.id(), p.version(), new ContentCommands.Audience("ONLY_ME", List.of()));
+      interactions.edit(author, c.id(), 0, "new private text");
+      finish.countDown();
+      read.get(10, TimeUnit.SECONDS);
+    } finally {
+      finish.countDown();
+      reset(store);
+    }
+  }
+
+  @Test
   void commentDeletionFirstDeniesConcurrentReactionWithoutCreatingSource() throws Exception {
     var author = user();
     var actor = user();

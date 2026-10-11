@@ -47,15 +47,18 @@ PATH=/usr/lib/jvm/java-21-openjdk-amd64/bin:$PATH \
 docker compose --profile app --profile media config --quiet
 ```
 
-Targeted gate: **45 pass** (11 unit/architecture/OpenAPI +34 integration: 21
+Targeted gate: **46 pass** (11 unit/architecture/OpenAPI +35 integration: 22
 InteractionsIT and 13 FoundationIT), zero failures/errors/skips. Log:
-`/tmp/social-p56-interactions-delivery.log`. Full verify: **206 pass** (41 unit/
-architecture/OpenAPI +165 integration), zero failures/errors/skips, including all
+`/tmp/social-p56-coherence-targeted.log`. Final slice full verify: **207 pass** (41 unit/
+architecture/OpenAPI +166 integration), zero failures/errors/skips, including all
 33 Phase4IT and real pinned Silo/storage/packaged-decoder/prior-phase regressions.
-Log: `/tmp/social-p56-interactions-verify.log`. Formatting, Enforcer/convergence,
+Log: `/tmp/social-p56-coherence-verify.log`. Formatting, Enforcer/convergence,
 OpenAPI/reference checks, resolved app/media Compose config, changed documentation
 links and diff whitespace pass. This verifies the delivered content slice and
 existing baseline, not an unimplemented report/feed package.
+
+Initial slice `a75885e` passed 45 targeted /206 full tests before the additional
+parent-before-comment-statement regression; those results remain historical.
 
 ```bash
 docker run --rm -v "$PWD:/repo:ro" \
@@ -85,6 +88,8 @@ Real PostgreSQL 18.6 regressions cover:
   changed-viewer/expired cursors. A statement-completion barrier then commits a
   CUSTOM→ONLY_ME change and new private comment body: the old response returns only
   its already-authorized old body; subsequent reads deny.
+  A separate barrier after the old parent read but before the actual comment SQL
+  proves a newly private body is denied at the comment source statement itself.
 - Separate-transaction barriers and PostgreSQL `wait_event_type='Lock'` prove comment
   first versus delete/block/membership/removal, revocation first versus reaction,
   both comment reaction/deletion orders, duplicate concurrent same-type reaction,

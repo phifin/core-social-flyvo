@@ -20,11 +20,13 @@ Records 001–012 are **Accepted for implementation** as of 2026-10-08; ADR-013 
 
 Future ADRs are required before approved-follow workflows, SaaS tenancy, native-client credential transport, account merging, rich HTML/documents/video, nonchronological ranking, broker introduction, service extraction, stricter media revocation, or changes to retention/privacy guarantees. Not every new endpoint needs an ADR.
 
-## Local storage decision
+## Proposed decisions
 
 [Proposed ADR-014](014-report-user-target-proof.md) records the Phase 5 USER report
 target-proof conflict with the frozen moderation dependency DAG. It is **not
 accepted** and has not changed the production/architecture-test allowlist.
+
+## Local storage decision
 
 [ADR-013 — Maintained local object-storage distribution](013-local-object-storage-distribution.md)
 records a Phase 4 infrastructure blocker and a concrete local-storage replacement
