@@ -3,10 +3,10 @@
 ## Routing
 
 - Task: phase-4-posts-and-secure-images
-- Round: 2
-- State: READY_FOR_REVIEW
-- Last writer: development, 2026-10-11 — verified round 2 stabilization delivery
-- Next owner: main (orchestrator/reviewer)
+- Round: 3
+- State: ACCEPTED
+- Last writer: main, 2026-10-11 — independent review and Phase 4 acceptance
+- Next owner: main (activate the requested Phases 5–6 package)
 - Assignment: address P4-R3/P4-R4/P4-R5 from `8333028`; no Phase 5–6 implementation.
 - Baseline: `552c4ca99692aba277b6fee6bb91b23962d65787`; clean checkout/index before coordination.
 - Accepted Phase 3 code: `bfda6e856d42282eaccd2ed70a81f49c416f86b7`.
@@ -180,6 +180,55 @@ No Phase 5, future feed/search/notification/video/document scaffolding, acceptan
 push, external deployment, other thread or spawned agent.
 
 ## Reviewer findings and developer responses
+
+### Main review — round 3, 2026-10-11: ACCEPTED
+
+Accepted executable commit: `9bdc9996b546d73356f177759806296cea40bc43`, including
+full-delivery ancestor `12fce2f8715ff7e17920b3b1bcf6e39b9b3da311`. Reviewed delivery
+HEAD `b7ecf1c`; initial checkout/index clean. Main inspected the entire stabilization
+executable/config/test diff, affected documentation and previous review context.
+No new blocking findings. No application/test/migration changes by main.
+
+- **P4-R3 RESOLVED:** one SQL statement snapshot hydrates post and ordered relations;
+  current owner policy still authorizes it. History is capped at the authorized
+  aggregate revision. Real PG barrier tests pass for removed CUSTOM recipient then
+  private body edit (direct/batch), audience-kind switches, attachment/mention edits
+  and staff-departure/history race.
+- **P4-R4 RESOLVED for local Phase 4:** cleanup waits through persisted upload expiry
+  plus settling, with fenced durable requeue and no attempt burn. Immediate deletion
+  denies business use; confirmed purge releases quota once. Real Silo regressions
+  pass for reusable/expired PUTs, early rejection, READY deletion, purge-before-ack
+  lease loss/retry, late-write tombstone repair, bound quarantine cleanup and bounded
+  sweep/FAILED recovery window. Late SDK writes model exceptional completion, not
+  successful new uploads with expired URLs or proof of a total server deadline.
+- **P4-R5 RESOLVED:** exact full-history pinned scan passes with only the reviewed
+  historical fingerprint exception; external synthetic generic-api-key detection
+  still passes. Default rules, redaction and original scan command remain enabled.
+- **P4-R1/R2 remain RESOLVED:** Compose isolation and real signature/storage checks
+  pass in the full suite. These dispositions supersede historical OPEN wording below;
+  original findings and developer responses are preserved.
+
+Independent checks on the accepted code:
+
+- Java 21 `./mvnw -B -ntp verify`: **182 passed**, 39 unit/architecture/contract +
+  143 integration; zero failures/errors/skips. Includes 33 Phase4IT, 12 storage,
+  Compose isolation, packaged decoder and prior real PG/Mailpit suites. Log
+  `/tmp/social-core-p4-round3-main.log`, BUILD SUCCESS in 1m41s. The original process
+  continued across the user interruption and was observed to finish; no duplicate run.
+- Exact CI-pinned Gitleaks on delivery HEAD: 28 commits, zero findings. External
+  synthetic positive control PASS (expected scanner exit 1, wrapper exit 0).
+- Compose app/media config and reviewed whitespace PASS. Developer negative red
+  regressions were not independently rerun. Actual Compose startup/replay/app image
+  build remain earlier developer evidence, not fresh checks here.
+
+This accepts local behavior and contracts; production launch remains gated by
+provider compatibility, total ingress upload duration/physical storage budgets,
+decoder isolation, backup/restore and prior identity gates. Silo has no tested
+absolute total PUT deadline; settling plus periodic repair provides eventual cleanup
+of exceptional late completions. Worker/sweep throughput needs deployment measurement.
+
+The user requested continuation and larger assignments. Main may now archive this
+record, activate the planned Phases 5–6 package and push under main-only authorization.
 
 ### Full-delivery review — round 2, 2026-10-11
 
@@ -747,7 +796,10 @@ Production S3 compatibility and earlier provider/production gates remain externa
 
 ## Next action and role boundary
 
-**Current:** development addresses round-2 P4-R3–R5 in the existing Phase 4 chat.
+**Current:** Phase 4 ACCEPTED at round 3. Main archives this record and activates
+the requested Phases 5–6 package. The following older routing is historical.
+
+**Historical:** development addressed round-2 P4-R3–R5 in the existing Phase 4 chat.
 Main-only remote delivery and the larger next package are recorded above. The
 original incoming review instructions below are historical; current routing is
 READY_FOR_REVIEW to main. No Phase 5/6 activation or Phase 4 acceptance yet.

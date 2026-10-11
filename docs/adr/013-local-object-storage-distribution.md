@@ -2,8 +2,9 @@
 
 Status: **Accepted for implementation**, 2026-10-10, by main orchestrator under
 the user's request to decide the Phase 4 blocker. Runtime integration is now
-implemented and locally tested; Phase 4 remains awaiting independent main review,
-not accepted. The decision-time evidence below is historical.
+implemented and locally tested; Phase 4 was accepted by independent main review
+on 2026-10-11. Production readiness remains separately gated. Decision-time evidence
+below is historical.
 
 Scope: the Phase 4 Compose/Testcontainers storage distribution only. This
 supersedes ADR-008's local MinIO distribution choice, not its media lifecycle

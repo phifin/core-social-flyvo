@@ -1,8 +1,10 @@
 # Phase 4 — posts, privacy and secure images
 
-Complete Phase 4 implementation is locally verified and delivered for main review,
-not accepted. Actual code/handoff hashes and routing are recorded in the
-[mailbox](../agent-handoff.md). Development cannot accept a phase.
+Complete Phase 4 is **ACCEPTED by main**, 2026-10-11, after independent review of
+`9bdc9996b546d73356f177759806296cea40bc43` and its full-delivery ancestor. Independent
+full verify: 182 pass (39 unit +143 integration), no failures/errors/skips. P4-R1
+through P4-R5 are resolved; pinned full-history scan and positive control pass.
+Detailed review: [mailbox](../agent-handoff.md). Production readiness remains gated.
 Latest stabilization baseline: `8333028` (main round 2 CHANGES_REQUESTED);
 initial full-delivery resume baseline was `44bcc99`. Earlier prerequisite code `8fe7738` was a
 checkpoint only. Main accepted ADR-013 at `ab568554cf50cfa5c2024e84c90a16ed234a967c`.
@@ -55,9 +57,9 @@ limits, API/cursor/retention and operator replay refinements.
 
 ## Round 2 stabilization — P4-R3/R4/R5
 
-Findings remain OPEN until main independently checks these proposed fixes; their
-original text and per-ID developer responses remain in the mailbox. P4-R1/R2 were
-resolved by main at the latest review, not by development.
+This is the historical development stabilization report. Main resolved R3/R4/R5
+at round 3 after independent verification; R1/R2 were resolved in the preceding
+review. Original findings and responses are preserved in the review record.
 
 - R3: one READ COMMITTED statement snapshot for post/ordered recipients/media/
   mentions; batched owner authorization still applies afterward. History is capped
