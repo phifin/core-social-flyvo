@@ -1,9 +1,10 @@
 # Phase 6 — chronological source-authorized feeds
 
-Status: implemented, **READY_FOR_REVIEW (round 2)**; P56-R1 remains open pending main.
-Main independently passed all 248 package tests but reproduced empty HOME source
-queries taking ~4.8–4.9s and four concurrent queries timing out at 5s on 1M unrelated
-posts. See [main review and stabilization assignment](../agent-handoff.md).
+Status: implemented, **CHANGES_REQUESTED after main round 2**. P56-R1 resolved;
+P56-R2 is open. Main independently passed all 257 package tests and verified sparse
+source work, but the full benchmark failed: 3,199/3,200 requests succeeded; one
+pool-10 steady dense request raised CannotCreateTransactionException. See
+[main review and reliability assignment](../agent-handoff.md) for exact evidence.
 The developer delivery evidence below is retained; latency goal remains unmet.
 **Not accepted**. Phase 5's full internal gate passed before feed implementation:
 70 targeted/231 full tests at report code `19849c96307d687958ede54df0b4fbd9cbf132a7`.

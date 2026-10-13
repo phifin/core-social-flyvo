@@ -4,9 +4,9 @@
 
 - Task: phase-5-6-interactions-reports-feeds
 - Round: 2
-- State: READY_FOR_REVIEW — round 2 stabilization verified; P56-R1 pending main disposition
-- Last writer: development, 2026-10-13 — verified stabilization code 21f7a5c
-- Next owner: main — review the actual round 2 code and evidence below
+- State: CHANGES_REQUESTED — P56-R1 resolved; P56-R2 open
+- Last writer: main, 2026-10-13 — independent round 2 review and benchmark
+- Next owner: development — existing Phases 5–6 chat, reliability assignment below
 - Accepted Phase 4 code: `9bdc9996b546d73356f177759806296cea40bc43`.
 - Phase 4 acceptance commit: `26d60ce`.
 - Review history: [accepted Phase 4](handoffs/phase-4-posts-media.md); R1–R5 resolved.
@@ -15,12 +15,111 @@
 - Verified report code: `19849c96307d687958ede54df0b4fbd9cbf132a7`.
 - Round 1 feed/package code: `26dec3845f13f2f1536170b37586ea4287f20aa1`.
 - Verified round 2 stabilization code: `21f7a5c9f568666b94c892786d90c16ab202794a`.
-- Round 2 gates complete: 102 targeted/257 full tests; 3,200 benchmark requests succeed.
+- Developer round 2: 102 targeted/257 full pass; 3,200 benchmark requests succeed.
+- Main round 2: 257 full pass; independent benchmark FAIL, 3,199/3,200 succeed.
 - Dense p95 goal remains unmet; no phase acceptance or production SLA claim.
 - Full assignment: [Phases 5–6 package](work-packages/phase-5-6.md).
 - Main coordinates/reviews/pushes; the user manually opens the named development chat.
 
 ## Assignment and execution order
+
+### Main round 2 verdict — code 21f7a5c, handoff a17d448
+
+**CHANGES_REQUESTED.** Inspected the complete stabilization delta: source-driven
+HOME SQL, exact seed bound and optional complete/overflow probe, current canonical
+privacy, transaction-local JIT, V0024–V0026, plan/load instrumentation, migration
+and feed regressions. No new blocking privacy/cursor defect identified. Source
+SHA-256 manifest matches the delivered files; working tree was clean. P56-B1 stays
+resolved. P56-R1 is resolved on the independent evidence below, but the combined
+package remains unaccepted because the required load gate failed with a real
+request error (P56-R2), not merely an unmet latency goal.
+
+Actual independent checks, Java 21:
+
+- `./mvnw -B -ntp verify`: **257 PASS** (47 fast +210 integration), no failures,
+  errors or skips; BUILD SUCCESS, 2m10s. Includes 18 FeedsIT, all report/interaction,
+  prior-phase regressions and new migration upgrades. Log
+  `/tmp/social-p56-r2-main-verify.log`.
+- App/media Compose config, whitespace and source manifest pass. V0001–V0023 are
+  unchanged. Pinned default redacted Gitleaks: **42 commits, no leaks** through
+  `a17d448`; unchanged two historical fingerprints. External synthetic positive
+  control passes. Logs `/tmp/social-p56-r2-main-secrets.log` and
+  `/tmp/social-p56-r2-main-positive.log`.
+- Ran the committed heavy tool without formatting, source/config modifications or
+  concurrent Maven tests: `./mvnw -B -ntp test`
+  `-Dtest=FeedsTest,ChronologicalRankerTest,OpenApiContractTest,ArchitectureTest,PersistenceBoundaryTest`
+  `failsafe:integration-test failsafe:verify -Dit.test=FeedBenchmarkTool -Dfeed.benchmark=true`.
+  Its 14 fast prerequisites pass; the **heavy test FAILS**, BUILD FAILURE, 4m47s.
+  Log `/tmp/social-p56-r2-main-benchmark.log`; Failsafe report
+  `target/failsafe-reports/com.flyvo.socialcore.feed.FeedBenchmarkTool.txt`.
+  Logs under /tmp/target are temporary; the exact outcome is retained here.
+
+P56-R1 independent result: on the million-row fixture, both pools' no-source,
+rare-old, last-page and exhausted-continuation plans visit **0/3/1/0 post nodes**.
+All 1,200 sparse/private/overlap scenario requests succeed; no unrelated global
+scan or false exhaustion was observed. The 18 real-PG feed tests include complete
+versus overflowing window, privacy before LIMIT, source overlap and JIT rollback.
+This supports closing the original finding independently of dense reliability.
+
+#### P56-R2 — P2 OPEN: required dense load gate still loses a request
+
+Anchors: `src/test/java/com/flyvo/socialcore/feed/FeedBenchmarkTool.java:320–336`
+(request/failure capture) and `:397` (all-requests-success assertion);
+`src/main/resources/application.yml:12–16` (default pool/timeouts).
+This is an experimentally observed acceptance-gate failure. A precise production
+root-cause location is not yet established; do not label it a proven SQL timeout.
+
+Main's unchanged-code run produced **3,199/3,200 successes**. Pool 10's steady dense
+burst returned only 499/500 requests. The final assertion reports exactly
+`pool=10 scenario=post_burst_steady CannotCreateTransactionException`.
+Pool 10 first burst and both pool 50 dense bursts returned 500/500; every sparse
+scenario returned 100/100 per pool. The tool correctly fails rather than hiding
+the lost request. Do not remove or weaken that assertion.
+
+| Dense burst | Success/attempt | p95 /p99 ms (successful requests only) | Mean acquire /candidate execute ms |
+|---|---|---|---|
+| pool 10 first | 500/500 | 3115.115 /4397.559 | 761.406 /159.119 |
+| pool 10 steady | 499/500 | 2597.478 /3828.671 | 598.313 /145.258 |
+| pool 50 first | 500/500 | 2290.245 /3484.887 | 145.756 /808.015 |
+| pool 50 steady | 500/500 | 1653.215 /1809.649 | 0.491 /775.652 |
+
+The measured pool wait plus earlier developer acquisition failures make pool
+contention a plausible hypothesis, not proof of this exception's cause. The tool
+records only the wrapper class, losing cause/SQLState and failure-time pool state.
+The shared host may influence timing; neither that possibility nor a previous
+successful run makes this required failed check a pass. Dense p95 <500ms is still
+a separate unmet goal; it is not newly promoted to an absolute acceptance SLA.
+
+Required outcome and one sequential development assignment:
+
+1. Improve test-only failure diagnostics: safe cause classes/SQLState, failed
+   request timing, pool active/idle/pending/acquisition statistics and available
+   CPU/memory/DB-wait evidence. Do not print tokens, connection credentials,
+   private SQL bindings or raw user content. Retain failed attempts in measurements;
+   explicitly distinguish success-only percentiles and error rate.
+2. Establish the cause, then fix measured source-query/transaction resource usage
+   or the relevant implementation defect within the current architecture. Preserve
+   the R1 source-work fix, coherent policy, all source branches and cursor contracts.
+   Do not silently raise timeouts/pool defaults, reduce readers/requests, serialize
+   the benchmark, swallow/retry failures until green, change hardware assumptions
+   without reporting them, add caches/fan-out, or relax the all-success gate.
+   If evidence instead proves an external resource blocker or needs a materially
+   different capacity/architecture contract, report that evidence and a concrete
+   decision proposal rather than self-waiving the gate.
+3. Deliver regression coverage for the diagnosed cause; rerun targeted/full verify,
+   Compose/OpenAPI/secret checks and the complete committed benchmark on the final
+   source. Demonstrate repeatability with two consecutive final-source benchmark
+   runs at pool 10/50, retaining all outcomes, not cherry-picking successes. Record
+   both sparse physical work and dense errors/latency/acquisition. Main reviews
+   the actual outcomes before acceptance; no public capacity claim.
+
+Reuse `Develop Phases 5–6 — Interactions, Moderation & Feeds`; set IN_PROGRESS,
+increment the delivery round to 3, preserve findings and record the concrete plan.
+Commit verified fixes first, then a separate mailbox referencing real hashes and
+responding to P56-R2. Do not self-resolve, push or start Phase 7/8. Main remains
+reviewer/orchestrator; no executable changes or push were made in this review.
+
+### Historical round 1 review
 
 ### Main round 1 verdict — code 26dec38, handoff e7f9065
 
@@ -42,7 +141,12 @@ positive control passes. Logs `/tmp/social-p56-main-review-secrets.log` and
 tool/results but did not rerun its full 50-reader fixture; the independent sparse
 source probe below is separate evidence, not a replacement benchmark.
 
-#### P56-R1 — P1 OPEN: sparse/empty home feed scans unrelated global history
+#### P56-R1 — RESOLVED by main round 2 (original priority P1)
+
+Disposition 2026-10-13: source-selective work and complete/overflow proof checked
+at `21f7a5c`; all independent sparse scenarios pass with 0/3/1/0 post-node visits.
+Original finding/evidence below is preserved. New dense failure is P56-R2, not a
+reopening or a claim that R1's unrelated-history defect still exists.
 
 Anchors: `JdbcPosts.java:151–177` (feedCandidates), `Feeds.java:120–129`,
 `FeedBenchmarkTool.java:267–270`. HOME leaves the root scoped predicate empty,
@@ -585,8 +689,8 @@ and external positive control are rerun before push.
 
 ## Next action
 
-Main reviews stabilization code `21f7a5c9f568666b94c892786d90c16ab202794a` and
-the round 2 response/evidence above, including source/probe bounds, privacy/cursor
-regressions and residual dense latency gap. Preserve all findings and resolved
-P56-B1; main alone changes dispositions/accepts phases and decides publication.
-The development package is READY_FOR_REVIEW; no Phase 7 or development push.
+Development addresses P56-R2 in the existing Phases 5–6 chat using the three-part
+reliability assignment above. Preserve resolved P56-B1/P56-R1, start from code
+`21f7a5c`, inspect actual max migration V0026 and never edit applied files. Return
+verified code, complete final-source evidence and a real-hash READY_FOR_REVIEW
+handoff for round 3. No phase acceptance, next-phase activation or push yet.
