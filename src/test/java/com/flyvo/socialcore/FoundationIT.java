@@ -58,13 +58,82 @@ class FoundationIT {
                 "select count(*) from information_schema.schemata where schema_name = 'platform'",
                 Integer.class))
         .isEqualTo(1);
-    assertThat(flyway.info().applied()).hasSize(23);
+    assertThat(flyway.info().applied()).hasSize(26);
     flyway.validate();
     assertThat(flyway.migrate().migrationsExecuted).isZero();
     assertThat(entityManagerFactory.getProperties())
         .containsEntry("hibernate.hbm2ddl.auto", "validate");
     assertThat(environment.getProperty("spring.jpa.open-in-view", Boolean.class)).isFalse();
     assertThat(jdbc.queryForObject("show timezone", String.class)).isEqualTo("UTC");
+  }
+
+  @Test
+  void homeSourceIndexUpgradePreservesTwentyThreeChecksumsAndExistingPost() {
+    assertFeedIndexUpgrade(
+        "0023", 23, "content.post_personal_author", "INCLUDE (audience)", "community_id IS NULL");
+  }
+
+  @Test
+  void customSourceIndexUpgradePreservesTwentyFourChecksumsAndExistingPost() {
+    assertFeedIndexUpgrade(
+        "0024", 24, "content.post_custom_source", "INCLUDE (author_id, published_at)", "CUSTOM");
+  }
+
+  @Test
+  void communitySourceIndexUpgradePreservesTwentyFiveChecksumsAndExistingPost() {
+    assertFeedIndexUpgrade(
+        "0025", 25, "content.post_community_source", "INCLUDE (author_id)", "COMMUNITY");
+  }
+
+  private void assertFeedIndexUpgrade(
+      String target, int priorCount, String index, String... definition) {
+    var name = "feed_upgrade_" + java.util.UUID.randomUUID().toString().replace("-", "");
+    new JdbcTemplate(dataSource).execute("CREATE DATABASE " + name);
+    String url = POSTGRES.getJdbcUrl().replace("/test?", "/" + name + "?");
+    var prior =
+        Flyway.configure()
+            .dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword())
+            .target(target)
+            .load();
+    assertThat(prior.migrate().migrationsExecuted).isEqualTo(priorCount);
+    var checksums =
+        java.util.Arrays.stream(prior.info().applied())
+            .map(org.flywaydb.core.api.MigrationInfo::getChecksum)
+            .toList();
+    var sql =
+        new JdbcTemplate(
+            new org.springframework.jdbc.datasource.DriverManagerDataSource(
+                url, POSTGRES.getUsername(), POSTGRES.getPassword()));
+    var author = java.util.UUID.randomUUID();
+    var post = java.util.UUID.randomUUID();
+    sql.update(
+        "INSERT INTO account.user_account(id,status,created_at,updated_at) VALUES (?,'ACTIVE',now(),now())",
+        author);
+    sql.update(
+        "INSERT INTO content.post(id,author_id,body,audience,status,revision_number,published_at,created_at,updated_at) VALUES (?,?,'Synthetic retained post','PUBLIC','PUBLISHED',1,now(),now(),now())",
+        post,
+        author);
+    var upgrade =
+        Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(26 - priorCount);
+    upgrade.validate();
+    assertThat(
+            java.util.Arrays.stream(upgrade.info().applied())
+                .limit(priorCount)
+                .map(org.flywaydb.core.api.MigrationInfo::getChecksum)
+                .toList())
+        .isEqualTo(checksums);
+    assertThat(sql.queryForObject("SELECT body FROM content.post WHERE id=?", String.class, post))
+        .isEqualTo("Synthetic retained post");
+    assertThat(
+            sql.queryForObject(
+                "SELECT indisvalid FROM pg_index WHERE indexrelid=?::regclass",
+                Boolean.class,
+                index))
+        .isTrue();
+    assertThat(sql.queryForObject("SELECT pg_get_indexdef(?::regclass)", String.class, index))
+        .contains(definition);
+    assertThat(upgrade.migrate().migrationsExecuted).isZero();
   }
 
   @Test
@@ -84,7 +153,7 @@ class FoundationIT {
             .toList();
     var upgrade =
         Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
-    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(1);
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(4);
     upgrade.validate();
     assertThat(
             java.util.Arrays.stream(upgrade.info().applied())
@@ -111,7 +180,7 @@ class FoundationIT {
             .toList();
     var upgrade =
         Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
-    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(2);
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(5);
     upgrade.validate();
     assertThat(
             java.util.Arrays.stream(upgrade.info().applied())
@@ -159,7 +228,7 @@ class FoundationIT {
     var checksum = phaseZero.info().applied()[0].getChecksum();
     var upgrade =
         Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
-    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(22);
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(25);
     assertThat(upgrade.info().applied()[0].getChecksum()).isEqualTo(checksum);
     upgrade.validate();
   }
@@ -192,7 +261,7 @@ class FoundationIT {
         id);
     var upgrade =
         Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
-    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(9);
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(12);
     upgrade.validate();
     assertThat(
             java.util.Arrays.stream(upgrade.info().applied())
@@ -266,7 +335,7 @@ class FoundationIT {
         id);
     var upgrade =
         Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
-    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(15);
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(18);
     upgrade.validate();
     assertThat(
             java.util.Arrays.stream(upgrade.info().applied())
@@ -308,7 +377,7 @@ class FoundationIT {
         id);
     var upgrade =
         Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
-    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(12);
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(15);
     upgrade.validate();
     assertThat(
             java.util.Arrays.stream(upgrade.info().applied())

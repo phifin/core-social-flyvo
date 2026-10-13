@@ -3,6 +3,12 @@
 Status: ACTIVATED by main on 2026-10-11 at the user's request to review and continue.
 Delivery: implementation/internal package gates complete, pending main review;
 representative benchmark completed, initial p95 goal not met (see Phase 6 evidence).
+Round 2 stabilization for main's P56-R1 is READY_FOR_REVIEW: source-selective HOME SQL,
+permanent sparse/empty/deep-page regressions, default-pool and benchmark-pool
+profiling and full package gates completed (102 targeted/257 full tests; 3,200
+successful benchmark requests). Main's P56-R1 disposition remains open for review.
+Original delivery/benchmark and failed optimization evidence is retained;
+this is not acceptance or permission to alter privacy/cursor/timeout contracts.
 Phase 4 code `9bdc999` was accepted in `26d60ce`; see the fixed mailbox and
 [accepted review](../handoffs/phase-4-posts-media.md). Phase 5 interactions/reports and
 Phase 6 chronological feeds are implemented, not accepted; separate phase records

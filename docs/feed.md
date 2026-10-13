@@ -29,8 +29,8 @@ Counts are optional decoration. Do not delay authorization for an unavailable ra
 `FeedQueries` provides home/community/personal timeline. `ContentQueries` provides
 current scope authorization (also for empty feeds), database-time cutoff, lightweight
 scans and scoped authorized hydration. Only the sanctioned content SQL adapter reads
-account/graph/community views. The home source union is an EXISTS/OR union over each
-post, naturally deduplicated before pagination without a Java graph ID list; ordinary
+account/graph/community views. HOME uses indexed author/community/recipient branches,
+deduplicated before pagination without a Java graph ID list; ordinary
 content policy and mute are applied in the same candidate SQL. Follow/friend sources
 are personal-only; joined effective communities and direct CUSTOM are separate.
 
@@ -60,14 +60,68 @@ calls; the benchmark separately instruments executed JDBC statements (including 
 for actual SQL count and records actual parameterized candidate/hydration EXPLAIN.
 No hidden totals, authorization cache, feed table, Redis, fan-out or Phase 7 consumer.
 
-Feed SQL retains the common owner FACTS/ELIGIBLE predicate. Candidate traversal
-orders cutoff/seek/scope through existing indexes and parameterizes the entire
-owner proof by candidate ID beneath a LATERAL/OFFSET 0 barrier. There is no LIMIT
-before visibility: outer LIMIT stops the ordered stream after eligible keys.
-This prevents account/relationship joins from forcing a full eligible-set sort;
-it is one statement, not per-post JDBC calls. Hydration explicitly bounds the fact
-subquery to selected IDs and uses point lookups. No timeout relaxation, policy
-shortcut or new index is introduced; representative EXPLAIN is in the phase record.
+Feed SQL retains the common owner FACTS/ELIGIBLE predicate. HOME does not traverse
+unrelated global history without a work bound (P56-R1). Current sources
+are generated inside SQL from the published views; graph facts are computed once
+per author in a statement-local CTE, not cached between reads. Current author
+account activity is checked on matching post candidates before the eligible LIMIT,
+avoiding account probes for sources with no keys in the requested range. Personal branches
+seek by author, community branches by effective joined community, direct CUSTOM
+by recipient → covering CUSTOM post ID index. Cutoff/seek apply inside each branch. Canonical
+owner privacy applies before each branch's eligible LIMIT; then UNION deduplicates
+and global ordering/LIMIT selects keys. Keeping K eligible keys per source is safe:
+any discarded key already has K distinct earlier keys in that source, so cannot
+belong to global Top K even when sources overlap. No truncated candidate set
+establishes exhaustion. Sorts merge source-selective keys, not unrelated global
+history. One statement preserves a coherent current source/permission snapshot.
+The deduplicated eligible own/community/direct-CUSTOM seed also supplies a lower
+key bound when it contains at least K keys. Author branches need not read below
+that seed's Kth key: K distinct already eligible keys precede anything discarded.
+With fewer than K seed keys the bound is negative infinity and no author key is
+pruned. This is an exact Top K optimization inside the current statement, not a
+cached permission, raw-candidate cutoff or feed snapshot. Seek/cutoff precede the
+seed, so each continuation recomputes its own safe bound.
+Author sources use parameterized per-author covering-index seeks and eligible
+Top K, avoiding a sort of every followed author's whole history. A seed bound
+can shorten those seeks. No graph IDs leave PostgreSQL.
+Direct CUSTOM IDs likewise use one covering-index array seek inside PostgreSQL;
+an explicit empty-addressed-source guard prevents a post scan when no recipients
+exist. The array contains only current recipient IDs for this viewer. Owner
+privacy still precedes eligible LIMIT; no raw candidate truncation is added.
+For more than 1,000 effective author sources and an eligible seed bound, an optional
+dense-path probe reads at most 1,001 published chronology keys in that exact
+cutoff/seek/seed interval. It is used only if its count is <=1,000, proving the
+whole interval was read. Those complete keys are joined to current author sources
+and checked by canonical privacy before eligible Top K. On overflow the entire
+probe is discarded and parameterized per-author seeks supply candidates. It never infers
+exhaustion or advances a cursor from a truncated/private prefix. Empty/sparse/no-seed
+sources do not execute the probe. The cap is database work, not an exposed count,
+cached grant or new application refill budget. Regression covers complete and
+overflow paths, inactive-author denial and no lost older eligible keys.
+Explicit community/timeline retain their scoped ordered index path with per-ID
+owner proof. Hydration remains unchanged: selected-ID bounded facts, current source
+recheck and coherent body/relations. No timeout relaxation, authorization cache,
+new dependency/view is introduced. V0024 adds a covering partial personal-author
+chronology index, measured against the source-driven plan's random heap lookups.
+V0025 adds an ID-keyed covering partial CUSTOM index for addressed-ID chronology
+lookups without body heap reads. Source edge flags and denied-author sets use
+current statement-local published views, avoiding repeated pair lookups per post.
+V0026 covers community chronology/author IDs so policy facts do not force a hot
+community body heap/sort. Seed proofs reuse current candidate fields and point owner
+facts; direct CUSTOM's recipient fact is earned by the addressed CTE for that same
+viewer inside the same statement, not an assumed or cached permission. Canonical
+ELIGIBLE and final coherent source/body hydration are retained unchanged.
+Actual plans/work are in the phase record.
+
+Measured compilation refinement: HOME owner scans use transaction-local
+`set_config('jit','off',true)` before their short OLTP statement. Server/session
+defaults remain unchanged and commit/rollback restore them; real PG regression
+tests verify both paths. It is not a timeout increase, cache, changed query work
+bound or permission shortcut. The additional setting statement is included in
+actual JDBC counts. EXPLAIN tooling runs through the actual owner API in a read
+transaction before measuring, so the measured planner/execution settings match
+the application, not a benchmark-only tuning. See [PostgreSQL's JIT guidance](https://www.postgresql.org/docs/18/jit-decision.html)
+and [transaction-local settings](https://www.postgresql.org/docs/18/functions-admin.html).
 
 ## Later ranking
 

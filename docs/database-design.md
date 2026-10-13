@@ -149,8 +149,32 @@ indexes including inactive rows. Target/actor/ID/creation time cannot be reassig
 active count indexes and FK traversal indexes are explicit. No counters or new SQL
 views are added. The existing parent SQL policy is shared privately between content
 adapters; the consumer allowlist is unchanged. Reports/actions are delivered in
-V0023 below. Phase 6 reuses existing chronology/author/community, relationship and
-recipient indexes; its measured SQL refinements do not allocate a new migration.
+V0023 below. Phase 6's round 2 stabilization adds V0024's partial covering
+`post_personal_author(author_id,published_at DESC,id DESC) INCLUDE(audience)` WHERE
+PUBLISHED and community_id IS NULL. HOME seeks only current author/community/
+recipient sources; common author facts are statement-local and canonical privacy
+precedes each eligible branch LIMIT and global dedup/LIMIT. The covering index
+avoids random body heap reads/unrelated community rows on high-degree sources.
+V0025 adds `post_custom_source(id) INCLUDE(author_id,published_at)` WHERE PUBLISHED,
+community_id IS NULL and audience CUSTOM. Addressed IDs use that owner partial
+index to recover chronology without loading body heaps; canonical owner privacy
+still precedes eligible LIMIT and coherent hydration is unchanged. Current source
+edges and block/mute sets are statement-local reads of the existing published views,
+never cached grants. No data column, trigger or asynchronous source projection is added.
+V0026 covers joined-community chronology with author IDs:
+`post_community_source(community_id,published_at DESC,id DESC) INCLUDE(author_id)`
+WHERE PUBLISHED and audience COMMUNITY. It avoids hot-community heap/sort work when
+the owner proof consumes the current candidate's author fields. Own/community roots
+project only the proven status/scope plus indexed fields; direct CUSTOM's current
+addressed row supplies its recipient fact in the same statement. All other owner
+facts and the shared canonical ELIGIBLE predicate remain current, before LIMIT.
+Existing chronology/community/recipient/view indexes remain unchanged; no source
+projection, new published view or foreign-table consumer is introduced.
+The existing published chronology index may also serve a dense-source work probe
+of at most 1,001 keys inside the current eligible-seed interval. Only a complete
+<=1,000-key interval is used; overflow returns to parameterized author seeks.
+Canonical privacy precedes eligible Top K in either path. No new DDL is needed
+for that optional probe; empty/sparse/no-seed sources do not execute it.
 
 COMMENT_RETENTION redacts one deleted comment after 30 days, retaining stable identity.
 POST_RETENTION additionally redacts at most 500 descendants for a sufficiently old

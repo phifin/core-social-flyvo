@@ -137,6 +137,8 @@ public class JdbcPosts implements PostRepository {
       Instant asOf,
       Key after,
       Instant now) {
+    if (scope.mode() == ContentQueries.FeedMode.HOME)
+      return homeCandidates(viewer, limit, asOf, after, now);
     var args = new ArrayList<Object>();
     args.add(time(asOf));
     // Preserve a streamed ordered index path before the policy lookups, with no
@@ -177,6 +179,183 @@ public class JdbcPosts implements PostRepository {
             + " ORDER BY candidate.published_at DESC,candidate.id DESC LIMIT ?",
         (r, n) -> new Key(r.getObject("id", UUID.class), instant(r, "published_at")),
         args.toArray());
+  }
+
+  private String feedRange(Instant asOf, Key after, List<Object> args) {
+    args.add(time(asOf));
+    String range = " AND published_at<=?";
+    if (after != null) {
+      range += " AND (published_at,id)<(?,?)";
+      args.add(time(after.published()));
+      args.add(after.id());
+    }
+    return range;
+  }
+
+  private List<Key> homeCandidates(UUID viewer, int limit, Instant asOf, Key after, Instant now) {
+    // Measured compilation dominated this short source-selective OLTP query.
+    // Owner API reads join a transaction: LOCAL restores the server/session default
+    // at commit/rollback. No timeout, plan/work bound or authorization changes.
+    jdbc.queryForObject("SELECT set_config('jit','off',true)", String.class);
+    var args = new ArrayList<Object>();
+    args.addAll(Collections.nCopies(7, viewer));
+    // Author facts are current statement-local facts, not an authorization cache.
+    // Compute graph/viewer facts once per source; check author activity only for
+    // matching post candidates, not sources with no keys in the requested range.
+    String sourceCte =
+        """
+        WITH sources AS MATERIALIZED (
+          SELECT author_id,bool_or(following) following,bool_or(friends) friends FROM (
+            SELECT followed_id author_id,true following,false friends FROM graph_api.follows_v1 WHERE follower_id=?
+            UNION ALL SELECT high_user_id,false,true FROM graph_api.friendships_v1 WHERE low_user_id=?
+            UNION ALL SELECT low_user_id,false,true FROM graph_api.friendships_v1 WHERE high_user_id=?
+          ) edges GROUP BY author_id
+        ), denied AS MATERIALIZED (
+          SELECT blocked_id author_id FROM graph_api.blocks_v1 WHERE blocker_id=?
+          UNION SELECT blocker_id FROM graph_api.blocks_v1 WHERE blocked_id=?
+          UNION SELECT muted_id FROM graph_api.mutes_v1 WHERE muter_id=?
+        ), authors AS MATERIALIZED (
+          SELECT source.*,true viewer_active,false blocked,
+            NULL::varchar community_visibility,NULL::varchar community_status,
+            NULL::varchar membership_status,NULL::varchar membership_role,NULL::timestamptz suspended_until
+          FROM sources source
+          WHERE EXISTS(SELECT 1 FROM account_api.active_users_v1 WHERE user_id=?)
+            AND NOT EXISTS(SELECT 1 FROM denied d WHERE d.author_id=source.author_id)
+        )
+        """;
+    var authorArgs = new ArrayList<Object>();
+    authorArgs.add(viewer);
+    String authors =
+        """
+        SELECT candidate.id,candidate.published_at FROM authors source CROSS JOIN (SELECT * FROM seeded_bound WHERE NOT (SELECT use_window FROM window_mode)) bound CROSS JOIN LATERAL (
+          SELECT id,published_at FROM (
+            SELECT p.id,p.author_id,p.community_id,p.audience,p.status,p.published_at,
+              EXISTS(SELECT 1 FROM account_api.active_users_v1 a WHERE a.user_id=p.author_id) author_active,
+              source.viewer_active,source.blocked,source.following,source.friends,
+              EXISTS(SELECT 1 FROM content.post_recipient r WHERE r.post_id=p.id AND r.user_id=?) recipient,
+              source.community_visibility,source.community_status,source.membership_status,
+              source.membership_role,source.suspended_until
+            FROM (
+        """;
+    authors +=
+        "SELECT id,author_id,NULL::uuid community_id,audience,'PUBLISHED'::varchar status,published_at FROM content.post WHERE author_id=source.author_id AND community_id IS NULL AND status='PUBLISHED'"
+            + feedRange(asOf, after, authorArgs)
+            + " AND (published_at,id)>=(COALESCE(bound.published_at,'-infinity'::timestamptz),COALESCE(bound.id,'00000000-0000-0000-0000-000000000000'::uuid))"
+            + " ORDER BY published_at DESC,id DESC OFFSET 0) p) facts WHERE ";
+    var policy = policyArgs(viewer, now);
+    authorArgs.addAll(policy.subList(2, policy.size()));
+    authorArgs.add(limit);
+    authors += ELIGIBLE + " ORDER BY published_at DESC,id DESC LIMIT ?) candidate";
+
+    // A complete bounded window can join source facts without thousands of seeks.
+    // Otherwise retain source-parameterized per-author Top K; a planner-chosen
+    // global chronology filter is not an acceptable fallback on sparse history.
+    var batchedArgs = new ArrayList<Object>();
+    batchedArgs.add(viewer);
+    String batchedAuthors =
+        """
+        SELECT id,published_at FROM (
+          SELECT p.*,EXISTS(SELECT 1 FROM account_api.active_users_v1 a WHERE a.user_id=p.author_id) author_active,
+            source.viewer_active,source.blocked,source.following,source.friends,
+            EXISTS(SELECT 1 FROM content.post_recipient r WHERE r.post_id=p.id AND r.user_id=?) recipient,
+            source.community_visibility,source.community_status,source.membership_status,
+            source.membership_role,source.suspended_until
+          FROM (SELECT * FROM seeded_bound WHERE id IS NOT NULL) bound CROSS JOIN LATERAL (
+        """;
+    batchedAuthors +=
+        "SELECT id,author_id,community_id,audience,status,published_at FROM candidate_window WHERE (SELECT use_window FROM window_mode) AND community_id IS NULL) p JOIN authors source ON source.author_id=p.author_id) facts WHERE ";
+    batchedArgs.addAll(policy.subList(2, policy.size()));
+    batchedArgs.add(limit);
+    batchedAuthors += ELIGIBLE + " ORDER BY published_at DESC,id DESC LIMIT ?";
+
+    args.add(viewer);
+    args.add(time(now));
+    String communities =
+        """
+        SELECT candidate.id,candidate.published_at FROM (
+          SELECT community_id FROM community_api.memberships_v1 WHERE user_id=? AND status='ACTIVE'
+            AND (suspended_until IS NULL OR suspended_until<=?) OFFSET 0
+        ) source CROSS JOIN LATERAL (
+        """;
+    String communityRoot =
+        "(SELECT id,author_id,community_id,'COMMUNITY'::varchar audience,'PUBLISHED'::varchar status,published_at FROM content.post WHERE community_id=source.community_id AND status='PUBLISHED' AND audience='COMMUNITY'"
+            + feedRange(asOf, after, args)
+            + " ORDER BY published_at DESC,id DESC OFFSET 0)";
+    communities +=
+        authorizedHomeBranch(communityRoot, viewer, limit, now, args, false) + ") candidate";
+
+    args.add(viewer);
+    String recipients =
+        """
+        WITH addressed AS MATERIALIZED (SELECT post_id FROM content.post_recipient WHERE user_id=?)
+        """;
+    String recipientRoot =
+        "(SELECT p.* FROM (SELECT id,author_id,NULL::uuid community_id,'CUSTOM'::varchar audience,'PUBLISHED'::varchar status,published_at FROM content.post WHERE id=ANY(ARRAY(SELECT post_id FROM addressed)) AND community_id IS NULL AND audience='CUSTOM' AND status='PUBLISHED' ORDER BY id OFFSET 0) p"
+            + " WHERE EXISTS(SELECT 1 FROM addressed)"
+            + feedRange(asOf, after, args)
+            + " ORDER BY published_at DESC,id DESC OFFSET 0)";
+    recipients += authorizedHomeBranch(recipientRoot, viewer, limit, now, args, true);
+    args.add(viewer);
+    String ownRoot =
+        "(SELECT id,author_id,NULL::uuid community_id,audience,'PUBLISHED'::varchar status,published_at FROM content.post WHERE author_id=? AND community_id IS NULL AND status='PUBLISHED'"
+            + feedRange(asOf, after, args)
+            + " ORDER BY published_at DESC,id DESC OFFSET 0)";
+    String own = authorizedHomeBranch(ownRoot, viewer, limit, now, args, false);
+    args.add(limit - 1);
+    // A dense source set can cost thousands of index seeks for a tiny seed
+    // interval. Probe at most 1001 published keys. Use it ONLY if the whole
+    // interval fits (<=1000); overflow discards this probe and uses source seeks.
+    // No source/seed means no probe. Raw truncation never establishes exhaustion.
+    String window =
+        ", probe_enabled AS MATERIALIZED (SELECT bound.*,bound.id IS NOT NULL AND (SELECT count(*) FROM authors)>1000 enabled FROM seeded_bound bound),"
+            + " candidate_window AS MATERIALIZED (SELECT p.* FROM (SELECT * FROM probe_enabled WHERE enabled) bound CROSS JOIN LATERAL (SELECT id,author_id,community_id,audience,'PUBLISHED'::varchar status,published_at FROM content.post WHERE status='PUBLISHED'"
+            + feedRange(asOf, after, args)
+            + " AND (published_at,id)>=(bound.published_at,bound.id) ORDER BY published_at DESC,id DESC LIMIT 1001) p),"
+            + " window_mode AS MATERIALIZED (SELECT enabled AND (SELECT count(*) FROM candidate_window)<=1000 use_window FROM probe_enabled)";
+    args.addAll(authorArgs);
+    args.addAll(batchedArgs);
+    args.add(limit);
+    // Top K eligible keys per source suffice for global Top K: a discarded key
+    // already has K distinct earlier keys in that source. UNION deduplicates BEFORE
+    // the global limit. Eligible limits follow privacy; incomplete probes cannot
+    // return candidates or establish exhaustion.
+    return jdbc.query(
+        "SELECT candidate.id,candidate.published_at FROM ("
+            + sourceCte
+            + ", seed AS MATERIALIZED (("
+            + communities
+            + ") UNION ("
+            + recipients
+            + ") UNION ("
+            + own
+            + ")), threshold AS MATERIALIZED (SELECT id,published_at FROM seed ORDER BY published_at DESC,id DESC LIMIT 1 OFFSET ?),"
+            + " seeded_bound AS MATERIALIZED (SELECT (SELECT id FROM threshold) id,(SELECT published_at FROM threshold) published_at)"
+            + window
+            + " SELECT id,published_at FROM seed UNION ("
+            + authors
+            + ") UNION ("
+            + batchedAuthors
+            + ")) candidate ORDER BY candidate.published_at DESC,candidate.id DESC LIMIT ?",
+        (r, n) -> new Key(r.getObject("id", UUID.class), instant(r, "published_at")),
+        args.toArray());
+  }
+
+  private String authorizedHomeBranch(
+      String root, UUID viewer, int limit, Instant now, List<Object> args, boolean addressed) {
+    args.addAll(policyArgs(viewer, now));
+    args.add(viewer);
+    args.add(limit);
+    return "SELECT candidate.id,candidate.published_at FROM "
+        + root
+        + " candidate CROSS JOIN LATERAL (SELECT 1 FROM ("
+        + facts(
+            true,
+            "(SELECT candidate.id,candidate.author_id,candidate.community_id,candidate.audience,candidate.status,candidate.published_at)",
+            addressed)
+        + ") facts WHERE "
+        + ELIGIBLE
+        + " AND NOT EXISTS(SELECT 1 FROM graph_api.mutes_v1 m WHERE m.muter_id=? AND m.muted_id=facts.author_id) OFFSET 0) authorized"
+        + " ORDER BY candidate.published_at DESC,candidate.id DESC LIMIT ?";
   }
 
   public List<Post> feedLoad(
@@ -319,6 +498,10 @@ public class JdbcPosts implements PostRepository {
   }
 
   private static String facts(boolean orderedLookups, String root) {
+    return facts(orderedLookups, root, false);
+  }
+
+  private static String facts(boolean orderedLookups, String root, boolean addressed) {
     return """
       WITH viewer AS (SELECT ?::uuid id, ?::timestamptz now)
       SELECT p.id,p.author_id,p.community_id,p.audience,p.status,p.published_at,
@@ -326,7 +509,7 @@ public class JdbcPosts implements PostRepository {
         EXISTS(SELECT 1 FROM graph_api.blocks_v1 b WHERE (b.blocker_id=v.id AND b.blocked_id=p.author_id) OR (b.blocker_id=p.author_id AND b.blocked_id=v.id)) blocked,
         EXISTS(SELECT 1 FROM graph_api.follows_v1 f WHERE f.follower_id=v.id AND f.followed_id=p.author_id) following,
         EXISTS(SELECT 1 FROM graph_api.friendships_v1 f WHERE f.low_user_id=LEAST(v.id,p.author_id) AND f.high_user_id=GREATEST(v.id,p.author_id) AND v.id<>p.author_id) friends,
-        EXISTS(SELECT 1 FROM content.post_recipient r WHERE r.post_id=p.id AND r.user_id=v.id) recipient,
+        %s recipient,
         c.visibility community_visibility,c.status community_status,m.status membership_status,
         CASE WHEN c.owner_user_id=v.id THEN 'OWNER' ELSE m.role END membership_role,m.suspended_until
       FROM %s p CROSS JOIN viewer v
@@ -335,6 +518,11 @@ public class JdbcPosts implements PostRepository {
                 orderedLookups
                     ? "EXISTS(SELECT 1 FROM account_api.active_users_v1 WHERE user_id=v.id)"
                     : "(va.user_id IS NOT NULL)",
+                // Only the direct-CUSTOM root has already joined the CURRENT
+                // recipient row for this same viewer within this statement.
+                addressed
+                    ? "true"
+                    : "EXISTS(SELECT 1 FROM content.post_recipient r WHERE r.post_id=p.id AND r.user_id=v.id)",
                 root)
         + (orderedLookups
             ? """

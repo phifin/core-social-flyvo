@@ -25,6 +25,30 @@ and its test-only pool size does not change the production pool default. The ini
 50-reader p95 <500ms goal is unmet on this host; profile/tune/revalidate on target
 hardware and the actual production pool before a public latency SLA.
 
+HOME stabilization V0024–V0026 add normal transactional covering partial indexes on
+personal-author chronology/audience, CUSTOM ID/author/chronology and community
+chronology/author. Run these forward-only migrations with the DDL
+role in the controlled migration window; normal CREATE INDEX can block writes to
+content.post while building. Existing rows/constraints and V0001–V0023 are unchanged.
+No public deployment is authorized. The isolated tool now measures default pool
+10 and labeled pool 50 plus no-source/rare/private/overlap/exhausted cases, actual
+SQL rows/buffers and JDBC execution/connection-acquisition timings. Acquiring a
+connection includes pool wait; EXPLAIN separates server planning/execution. Keep
+all latency misses; do not increase timeouts or add caching to hide failures.
+
+Profiling found short HOME-query JIT compilation contributing to pool starvation even
+after source work/indexes were corrected. The owner adapter now turns JIT off
+only for the current HOME read transaction (`set_config` LOCAL); normal PG and
+pooled session defaults are unchanged and tested after commit/rollback. It adds
+one counted SQL statement per HOME scan. Five-second SQL/connection/acquisition
+timeouts and pool default 10 remain unchanged. No runtime-role DDL/extra service
+or permission cache is introduced; operator configuration is not silently changed.
+Dense HOME source unions can use a chronology interval probe capped at 1,001
+published keys when an eligible seed supplies the lower bound. Only a complete
+<=1,000-key interval is used; overflow falls back to indexed author sources.
+Empty/sparse/no-seed sources skip the probe. This adds no timeout setting or index
+and does not change the application's 100/1,000/200ms refill limits.
+
 Phase 4 [media operations](../ops/media.md) covers real local enablement, individual
 secret mounts, SDK endpoint split, bounded isolated processing, quota/reconciliation,
 lease recovery and restricted audited replay. Post/avatar APIs are implemented;

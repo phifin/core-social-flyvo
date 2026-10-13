@@ -12,6 +12,7 @@ import com.flyvo.socialcore.content.api.*;
 import com.flyvo.socialcore.content.api.ContentQueries.*;
 import com.flyvo.socialcore.content.application.port.PostRepository;
 import com.flyvo.socialcore.feed.api.FeedQueries;
+import com.flyvo.socialcore.feed.application.ChronologicalRanker;
 import com.flyvo.socialcore.graph.api.GraphCommands;
 import com.flyvo.socialcore.identity.application.port.AccessTokens;
 import com.flyvo.socialcore.moderation.api.Reports;
@@ -95,6 +96,7 @@ class FeedsIT {
   @Autowired org.springframework.transaction.PlatformTransactionManager manager;
   @MockitoSpyBean PostRepository store;
   @Autowired JdbcTemplate jdbc;
+  @Autowired tools.jackson.databind.ObjectMapper json;
   TransactionTemplate tx;
 
   @BeforeEach
@@ -226,14 +228,272 @@ class FeedsIT {
     var trace = FeedBenchmarkTool.candidateTrace;
     var plan =
         jdbc.queryForObject(
-            "EXPLAIN (FORMAT JSON) " + trace.sql(), String.class, trace.bindings().toArray());
+            "EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) " + trace.sql(),
+            String.class,
+            trace.bindings().toArray());
     var nodes = java.util.regex.Pattern.compile("\"Node Type\": \"([^\"]+)\"").matcher(plan);
     assertThat(nodes.find()).isTrue();
     assertThat(nodes.group(1)).isEqualTo("Limit");
-    assertThat(nodes.find()).isTrue();
-    assertThat(nodes.group(1))
-        .as("No full eligible-set sort before LIMIT")
-        .isEqualTo("Nested Loop");
+    assertThat(FeedBenchmarkTool.physicalPostRows(json.readTree(plan).get(0).path("Plan")))
+        .as("Only the viewer's bounded source history, not global chronology")
+        .isLessThan(120);
+    assertThat(
+            FeedBenchmarkTool.indexRows(json.readTree(plan).get(0).path("Plan"), "post_chronology"))
+        .isZero();
+  }
+
+  void unrelatedHistory(ActorContext author) {
+    jdbc.update(
+        "INSERT INTO content.post(id,author_id,body,audience,status,revision_number,published_at,created_at,updated_at) SELECT gen_random_uuid(),?,'Synthetic unrelated history','PUBLIC','PUBLISHED',1,CASE WHEN i%2=0 THEN timestamptz '2026-10-10Z' ELSE timestamptz '2010-01-01Z' END+i*interval '1 millisecond',now(),now() FROM generate_series(1,20000) i",
+        author.userId());
+    jdbc.execute("ANALYZE content.post");
+  }
+
+  void assertSourceWorkBelow(long bound) {
+    var trace = FeedBenchmarkTool.candidateTrace;
+    var plan =
+        jdbc.queryForObject(
+            "EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) " + trace.sql(),
+            String.class,
+            trace.bindings().toArray());
+    assertThat(
+            FeedBenchmarkTool.indexRows(json.readTree(plan).get(0).path("Plan"), "post_chronology"))
+        .isZero();
+    assertThat(FeedBenchmarkTool.physicalPostRows(json.readTree(plan).get(0).path("Plan")))
+        .as("Physical post rows must not grow with unrelated history")
+        .isLessThan(bound);
+  }
+
+  @Test
+  void homeJitSettingIsTransactionLocalAndRestoresAfterSuccessAndRollback() {
+    var viewer = user();
+    var initial = jdbc.queryForObject("SELECT current_setting('jit')", String.class);
+    assertThat(initial).isEqualTo("on");
+    tx.executeWithoutResult(
+        s -> {
+          content.scanCandidates(
+              viewer, new FeedScope(FeedMode.HOME, null), 100, Instant.now(), null);
+          assertThat(jdbc.queryForObject("SELECT current_setting('jit')", String.class))
+              .isEqualTo("off");
+        });
+    assertThat(jdbc.queryForObject("SELECT current_setting('jit')", String.class))
+        .isEqualTo(initial);
+    assertThatThrownBy(
+            () ->
+                tx.executeWithoutResult(
+                    s -> {
+                      content.scanCandidates(
+                          viewer, new FeedScope(FeedMode.HOME, null), 100, Instant.now(), null);
+                      assertThat(jdbc.queryForObject("SELECT current_setting('jit')", String.class))
+                          .isEqualTo("off");
+                      throw new IllegalStateException("Synthetic rollback after source query");
+                    }))
+        .isInstanceOf(IllegalStateException.class);
+    assertThat(jdbc.queryForObject("SELECT current_setting('jit')", String.class))
+        .isEqualTo(initial);
+  }
+
+  @Test
+  void eligibleSeedBoundPreservesGlobalTopKAndEveryInterleavedSourceAcrossPages() {
+    var viewer = user();
+    var followed = user();
+    var direct = user();
+    graph.follow(viewer, followed.userId(), true);
+    graph.follow(viewer, direct.userId(), true);
+    var friendship = graph.request(viewer, direct.userId());
+    graph.respond(direct, friendship.id(), "accept");
+    var joined = community(followed, "PRIVATE");
+    members.join(viewer, joined.id());
+    var expected = new HashSet<UUID>();
+    for (int branch = 0; branch < 4; branch++) {
+      UUID author =
+          branch == 0 ? viewer.userId() : branch == 2 ? direct.userId() : followed.userId();
+      UUID scope = branch == 3 ? joined.id() : null;
+      String audience =
+          branch == 0 ? "ONLY_ME" : branch == 2 ? "CUSTOM" : branch == 3 ? "COMMUNITY" : "PUBLIC";
+      int offset = branch;
+      tx.executeWithoutResult(
+          s -> {
+            var keys =
+                jdbc.query(
+                    "INSERT INTO content.post(id,author_id,community_id,body,audience,status,revision_number,published_at,created_at,updated_at) SELECT gen_random_uuid(),?,?, 'Synthetic interleaved source',?,'PUBLISHED',1,timestamptz '2026-10-10Z'+(i*4+?)*interval '1 millisecond',now(),now() FROM generate_series(1,150) i RETURNING id",
+                    (r, n) -> r.getObject("id", UUID.class),
+                    author,
+                    scope,
+                    audience,
+                    offset);
+            expected.addAll(keys);
+            if (audience.equals("CUSTOM"))
+              for (var key : keys)
+                jdbc.update(
+                    "INSERT INTO content.post_recipient(post_id,user_id) VALUES (?,?)",
+                    key,
+                    viewer.userId());
+          });
+    }
+    jdbc.update(
+        "INSERT INTO content.post(id,author_id,body,audience,status,revision_number,published_at,created_at,updated_at) SELECT gen_random_uuid(),?,'Synthetic newer denied seed','ONLY_ME','PUBLISHED',1,timestamptz '2026-10-10Z'+interval '1 day',now(),now() FROM generate_series(1,150) i",
+        direct.userId());
+    var collected = new ArrayList<UUID>();
+    String cursor = null;
+    int pages = 0;
+    do {
+      var page = feeds.home(viewer, 50, cursor);
+      collected.addAll(ids(page));
+      cursor = page.nextCursor();
+      assertThat(++pages).isLessThan(20);
+    } while (cursor != null);
+    assertThat(collected).doesNotHaveDuplicates().containsExactlyInAnyOrderElementsOf(expected);
+    var ordered =
+        jdbc.query(
+            "SELECT id FROM content.post WHERE author_id IN (?,?,?) AND body='Synthetic interleaved source' ORDER BY published_at DESC,id DESC",
+            (r, n) -> r.getObject("id", UUID.class),
+            viewer.userId(),
+            followed.userId(),
+            direct.userId());
+    assertThat(collected).containsExactlyElementsOf(ordered);
+  }
+
+  @Test
+  void denseSeedWindowIsCompleteOrFallsBackWithoutFalseExhaustionAndRechecksInactiveAuthor() {
+    var viewer = user();
+    var followed = user();
+    var unrelated = user();
+    graph.follow(viewer, followed.userId(), true);
+    var extra =
+        jdbc.query(
+            "INSERT INTO account.user_account(id,status,created_at,updated_at) SELECT gen_random_uuid(),'ACTIVE',now(),now() FROM generate_series(1,1100) i RETURNING id",
+            (r, n) -> r.getObject("id", UUID.class));
+    for (var author : extra)
+      jdbc.update(
+          "INSERT INTO graph.follow(follower_id,followed_id,created_at) VALUES (?,?,now())",
+          viewer.userId(),
+          author);
+    var own =
+        jdbc.query(
+            "INSERT INTO content.post(id,author_id,body,audience,status,revision_number,published_at,created_at,updated_at) SELECT gen_random_uuid(),?,'Synthetic window seed','ONLY_ME','PUBLISHED',1,timestamptz '2026-10-10 23:00:00Z'+i*interval '1 millisecond',now(),now() FROM generate_series(1,100) i RETURNING id,published_at",
+            (r, n) ->
+                new ContentQueries.Candidate(
+                    r.getObject("id", UUID.class),
+                    r.getObject("published_at", java.time.OffsetDateTime.class).toInstant()),
+            viewer.userId());
+    var visible =
+        jdbc.query(
+            "INSERT INTO content.post(id,author_id,body,audience,status,revision_number,published_at,created_at,updated_at) SELECT gen_random_uuid(),?,'Synthetic window followed','PUBLIC','PUBLISHED',1,timestamptz '2026-10-10 23:00:00Z'+interval '500 milliseconds'+i*interval '1 millisecond',now(),now() FROM generate_series(1,30) i RETURNING id,published_at",
+            (r, n) ->
+                new ContentQueries.Candidate(
+                    r.getObject("id", UUID.class),
+                    r.getObject("published_at", java.time.OffsetDateTime.class).toInstant()),
+            followed.userId());
+    var cutoff = Instant.parse("2026-10-10T23:00:01Z");
+    var scope = new ContentQueries.FeedScope(ContentQueries.FeedMode.HOME, null);
+    assertThat(content.scanCandidates(viewer, scope, 20, cutoff, null))
+        .containsExactlyElementsOf(
+            visible.stream().sorted(ChronologicalRanker.ORDER).limit(20).toList());
+    assertThat(chronologyProbeWork()).isBetween(1L, 1000L);
+    tx.executeWithoutResult(s -> accounts.requestDeletion(followed.userId()));
+    var expected = own.stream().sorted(ChronologicalRanker.ORDER).limit(20).toList();
+    assertThat(content.scanCandidates(viewer, scope, 20, cutoff, null))
+        .containsExactlyElementsOf(expected);
+    assertThat(chronologyProbeWork()).isBetween(1L, 1000L);
+    jdbc.update(
+        "INSERT INTO content.post(id,author_id,body,audience,status,revision_number,published_at,created_at,updated_at) SELECT gen_random_uuid(),?,'Synthetic window overflow','PUBLIC','PUBLISHED',1,timestamptz '2026-10-10 23:00:00Z'+interval '650 milliseconds'+i*interval '0.1 millisecond',now(),now() FROM generate_series(1,1200) i",
+        unrelated.userId());
+    assertThat(content.scanCandidates(viewer, scope, 20, cutoff, null))
+        .containsExactlyElementsOf(expected);
+    assertThat(chronologyProbeWork()).isEqualTo(1001);
+  }
+
+  long chronologyProbeWork() {
+    var trace = FeedBenchmarkTool.candidateTrace;
+    var plan =
+        jdbc.queryForObject(
+            "EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) " + trace.sql(),
+            String.class,
+            trace.bindings().toArray());
+    return FeedBenchmarkTool.indexRows(json.readTree(plan).get(0).path("Plan"), "post_chronology");
+  }
+
+  @Test
+  void absentSourcesUseSourceIndexesWithoutVisitingUnrelatedGlobalPosts() {
+    var viewer = user();
+    unrelatedHistory(user());
+    var page = feeds.home(viewer, 20, null);
+    assertThat(page.items()).isEmpty();
+    assertThat(page.nextCursor()).isNull();
+    assertSourceWorkBelow(10);
+  }
+
+  @Test
+  void rareOldSourceAndLastPageAndExhaustedSeekDoNotWalkUnrelatedNewerOrOlderHistory() {
+    var viewer = user();
+    var author = user();
+    unrelatedHistory(user());
+    graph.follow(viewer, author.userId(), true);
+    var a = publish(author);
+    var b = publish(author);
+    var c = publish(author);
+    jdbc.update(
+        "UPDATE content.post SET published_at=timestamptz '2020-01-01Z' WHERE author_id=?",
+        author.userId());
+    var first = feeds.home(viewer, 2, null);
+    assertThat(first.items()).hasSize(2);
+    assertThat(first.nextCursor()).isNotNull();
+    assertSourceWorkBelow(20);
+    var last = feeds.home(viewer, 2, first.nextCursor());
+    assertThat(last.items()).hasSize(1);
+    assertThat(last.nextCursor()).isNull();
+    assertThat(java.util.stream.Stream.concat(ids(first).stream(), ids(last).stream()).toList())
+        .containsExactlyInAnyOrder(a.id(), b.id(), c.id());
+    assertSourceWorkBelow(10);
+    var oldest = last.items().getFirst().post();
+    assertThat(
+            content.scanCandidates(
+                viewer,
+                new FeedScope(FeedMode.HOME, null),
+                100,
+                Instant.now(),
+                new Candidate(oldest.id(), oldest.publishedAt())))
+        .isEmpty();
+    assertSourceWorkBelow(10);
+  }
+
+  @Test
+  void privacyBeforeBranchLimitAndOverlappingSourcesBeforeGlobalLimitPreserveAllPages() {
+    var viewer = user();
+    var author = user();
+    graph.follow(viewer, author.userId(), true);
+    var friendship = graph.request(viewer, author.userId());
+    graph.respond(author, friendship.id(), "accept");
+    // More than a batch of newer private rows must not cause false exhaustion.
+    jdbc.update(
+        "INSERT INTO content.post(id,author_id,body,audience,status,revision_number,published_at,created_at,updated_at) SELECT gen_random_uuid(),?,'Synthetic private rejection','ONLY_ME','PUBLISHED',1,timestamptz '2026-10-10Z',now(),now() FROM generate_series(1,1001) i",
+        author.userId());
+    var visible = new HashSet<UUID>();
+    for (int i = 0; i < 23; i++)
+      visible.add(publish(author, "CUSTOM", null, List.of(viewer.userId())).id());
+    jdbc.update(
+        "UPDATE content.post SET published_at=timestamptz '2020-01-01Z' WHERE author_id=? AND audience='CUSTOM'",
+        author.userId());
+    var muted = user();
+    var blocked = user();
+    graph.follow(viewer, muted.userId(), true);
+    graph.mute(viewer, muted.userId(), true);
+    graph.follow(viewer, blocked.userId(), true);
+    graph.block(blocked, viewer.userId(), true);
+    publish(muted);
+    publish(blocked);
+    String cursor = null;
+    var collected = new ArrayList<UUID>();
+    int pages = 0;
+    do {
+      var page = feeds.home(viewer, 7, cursor);
+      collected.addAll(ids(page));
+      cursor = page.nextCursor();
+      assertThat(++pages).isLessThan(8);
+    } while (cursor != null);
+    assertThat(collected).doesNotHaveDuplicates().containsExactlyInAnyOrderElementsOf(visible);
+    assertThat(pages).isEqualTo(4);
   }
 
   @Test

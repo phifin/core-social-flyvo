@@ -14,7 +14,8 @@ Phase 5's content slice adds bounded roots/replies/tombstones, versioned own edi
 deletion, typed stable reactions and viewer-filtered counts. Current parent privacy
 and community write membership apply to every path; [OpenAPI](docs/api/openapi.yaml)
 documents the exact surface. V0022 adds interactions and V0023 adds reports without
-changing V0001–V0021. Reports support all four owner-proven target types, encrypted
+changing V0001–V0021. V0024–V0026 add measured HOME personal/CUSTOM/community covering indexes;
+all previously applied migrations remain unchanged. Reports support all four owner-proven target types, encrypted
 private evidence, scoped staff/global ADMIN queues and atomic actions/resolution.
 Phase 6 supplies home/community/personal timeline with source-authorized batched
 hydration, scoped expiring cursors and bounded refill. [Feed](docs/feed.md) documents

@@ -2,6 +2,7 @@ package com.flyvo.socialcore.feed;
 
 import static org.assertj.core.api.Assertions.*;
 
+import com.flyvo.socialcore.content.api.ContentCommands;
 import com.flyvo.socialcore.content.api.ContentQueries;
 import com.flyvo.socialcore.feed.api.FeedQueries;
 import com.flyvo.socialcore.platform.api.ActorContext;
@@ -27,8 +28,7 @@ import org.testcontainers.junit.jupiter.*;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /** Explicit heavy tool: not *Test/*IT, no implicit normal-suite skip or production seed. */
-@SpringBootTest(
-    properties = {"logging.level.root=WARN", "spring.datasource.hikari.maximum-pool-size=50"})
+@SpringBootTest(properties = "logging.level.root=WARN")
 @ActiveProfiles("test")
 @Testcontainers
 class FeedBenchmarkTool {
@@ -46,6 +46,9 @@ class FeedBenchmarkTool {
 
   static final AtomicLong STATEMENTS = new AtomicLong();
   static final ConcurrentHashMap<String, AtomicLong> SQL_COUNTS = new ConcurrentHashMap<>();
+  static final AtomicLong ACQUISITIONS = new AtomicLong();
+  static final AtomicLong ACQUIRE_NANOS = new AtomicLong();
+  static final ConcurrentHashMap<String, AtomicLong> EXECUTE_NANOS = new ConcurrentHashMap<>();
   static volatile Trace candidateTrace;
   static volatile Trace hydrateTrace;
 
@@ -57,7 +60,13 @@ class FeedBenchmarkTool {
     }
 
     public Connection getConnection() throws SQLException {
-      return trace(super.getConnection());
+      long start = System.nanoTime();
+      try {
+        return trace(super.getConnection());
+      } finally {
+        ACQUISITIONS.incrementAndGet();
+        ACQUIRE_NANOS.addAndGet(System.nanoTime() - start);
+      }
     }
 
     public Connection getConnection(String u, String p) throws SQLException {
@@ -83,6 +92,27 @@ class FeedBenchmarkTool {
               new Class[] {Connection.class},
               (proxy, method, args) -> {
                 var result = invoke(c, method, args);
+                if (method.getName().equals("createStatement") && result instanceof Statement st) {
+                  return Proxy.newProxyInstance(
+                      Statement.class.getClassLoader(),
+                      new Class[] {Statement.class},
+                      (p, m, a) -> {
+                        if (!m.getName().startsWith("execute")
+                            || a == null
+                            || a.length == 0
+                            || !(a[0] instanceof String sql)) return invoke(st, m, a);
+                        STATEMENTS.incrementAndGet();
+                        SQL_COUNTS.computeIfAbsent(sql, k -> new AtomicLong()).incrementAndGet();
+                        long start = System.nanoTime();
+                        try {
+                          return invoke(st, m, a);
+                        } finally {
+                          EXECUTE_NANOS
+                              .computeIfAbsent(sql, k -> new AtomicLong())
+                              .addAndGet(System.nanoTime() - start);
+                        }
+                      });
+                }
                 if (method.getName().equals("prepareStatement")
                     && args[0] instanceof String sql
                     && result instanceof PreparedStatement ps) {
@@ -104,7 +134,15 @@ class FeedBenchmarkTool {
                           if (sql.startsWith("SELECT p.*,") && sql.contains("facts WHERE"))
                             hydrateTrace = new Trace(sql, new ArrayList<>(bindings.values()));
                         }
-                        return invoke(ps, m, a);
+                        if (!m.getName().startsWith("execute")) return invoke(ps, m, a);
+                        long start = System.nanoTime();
+                        try {
+                          return invoke(ps, m, a);
+                        } finally {
+                          EXECUTE_NANOS
+                              .computeIfAbsent(sql, k -> new AtomicLong())
+                              .addAndGet(System.nanoTime() - start);
+                        }
                       });
                 }
                 return result;
@@ -129,8 +167,11 @@ class FeedBenchmarkTool {
   @Autowired JdbcTemplate jdbc;
   @Autowired FeedQueries feeds;
   @Autowired ContentQueries content;
+  @Autowired ContentCommands commands;
   @Autowired MeterRegistry metrics;
   @Autowired org.springframework.transaction.PlatformTransactionManager manager;
+  @Autowired DataSource dataSource;
+  @Autowired tools.jackson.databind.ObjectMapper json;
 
   // Deterministic synthetic UUIDs, not authentication/crypto or production seed IDs.
   UUID fixtureUser(int i) {
@@ -232,7 +273,10 @@ class FeedBenchmarkTool {
         "FEED_BENCH database_bytes="
             + jdbc.queryForObject("SELECT pg_database_size(current_database())", Long.class));
     try {
-      for (var reader : readers) assertThat(feeds.home(reader, 20, null).items()).hasSize(20);
+      for (var reader : readers) {
+        assertThat(feeds.home(reader, 20, null).items()).hasSize(20);
+        if (reader == readers.getFirst()) explain("first_warmup_candidate", candidateTrace, reader);
+      }
     } catch (RuntimeException failure) {
       if (candidateTrace != null) {
         System.out.println(
@@ -244,62 +288,88 @@ class FeedBenchmarkTool {
       }
       throw failure;
     }
-    // Preserve the first parallel burst rather than hiding pool/statement warmup.
-    // The second burst measures steady state after the same 500 real requests.
-    for (String scenario : List.of("first_burst", "post_burst_steady")) {
-      STATEMENTS.set(0);
-      SQL_COUNTS.clear();
-      double examinedStart =
-          metrics.get("feed.candidates.examined").tag("mode", "home").counter().count();
-      double returnedStart =
-          metrics.get("feed.items.returned").tag("mode", "home").counter().count();
-      var latencies = new ConcurrentLinkedQueue<Long>();
-      var barrier = new CyclicBarrier(50);
-      long measuredStart = System.nanoTime();
-      try (var pool = Executors.newFixedThreadPool(50)) {
-        var futures =
-            readers.stream()
-                .map(
-                    reader ->
-                        pool.submit(
-                            () -> {
-                              barrier.await(10, TimeUnit.SECONDS);
-                              for (int round = 0; round < 10; round++) {
-                                long start = System.nanoTime();
-                                var page = feeds.home(reader, 20, null);
-                                assertThat(page.items()).hasSize(20);
-                                latencies.add(System.nanoTime() - start);
-                              }
-                              return true;
-                            }))
-                .toList();
-        for (var future : futures) assertThat(future.get(180, TimeUnit.SECONDS)).isTrue();
+    var hikari =
+        (com.zaxxer.hikari.HikariDataSource) ((TracingDataSource) dataSource).getTargetDataSource();
+    assertThat(hikari.getMaximumPoolSize()).isEqualTo(10);
+    var loadFailures = new ConcurrentLinkedQueue<String>();
+    for (int poolSize : List.of(10, 50)) {
+      hikari.setMaximumPoolSize(poolSize);
+      System.out.println(
+          "FEED_BENCH pool_size=" + poolSize + " production_default=" + (poolSize == 10));
+      // Preserve the first parallel burst rather than hiding pool/statement warmup.
+      // The second burst measures steady state after the same 500 real requests.
+      for (String scenario : List.of("first_burst", "post_burst_steady")) {
+        STATEMENTS.set(0);
+        SQL_COUNTS.clear();
+        resetProfile();
+        double examinedStart =
+            metrics.get("feed.candidates.examined").tag("mode", "home").counter().count();
+        double returnedStart =
+            metrics.get("feed.items.returned").tag("mode", "home").counter().count();
+        var latencies = new ConcurrentLinkedQueue<Long>();
+        var barrier = new CyclicBarrier(50);
+        long measuredStart = System.nanoTime();
+        try (var pool = Executors.newFixedThreadPool(50)) {
+          var futures =
+              readers.stream()
+                  .map(
+                      reader ->
+                          pool.submit(
+                              () -> {
+                                barrier.await(10, TimeUnit.SECONDS);
+                                for (int round = 0; round < 10; round++) {
+                                  long start = System.nanoTime();
+                                  try {
+                                    var page = feeds.home(reader, 20, null);
+                                    assertThat(page.items()).hasSize(20);
+                                    latencies.add(System.nanoTime() - start);
+                                  } catch (RuntimeException failure) {
+                                    loadFailures.add(
+                                        "pool="
+                                            + poolSize
+                                            + " scenario="
+                                            + scenario
+                                            + " "
+                                            + failure.getClass().getSimpleName());
+                                  }
+                                }
+                                return true;
+                              }))
+                  .toList();
+          for (var future : futures) assertThat(future.get(180, TimeUnit.SECONDS)).isTrue();
+        }
+        long statements = STATEMENTS.get();
+        System.out.println("FEED_BENCH cumulative_request_failures=" + loadFailures.size());
+        var times = latencies.stream().sorted().toList();
+        double seconds = (System.nanoTime() - measuredStart) / 1e9;
+        double
+            examined =
+                metrics.get("feed.candidates.examined").tag("mode", "home").counter().count()
+                    - examinedStart,
+            returned =
+                metrics.get("feed.items.returned").tag("mode", "home").counter().count()
+                    - returnedStart;
+        System.out.printf(
+            Locale.ROOT,
+            "FEED_BENCH results scenario=%s requests=%d concurrent_readers=50 seconds=%.3f throughput=%.3f p50_ms=%.3f p95_ms=%.3f p99_ms=%.3f sql_per_request=%.3f examined=%.0f returned=%.0f scan_ratio=%.3f p95_target_met=%s%n",
+            scenario,
+            times.size(),
+            seconds,
+            times.size() / seconds,
+            percentile(times, .50),
+            percentile(times, .95),
+            percentile(times, .99),
+            (double) statements / times.size(),
+            examined,
+            returned,
+            examined / returned,
+            percentile(times, .95) < 500);
+        profile(scenario, times.size());
       }
-      long statements = STATEMENTS.get();
-      var times = latencies.stream().sorted().toList();
-      double seconds = (System.nanoTime() - measuredStart) / 1e9;
-      double
-          examined =
-              metrics.get("feed.candidates.examined").tag("mode", "home").counter().count()
-                  - examinedStart,
-          returned =
-              metrics.get("feed.items.returned").tag("mode", "home").counter().count()
-                  - returnedStart;
-      System.out.printf(
-          Locale.ROOT,
-          "FEED_BENCH results scenario=%s requests=%d concurrent_readers=50 seconds=%.3f throughput=%.3f p50_ms=%.3f p95_ms=%.3f p99_ms=%.3f sql_per_request=%.3f examined=%.0f returned=%.0f scan_ratio=%.3f p95_target_met=%s%n",
-          scenario,
-          times.size(),
-          seconds,
-          times.size() / seconds,
-          percentile(times, .50),
-          percentile(times, .95),
-          percentile(times, .99),
-          (double) statements / times.size(),
-          examined,
-          returned,
-          examined / returned,
-          percentile(times, .95) < 500);
+      feeds.home(readers.getFirst(), 20, null);
+      explain("dense_candidate_pool_" + poolSize, candidateTrace, readers.getFirst());
+      explain("dense_hydrate_pool_" + poolSize, hydrateTrace, readers.getFirst());
+      sparseScenarios(poolSize, readers.getFirst());
     }
     for (var mode : List.of(ContentQueries.FeedMode.COMMUNITY, ContentQueries.FeedMode.TIMELINE)) {
       UUID scope =
@@ -321,22 +391,247 @@ class FeedBenchmarkTool {
               + page.items().size());
     }
     feeds.home(readers.getFirst(), 20, null);
-    explain("home_candidate", candidateTrace);
-    explain("home_hydrate", hydrateTrace);
+    explain("home_candidate", candidateTrace, readers.getFirst());
+    explain("home_hydrate", hydrateTrace, readers.getFirst());
     System.out.println("FEED_BENCH query_shapes=" + SQL_COUNTS.size());
+    assertThat(loadFailures).as("Every measured request must succeed in both pools").isEmpty();
   }
 
   double percentile(List<Long> values, double q) {
     return values.get(Math.min(values.size() - 1, (int) Math.ceil(q * values.size()) - 1)) / 1e6;
   }
 
-  void explain(String name, Trace trace) {
+  void explain(String name, Trace trace, ActorContext actor) {
     assertThat(trace).isNotNull();
+    var tx = new TransactionTemplate(manager);
+    tx.setReadOnly(true);
     var plan =
-        jdbc.queryForObject(
-            "EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) " + trace.sql(),
-            String.class,
-            trace.bindings().toArray());
+        tx.execute(
+            s -> {
+              // Apply the actual owner path's LOCAL settings, not a copied test tuning.
+              content.scanCandidates(
+                  actor,
+                  new ContentQueries.FeedScope(ContentQueries.FeedMode.HOME, null),
+                  1,
+                  Instant.now(),
+                  null);
+              return jdbc.queryForObject(
+                  "EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) " + trace.sql(),
+                  String.class,
+                  trace.bindings().toArray());
+            });
     System.out.println("FEED_BENCH explain=" + name + " " + plan);
+  }
+
+  void resetProfile() {
+    ACQUISITIONS.set(0);
+    ACQUIRE_NANOS.set(0);
+    EXECUTE_NANOS.clear();
+  }
+
+  void profile(String scenario, int requests) {
+    double candidate =
+        EXECUTE_NANOS.entrySet().stream()
+                .filter(
+                    e -> e.getKey().startsWith("SELECT candidate.id,candidate.published_at FROM ("))
+                .mapToLong(e -> e.getValue().get())
+                .sum()
+            / 1e6
+            / requests;
+    double all = EXECUTE_NANOS.values().stream().mapToLong(AtomicLong::get).sum() / 1e6 / requests;
+    System.out.printf(
+        Locale.ROOT,
+        "FEED_BENCH profile scenario=%s acquire_calls=%d acquire_ms_per_request=%.3f candidate_execute_ms_per_request=%.3f all_sql_execute_ms_per_request=%.3f%n",
+        scenario,
+        ACQUISITIONS.get(),
+        ACQUIRE_NANOS.get() / 1e6 / requests,
+        candidate,
+        all);
+  }
+
+  void sparseScenarios(int poolSize, ActorContext dense) throws Exception {
+    // Readers beyond the original dense set have no graph/community sources.
+    if (poolSize == 10) {
+      jdbc.update(
+          "INSERT INTO account.user_account(id,status,created_at,updated_at) SELECT md5('feed-bench-user:'||i)::uuid,'ACTIVE',now(),now() FROM generate_series(20051,20055) i");
+      jdbc.update(
+          "INSERT INTO profile.profile(user_id,handle,handle_normalized,display_name,visibility,created_at,updated_at) SELECT md5('feed-bench-user:'||i)::uuid,'bench_'||i,'bench_'||i,'Synthetic sparse author','AUTHENTICATED',now(),now() FROM generate_series(20051,20055) i");
+      jdbc.update(
+          "INSERT INTO graph.follow(follower_id,followed_id,created_at) VALUES (?, ?, now())",
+          fixtureUser(20053),
+          fixtureUser(20052));
+      jdbc.update(
+          "INSERT INTO content.post(id,author_id,body,audience,status,revision_number,published_at,created_at,updated_at) SELECT md5('feed-bench-rare:'||i)::uuid,?,'Synthetic rare old source','PUBLIC','PUBLISHED',1,timestamptz '2020-01-01Z'+i*interval '1 millisecond',now(),now() FROM generate_series(1,3) i",
+          fixtureUser(20052));
+      // Most followed authors have only private personal posts; one source is muted,
+      // another blocked. These are still current owner-policy checks, not a cache.
+      jdbc.update(
+          "INSERT INTO graph.follow(follower_id,followed_id,created_at) SELECT ?,md5('feed-bench-user:'||(1+(i::bigint*7919)%20000))::uuid,now() FROM generate_series(9,1989,20) i",
+          fixtureUser(20054));
+      jdbc.update(
+          "INSERT INTO graph.mute(muter_id,muted_id,created_at) VALUES (?,?,now())",
+          fixtureUser(20054),
+          fixtureUser(11272));
+      jdbc.update(
+          "DELETE FROM graph.follow WHERE follower_id=? AND followed_id=?",
+          fixtureUser(20054),
+          fixtureUser(9652));
+      jdbc.update(
+          "INSERT INTO graph.block(blocker_id,blocked_id,created_at) VALUES (?,?,now())",
+          fixtureUser(20054),
+          fixtureUser(9652));
+      jdbc.execute("ANALYZE");
+    }
+    var empty = new ActorContext(fixtureUser(20051), UUID.randomUUID());
+    var rare = new ActorContext(fixtureUser(20053), UUID.randomUUID());
+    var rejected = new ActorContext(fixtureUser(20054), UUID.randomUUID());
+    var first = feeds.home(rare, 2, null);
+    assertThat(first.items()).hasSize(2);
+    assertThat(first.nextCursor()).isNotNull();
+    var last = feeds.home(rare, 2, first.nextCursor());
+    assertThat(last.items()).hasSize(1);
+    assertThat(last.nextCursor()).isNull();
+    // The exhausted cursor lies ABOVE all million unrelated posts, not below them.
+    // Exercise the real encrypted continuation, not a synthetic owner-API seek.
+    var deep = new ActorContext(fixtureUser(20055), UUID.randomUUID());
+    jdbc.update(
+        "INSERT INTO content.post(id,author_id,body,audience,status,revision_number,published_at,created_at,updated_at) SELECT gen_random_uuid(),?,'Synthetic exhausted source','PUBLIC','PUBLISHED',1,timestamptz '2026-10-10 00:20:00Z'+i*interval '1 millisecond',now(),now() FROM generate_series(1,2) i",
+        deep.userId());
+    var deepFirst = feeds.home(deep, 1, null);
+    assertThat(deepFirst.items()).hasSize(1);
+    assertThat(deepFirst.nextCursor()).isNotNull();
+    // A real owner mutation exhausts the previously valid continuation.
+    for (var id :
+        jdbc.queryForList(
+            "SELECT id FROM content.post WHERE author_id=? AND status='PUBLISHED'",
+            UUID.class,
+            deep.userId())) commands.delete(deep, id, 0);
+    for (String scenario :
+        List.of("no_sources", "rare_old", "last_page", "mostly_rejected", "overlap", "exhausted")) {
+      ActorContext actor =
+          switch (scenario) {
+            case "no_sources" -> empty;
+            case "rare_old", "last_page" -> rare;
+            case "exhausted" -> deep;
+            case "mostly_rejected" -> rejected;
+            default -> dense;
+          };
+      java.util.concurrent.Callable<Integer> query =
+          () -> {
+            if (scenario.equals("exhausted")) {
+              var page = feeds.home(actor, 1, deepFirst.nextCursor());
+              assertThat(page.items()).isEmpty();
+              assertThat(page.nextCursor()).isNull();
+              return 0;
+            }
+            var page =
+                feeds.home(
+                    actor,
+                    scenario.equals("last_page") ? 2 : 20,
+                    scenario.equals("last_page") ? first.nextCursor() : null);
+            int expected =
+                switch (scenario) {
+                  case "no_sources", "mostly_rejected" -> 0;
+                  case "rare_old" -> 3;
+                  case "last_page" -> 1;
+                  default -> 20;
+                };
+            assertThat(page.items()).hasSize(expected);
+            assertThat(page.items().stream().map(i -> i.post().id()).distinct().count())
+                .isEqualTo(expected);
+            if (expected < 20) assertThat(page.nextCursor()).isNull();
+            return expected;
+          };
+      var explainTx = new TransactionTemplate(manager);
+      explainTx.setReadOnly(true);
+      var plan =
+          explainTx.execute(
+              s -> {
+                try {
+                  query.call();
+                } catch (Exception e) {
+                  throw new RuntimeException(e);
+                }
+                var trace = candidateTrace;
+                return jdbc.queryForObject(
+                    "EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) " + trace.sql(),
+                    String.class,
+                    trace.bindings().toArray());
+              });
+      assertThat(indexRows(json.readTree(plan).get(0).path("Plan"), "post_chronology"))
+          .as("Dense optional probe never traverses more than 1001 unrelated keys")
+          .isLessThanOrEqualTo(1001);
+      long work = physicalPostRows(json.readTree(plan).get(0).path("Plan"));
+      if (List.of("no_sources", "rare_old", "last_page", "exhausted").contains(scenario))
+        assertThat(work)
+            .as("Source-selective physical post work on million-row history")
+            .isLessThan(100);
+      System.out.println(
+          "FEED_BENCH sparse_plan pool="
+              + poolSize
+              + " scenario="
+              + scenario
+              + " physical_post_rows="
+              + work
+              + " "
+              + plan);
+      STATEMENTS.set(0);
+      SQL_COUNTS.clear();
+      resetProfile();
+      var latencies = new ConcurrentLinkedQueue<Long>();
+      var barrier = new CyclicBarrier(50);
+      try (var executor = Executors.newFixedThreadPool(50)) {
+        var futures = new ArrayList<Future<Boolean>>();
+        for (int i = 0; i < 50; i++)
+          futures.add(
+              executor.submit(
+                  () -> {
+                    barrier.await(10, TimeUnit.SECONDS);
+                    for (int r = 0; r < 2; r++) {
+                      long start = System.nanoTime();
+                      query.call();
+                      latencies.add(System.nanoTime() - start);
+                    }
+                    return true;
+                  }));
+        for (var future : futures) assertThat(future.get(180, TimeUnit.SECONDS)).isTrue();
+      }
+      var times = latencies.stream().sorted().toList();
+      System.out.printf(
+          Locale.ROOT,
+          "FEED_BENCH sparse_results pool=%d scenario=%s requests=%d concurrent_readers=50 p50_ms=%.3f p95_ms=%.3f p99_ms=%.3f sql_per_request=%.3f%n",
+          poolSize,
+          scenario,
+          times.size(),
+          percentile(times, .5),
+          percentile(times, .95),
+          percentile(times, .99),
+          (double) STATEMENTS.get() / times.size());
+      profile(scenario, times.size());
+    }
+  }
+
+  static long physicalPostRows(tools.jackson.databind.JsonNode node) {
+    return Math.round(postVisits(node));
+  }
+
+  private static double postVisits(tools.jackson.databind.JsonNode node) {
+    double rows = 0;
+    if (node.path("Relation Name").asString().equals("post"))
+      rows +=
+          (node.path("Actual Rows").asDouble(0) + node.path("Rows Removed by Filter").asDouble(0))
+              * node.path("Actual Loops").asDouble(0);
+    for (var child : node.path("Plans")) rows += postVisits(child);
+    return rows;
+  }
+
+  static long indexRows(tools.jackson.databind.JsonNode node, String index) {
+    long rows = 0;
+    if (node.path("Index Name").asString().equals(index))
+      rows +=
+          (node.path("Actual Rows").asLong(0) + node.path("Rows Removed by Filter").asLong(0))
+              * node.path("Actual Loops").asLong(0);
+    for (var child : node.path("Plans")) rows += indexRows(child, index);
+    return rows;
   }
 }

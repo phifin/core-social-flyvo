@@ -5,6 +5,33 @@ Comments/reactions and reports/evidence/action correlation are implemented. Main
 [ADR-014](../adr/014-report-user-target-proof.md) on 2026-10-11 to unblock USER proof.
 Current routing and actual code hash: [mailbox](../agent-handoff.md).
 
+## Round 2 stabilization regression — 2026-10-13
+
+The current P56-R1 work passes the full package targeted command:
+23 fast tests plus 79 PostgreSQL integration tests (22 InteractionsIT,
+22 ReportsIT, 18 FeedsIT, 17 FoundationIT), **102 PASS**, zero failures/errors/skips.
+Log: `.local/evidence/p56-r2/package-targeted.log`. The command uses Java 21,
+`test` with
+`-Dtest=FeedsTest,ChronologicalRankerTest,OpenApiContractTest,ArchitectureTest,PersistenceBoundaryTest,ReportTest,CommentTest,PostPolicyTest`,
+then `failsafe:integration-test failsafe:verify` with
+`-Dit.test=ReportsIT,InteractionsIT,FeedsIT,FoundationIT`.
+This retains the report privacy/evidence/atomicity and interaction concurrency
+matrix below, alongside source-selective HOME and V0024–V0026 upgrade tests.
+No Phase 5 implementation/dependency/evidence-access contract is widened.
+Final Java 21 `./mvnw -B -ntp verify`: **257 PASS** (47 fast +210 integration),
+zero failures/errors/skips; `.local/evidence/p56-r2/verify.log`. This includes all
+33 Phase4IT, 12 real pinned StorageContractIT, packaged decoder/Compose secret
+isolation and the full prior identity/community/graph/report/interaction matrix.
+Formatting was applied before the final benchmark; full verify's formatting,
+Enforcer/convergence, architecture/SQL allowlist and OpenAPI gates pass.
+The final feed benchmark completes 3,200/3,200 requests on pools 10/50; separate
+[Phase 6 evidence](phase-6.md) records the remaining dense p95 goal miss and all
+failed iterations. App/media Compose, local documentation links and whitespace
+pass. Pinned redacted history through the 40-commit review baseline and external
+synthetic positive control pass with unchanged two exact fingerprints.
+Final staged/code/handoff scans and real stabilization hash are in the mailbox.
+The combined package is returned for round 2 review; neither phase is accepted.
+
 ## Report delivery and resumed verification
 
 Verified report slice `19849c96307d687958ede54df0b4fbd9cbf132a7`:
