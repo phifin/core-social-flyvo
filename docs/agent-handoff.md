@@ -3,19 +3,20 @@
 ## Routing
 
 - Task: phase-5-6-interactions-reports-feeds
-- Round: 1
-- State: CHANGES_REQUESTED — P56-R1 open; package not accepted
-- Last writer: main, 2026-10-11 — independent round 1 review
-- Next owner: development — same Phases 5–6 chat, stabilization package below
+- Round: 2
+- State: READY_FOR_REVIEW — round 2 stabilization verified; P56-R1 pending main disposition
+- Last writer: development, 2026-10-13 — verified stabilization code 21f7a5c
+- Next owner: main — review the actual round 2 code and evidence below
 - Accepted Phase 4 code: `9bdc9996b546d73356f177759806296cea40bc43`.
 - Phase 4 acceptance commit: `26d60ce`.
 - Review history: [accepted Phase 4](handoffs/phase-4-posts-media.md); R1–R5 resolved.
 - Content slice commit: `a75885e09bf752e018ccf51a6de6573dda6856e0`.
 - Prior interaction regression: `870959d876c0928898bf35d75bf48149fe3b896d`.
 - Verified report code: `19849c96307d687958ede54df0b4fbd9cbf132a7`.
-- Final feed/package code: `26dec3845f13f2f1536170b37586ea4287f20aa1`.
-- Comments/reactions/reports/feeds are implemented and verified; no phase acceptance.
-- Benchmark complete; p95 <500ms goal unmet on recorded hardware (details below).
+- Round 1 feed/package code: `26dec3845f13f2f1536170b37586ea4287f20aa1`.
+- Verified round 2 stabilization code: `21f7a5c9f568666b94c892786d90c16ab202794a`.
+- Round 2 gates complete: 102 targeted/257 full tests; 3,200 benchmark requests succeed.
+- Dense p95 goal remains unmet; no phase acceptance or production SLA claim.
 - Full assignment: [Phases 5–6 package](work-packages/phase-5-6.md).
 - Main coordinates/reviews/pushes; the user manually opens the named development chat.
 
@@ -156,7 +157,110 @@ concurrent writers, push or Phase 7 implementation.
 
 ## Implementation report and findings
 
-### Full package delivery and actual checks — 2026-10-11
+### P56-R1 developer completion response — round 2, pending main review
+
+Actual code: `21f7a5c9f568666b94c892786d90c16ab202794a`, based on main review
+`2cc3e61`. Delivered the entire stabilization package and preserved main's finding
+text/disposition. Only main resolves P56-R1 or accepts either phase. P56-B1's main
+resolution and accepted ADR-014 remain unchanged; no dependency/evidence-access
+widening, push, agents or Phase 7 work.
+
+HOME enumerates current author/community/direct-CUSTOM/own sources inside the
+approved content adapter, with V0024–V0026 measured covering owner indexes.
+Shared canonical privacy applies before eligible Top K; UNION deduplicates before
+global pagination. Eligible seed keys can bound author seeks exactly; without a
+seed the query retains per-author Top K. Direct recipient IDs are batched only
+inside PostgreSQL, guarded against an empty source. No graph IDs leave SQL.
+Current coherent body/source hydration, viewer-bound encrypted cursor, last
+examined key, source completeness, privacy/guard order and 100/1,000/200ms refill
+contracts remain. No foreign base-table read/write, applied migration edit,
+permission cache, new dependency/view, timeout increase or denial-path bypass.
+
+For >1,000 effective author sources with an eligible seed, an optional chronology
+interval probe visits at most 1,001 keys. Only a complete <=1,000-key interval may
+supply author candidates; otherwise all probe results are discarded and the query
+uses parameterized per-author seeks. Raw truncation never establishes exhaustion
+or advances a cursor. No-source/rare/no-seed paths skip the probe. The permanent
+regression checks complete/overflow paths, inactive author and exact 1,001 work;
+it caught and prevented a planner-chosen global fallback. The final million-row
+dense case overflows and uses source seeks, so the fast path is not claimed as the
+cause of its measured timings. LOCAL JIT off is an evidence-based HOME-read tuning,
+not a timeout change; real PG tests verify restoration after success/rollback.
+
+Final code checks (logs in ignored mode-700 `.local/evidence/p56-r2/`):
+
+- **102 targeted PASS**, 23 fast +79 PG (22 interactions, 22 reports, 18 feeds,
+  17 foundation), zero failures/errors/skips; `package-targeted.log`.
+- Java 21 `./mvnw -B -ntp verify`: **257 PASS**, 47 fast +210 integration,
+  zero failures/errors/skips; `verify.log`. Includes all 33 Phase4IT, 12 real pinned
+  StorageContractIT, packaged decoder/Compose secret isolation, previous modules,
+  report evidence/atomicity/revocation races, feed privacy/cursor/coherent hydration,
+  SQL/object parity and fresh/upgrade checksum/data preservation. Formatting,
+  Enforcer/convergence, architecture/SQL allowlist and OpenAPI pass, no exclusions.
+- **1 heavy benchmark +14 prerequisites PASS**, `benchmark.log`: 1M initial
+  posts/10k follows/skew/blocks/private/overlap; pool 10 then explicitly labeled
+  50; **3,200/3,200 requests succeed** with asserted result/dedup/continuation.
+  No-source/rare/last/exhausted physical post-node visits **0/3/1/0**, chronology
+  probe work zero, independent of unrelated history. Pool-10 candidate execution
+  **0.916/1.182/1.344/1.209ms**; actual plans/buffers recorded for both pools.
+  Sparse p95 pool10/50: no-source 66.929/33.264ms, rare 237.012/178.717ms,
+  last 360.020/372.195ms, exhausted 180.134/202.147ms.
+- Dense first/steady p95: pool10 **2312.281/2225.788ms**, pool50
+  **1713.901/1146.091ms**; **<500ms initial goal NOT MET in any burst**.
+  Each burst has 500 successful 20-item requests; app scan ratio 1.000;
+  actual JDBC **12 SQL/request**, including plain cutoff/JIT statements, not
+  driver wire-level transaction commands. Pool10 mean acquisition 599.893/521.472ms;
+  pool50 107.535/0.174ms. Planning/execution/buffers, hardware, fixture counts,
+  SQL/profiling definitions and all sparse/private/overlap metrics are committed
+  in separate [Phase 6 evidence](phases/phase-6.md). [Phase 5 evidence](phases/phase-5.md)
+  records current report/interaction regression gates separately.
+- App/media Compose config, local documentation links and staged/unstaged whitespace
+  pass. Source SHA-256 manifest matches final verified files. Earlier failures and
+  the previous successful load are retained, not substituted for final numbers;
+  unavailable pre-reset `/tmp` artifacts are explicitly historical.
+- CI-pinned Gitleaks8.28.0 default redacted staged code scan PASS (`staged-code.log`),
+  **41-commit full history through actual code/no leaks** (`history-code.log`).
+  Exactly the same two accepted historical fingerprints; no new exclusions/rules.
+  External synthetic generic-api-key control PASS (`secret-positive.log`), expected
+  detector exit1/wrapper0, redacted/outside git/cleaned. This separate mailbox is
+  patch-scanned and history-scanned after commit; its own hash is not embedded here.
+
+Material limitations: shared four-core/eight-thread i7/~7.5GiB host, synthetic
+fixture and a successful run do not establish production capacity or eliminate
+load variability; earlier dense acquisition failures remain in evidence. Dense
+latency goal is still unmet and requires main's residual-gap review. The work
+budget cannot interrupt the first in-flight SQL; related private/source-degree
+work remains, while unrelated history cannot cause the former empty/sparse scan.
+The optional dense probe adds at most 1,001 node visits and requires complete-window
+proof before use. Three standard transactional index builds need the controlled
+DDL window in operations docs. Weak cursor consistency, already authorized old
+responses, initial reaction serialization and accepted Phase4 provider/storage/
+decoder/key/retention/public-launch gates remain. No required local gate is unrun;
+no production/provider smoke, remote CI, deployment or SLA is claimed.
+
+### Recorded round 2 stabilization plan — initially IN_PROGRESS
+
+Clean review HEAD `2cc3e61`; executable baseline `26dec38`. Preserve main's
+P56-R1 text/disposition and resolved P56-B1. Change only the content-owned HOME
+candidate SQL: indexed author/community/recipient source branches, current owner
+privacy before each eligible LIMIT, deduplicate before global pagination. Measure
+plans before adding any index; existing maximum is V0023, new DDL would be V0024.
+No API/schema/cursor/timeout/cache/dependency change is planned. Read-only source
+and coherent hydrate remain one statement each; no new business locks or changes
+to account → community → graph → post → comment lock order.
+
+Permanent real-PG regressions will assert source-index work (not wall-clock-only)
+for no sources, rare old posts, exhausted continuation, blocked/muted/private
+sources and overlapping branches, retaining all privacy/race/cursor/parity checks.
+Expand the isolated million-row tool with these scenarios, actual EXPLAIN rows/
+buffers/SQL counts and concurrent result/progress assertions; measure default pool
+10 and explicitly labeled pool 50, dense first/steady bursts, SQL execution and
+connection acquisition waits. Then targeted package tests, formatting/full verify,
+OpenAPI/Compose, documentation checks and pinned history/patch secret scan plus
+external positive control. Commit verified stabilization and separate phase
+evidence before the real-hash READY_FOR_REVIEW mailbox. No agents/push/accept/Phase 7.
+
+### Historical round 1 package delivery and actual checks — 2026-10-11
 
 Completed the entire assignment sequentially, not a per-module handoff. Preserved
 the delivered interaction slices, implemented four-target reports at `19849c9`,
@@ -481,8 +585,8 @@ and external positive control are rerun before push.
 
 ## Next action
 
-Development resumes the existing Phases 5–6 chat and addresses P56-R1 plus the
-three-part stabilization assignment above, starting from code `26dec38` and this
-documentation-only review. Preserve all previous findings/evidence and resolved
-P56-B1. Return the full verified package for round 2; no Phase 7 or push. Main
-will review the fix and residual benchmark gap before accepting/publishing.
+Main reviews stabilization code `21f7a5c9f568666b94c892786d90c16ab202794a` and
+the round 2 response/evidence above, including source/probe bounds, privacy/cursor
+regressions and residual dense latency gap. Preserve all findings and resolved
+P56-B1; main alone changes dispositions/accepts phases and decides publication.
+The development package is READY_FOR_REVIEW; no Phase 7 or development push.
