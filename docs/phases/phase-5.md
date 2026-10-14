@@ -7,7 +7,8 @@ P56-B1/R1/R2 resolved; historical delivery reports below retain their original
 pending-review state. Production readiness is separately gated.
 Comments/reactions and reports/evidence/action correlation are implemented. Main accepted
 [ADR-014](../adr/014-report-user-target-proof.md) on 2026-10-11 to unblock USER proof.
-Current routing and actual code hash: [mailbox](../agent-handoff.md).
+Accepted code and complete review: [archive](../handoffs/phase-5-6-interactions-reports-feeds.md).
+Current task routing: [mailbox](../agent-handoff.md).
 
 ## Round 3 reliability regression — 2026-10-14
 

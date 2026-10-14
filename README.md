@@ -23,6 +23,8 @@ current-state privacy/weak consistency; [benchmark evidence](docs/phases/phase-6
 records representative load and limitations, including the unmet initial p95
 <500ms goal on local hardware, not production capacity. Phase 7
 notifications/SSE and later roadmap phases are unimplemented.
+Main has activated the [Phases 7–8 package](docs/work-packages/phase-7-8.md)
+for sequential development; this is an assignment, not implemented functionality.
 
 For sequential development/review threads, read the fixed [agent handoff](docs/agent-handoff.md) and [thread workflow](docs/thread-workflow.md).
 

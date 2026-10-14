@@ -1,6 +1,7 @@
 # Next package: interactions, reports and chronological feeds
 
 Status: ACCEPTED by main on 2026-10-14 at code `32c1b1e`; P56-B1/R1/R2 resolved.
+Complete findings and actual final checks: [accepted archive](../handoffs/phase-5-6-interactions-reports-feeds.md).
 Independent final gates: 260 tests PASS, benchmark 3,200/3,200 PASS. Dense p95
 goal remains unmet; production readiness remains separately gated. Original
 activation was 2026-10-11. The reports below preserve historical delivery state.

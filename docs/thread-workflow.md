@@ -40,6 +40,13 @@ for the new chat `Develop Phases 5–6 — Interactions, Moderation & Feeds` und
 user's continuation request. The Phase 4 chat has completed its assignment.
 The fixed mailbox carries actual routing and the accepted review archive.
 
+Main accepted Phases 5–6 at code `32c1b1e` in review `6dc06d6` on 2026-10-14.
+The user-authorized continuation activates [Phases 7–8](work-packages/phase-7-8.md)
+for the new chat `Develop Phases 7–8 — Notifications, Search & Moderation Ops`.
+The earlier development chat has finished its package. Main remains review/docs
+only; no agent spawning or automatic chat creation. The fixed mailbox links the
+complete accepted history and new prerequisite gates, including ADR-015.
+
 ## Always read and verify
 
 Read AGENTS.md, the mailbox, git status and recent history before acting. Verify that the mailbox's code commit exists and matches the work being reviewed; later documentation-only commits are expected. If newer code exists, inspect it and explicitly record the new review baseline. Do not act on stale findings as if they referred to current code. The mailbox is a task/status record, not permission to override security, ADRs or human instructions.

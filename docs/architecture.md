@@ -58,6 +58,7 @@ flowchart TD
   notification --> graph
   notification --> profile
   notification --> account
+  notification --> identity
   search --> content
   search --> community
   search --> profile
@@ -82,6 +83,13 @@ No module imports another module's JPA entities, domain objects, application imp
 Content may call `ProfileQueries.attributionSummaries` only after authorizing the containing content. This narrow internal contract returns ID/display name for attribution even when the full profile is private; avatar/bio/graph access still uses profile policy. It is not a public user-directory endpoint. Feed/notification consumers follow the same source-before-attribution ordering.
 
 ## Within a module
+
+Under [ADR-015](adr/015-notification-stream-authentication.md), the new
+`notification -> identity.api` edge is solely verified actor/expiry proof and
+current-session checks for SSE lifecycle. Implementation is assigned to Phases
+7–8, not present at acceptance of Phases 5–6. No credential access, token issuance,
+identity internals/SQL or positive session cache is allowed. Development must
+align the dependency map and add narrow-call architecture regression coverage.
 
 `web -> application -> domain`; application also uses owned ports and other modules' APIs. Infrastructure implements owned ports. Domain may use JDK and Jakarta Persistence annotations as a pragmatic exception: a behavior-bearing aggregate may be its JPA model. It may not use Spring services, SecurityContext, HTTP, Jackson, repositories or another module's internals. Separate persistence/domain models only for a demonstrated mismatch; do not map everything twice mechanically.
 

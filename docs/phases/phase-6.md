@@ -5,7 +5,8 @@ Independent verify: 260 PASS; benchmark: 16 fast +1 heavy PASS, all 3,200 reques
 on pools10/50 succeed. Dense p95 pool10 first/steady 2715.899/2267.505ms, pool50
 2316.014/1717.306ms; initial <500ms goal still unmet. Sparse physical post rows
 no-source/rare/last/exhausted remain 0/3/1/0. No production capacity/SLA claim.
-Complete main evidence and preserved failures are in the review mailbox/archive.
+Complete main evidence and preserved failures are in the
+[accepted review archive](../handoffs/phase-5-6-interactions-reports-feeds.md).
 
 Historical developer handoff: implemented, READY_FOR_REVIEW (round 3). P56-R1 resolved
 by main; P56-R2 awaits main's disposition. Round 3 passes 105 targeted/260 full
