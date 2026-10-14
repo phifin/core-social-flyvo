@@ -1,11 +1,11 @@
 # Phase 6 — chronological source-authorized feeds
 
-Status: implemented, **CHANGES_REQUESTED after main round 2**. P56-R1 resolved;
-P56-R2 is open. Main independently passed all 257 package tests and verified sparse
-source work, but the full benchmark failed: 3,199/3,200 requests succeeded; one
-pool-10 steady dense request raised CannotCreateTransactionException. See
-[main review and reliability assignment](../agent-handoff.md) for exact evidence.
-The developer delivery evidence below is retained; latency goal remains unmet.
+Status: implemented, **READY_FOR_REVIEW (round 3 reliability)**. P56-R1 resolved
+by main; P56-R2 awaits main's disposition. Round 3 passes 105 targeted/260 full
+tests and two consecutive final-source benchmarks, each 3,200/3,200 requests.
+Main's earlier independent 3,199/3,200 failure and the diagnostic baseline failure
+are retained below and in the [mailbox](../agent-handoff.md), not relabeled passes.
+The initial dense latency goal remains unmet.
 **Not accepted**. Phase 5's full internal gate passed before feed implementation:
 70 targeted/231 full tests at report code `19849c96307d687958ede54df0b4fbd9cbf132a7`.
 See [Phase 5 evidence](phase-5.md), [package](../work-packages/phase-5-6.md) and
@@ -35,6 +35,163 @@ requests, examined/returned, scan ratio, owner-query calls/duration and budget.
 No new dependency, published view, feed table/projection/cache/worker or broker.
 Round 2 adds V0024–V0026's partial covering personal-author/CUSTOM/community indexes.
 V0001–V0023 remain unchanged. Actual migration maximum is V0026.
+
+## Round 3 reliability — P56-R2
+
+Review baseline `6b90a10`, executable baseline `21f7a5c`. Main's failed
+3,199/3,200 run and R1 resolution are preserved in the mailbox. Local logs live in
+ignored mode-700 `.local/evidence/p56-r3/`; main's available failed log is copied
+there as `main-round2-benchmark.log`. No gate is self-waived.
+
+Safe test-only diagnostics were first run with production SQL/transaction/config
+unchanged (SHA-256 evidence `baseline-production.sha256`). That baseline **FAILS**:
+4/500 pool-10 first-burst acquisitions fail, overall 3,196/3,200 successes; every
+other burst/scenario succeeds. `baseline-diagnostics.log` retains all outcomes.
+The cause chain is CannotCreateTransactionException → JDBCConnectionException →
+SQLTransientConnectionException, null SQLState/vendor0, with the failure captured
+at DataSource acquisition before application SQL. Failed acquisitions take
+5,003.067ms mean (max 5,010.935ms), request elapsed 5,001.749–5,082.682ms.
+Failure-time pool: active10/idle0/total10/pending33–39. This establishes pool
+acquisition timeout, not a PostgreSQL statement timeout or a leaked connection.
+All 496 successfully acquired first-burst leases are returned; mean held
+216.062ms, max 417.723ms. At the first failure 220 leases had already been acquired
+and 210 returned while the failing request was still on its first attempt.
+Repeated full-page occupancy starves some waiters beyond 5s even though no one
+transaction lasts 5s. About 13.366ms/lease is outside explicit JDBC execution,
+including conversion/transaction machinery; it is not labeled pure CPU time.
+
+At failures CPU load is ~0.97–0.99 on the shared host; recent DB samples show
+8–9 active/runnable backends plus 1–2 idle-in-transaction/ClientRead, oldest
+transaction ~206–313ms. Heap ~66–95MB and cumulative GC ~281–313ms do not show
+a five-second JVM pause or OOM in these observations. No diagnostic DB samples
+were unavailable. Host contention contributes; it is not used to waive the gate.
+
+The fix removes the feed-owned outer page transaction; existing owner APIs own
+short read-only transactions and release connections before orchestration/cursor
+crypto. R1 SQL, all V0001–V0026, datasource/pool/timeouts, dependencies, API/cursor
+and current body/source policy remain unchanged. Coherence remains per source/body
+statement under READ COMMITTED, as before, not a frozen page. No retry/cache/
+fan-out/serialization is introduced. A real-PG regression **fails on the old
+transaction** at cursor encryption (`regression-before-fix.log`, active transaction
+true) and passes after the fix, while asserting candidate/body SQL is transactional
+and read-only and actual encrypted continuation has no missing/duplicate item.
+EXPLAIN setup now invokes the actual matching candidate or hydrate owner API,
+avoiding an inherited candidate LOCAL setting when measuring separate hydration.
+
+Diagnostics are bounded metadata only: cause types/SQLState/vendor code, pool/
+acquisition/lease counters and failed duration, JVM/host resource values and
+PostgreSQL wait aggregates. Message/SQL bindings/credentials/content are omitted;
+unit tests verify JSON redaction and cycle/length bounds. One independent observer
+connection reads no business rows/SQL text and does not supply application slots.
+Sampling every 200ms is part of both baseline/final measurements; SQL counts omit
+that observer and driver implicit transaction commands. Means use all attempts;
+percentiles explicitly use successful requests, errors are retained separately.
+
+Current final-source gates: **105 targeted PASS** (25 fast +80 PG: 22 interactions,
+22 reports, 19 feeds, 17 foundation) and **260 full verify PASS** (49 fast +211
+integration), zero failures/errors/skips. Logs `package-targeted.log`/`verify.log`;
+formatting, architecture/SQL allowlist, OpenAPI and all previous privacy/concurrency/
+storage/decoder/migration cases pass.
+
+### Final-source repeatability and delivery gates
+
+Measurements on 2026-10-13, delivery on 2026-10-14. Two consecutive complete tool
+runs **PASS**, each 16 fast prerequisites +1 heavy test, no failures/errors/skips;
+each records **3,200/3,200 successes, zero request errors**. Logs
+`benchmark-final-1.log` / `benchmark-final-2.log`, finishing at 20:06:27 /20:11:12
++07:00. Both runs execute pool10 then pool50, 50 concurrent readers, two dense
+500-request bursts and six 100-request sparse scenarios per pool. No retries,
+reduced load, concurrent Maven checks or intervening executable/config changes.
+`final-source.sha256`, `source-check-between.log` and `source-check-after.log`
+bind production feed/source/config plus all four changed/new test files to the
+same final bytes; the mailbox records the real verified code commit.
+
+Reproduce with Java21 (`JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64`, that JDK's
+`bin` first on PATH), Docker available, no concurrent Maven workload:
+
+```bash
+./mvnw -B -ntp spotless:apply test \
+  -Dtest=FeedBenchmarkDiagnosticsTest,FeedsTest,ChronologicalRankerTest,OpenApiContractTest,ArchitectureTest,PersistenceBoundaryTest,ReportTest,CommentTest,PostPolicyTest \
+  failsafe:integration-test failsafe:verify -Dit.test=ReportsIT,InteractionsIT,FeedsIT,FoundationIT
+./mvnw -B -ntp verify
+# Run this complete command twice consecutively without modifying source/config:
+./mvnw -B -ntp test \
+  -Dtest=FeedBenchmarkDiagnosticsTest,FeedsTest,ChronologicalRankerTest,OpenApiContractTest,ArchitectureTest,PersistenceBoundaryTest \
+  failsafe:integration-test failsafe:verify -Dit.test=FeedBenchmarkTool -Dfeed.benchmark=true
+```
+
+Same shared i7-1165G7 four-core/eight-thread host, 7,848,008kB physical RAM,
+JVM max 2,011,168,768 bytes, pinned PostgreSQL 18.6, fresh isolated million-post/
+10k-follow skewed fixture per run. Cgroup CPU/memory limits were unavailable;
+seed time 201.071 /206.867s, MemAvailable ~2.29 /2.67GB. Host CPU peaks ~0.99–1.00
+in dense bursts. Pool10 remains the default, pool50 the explicitly labeled
+comparison, each with one additional metadata-only observer connection. Original
+5s acquisition/statement limits and all application settings remain unchanged.
+
+Dense latency in ms (success-only; all 500 attempts succeeded in every row):
+
+| Run /pool /burst | p50 | p95 | p99 | Success/s | Acquire /candidate execute ms per attempt |
+|---|---|---|---|---|---|
+| 1 /10 /first | 1064.155 | 2018.699 | 2694.553 | 42.219 | 856.080 /160.401 |
+| 1 /10 /steady | 817.831 | 1753.182 | 2220.474 | 51.219 | 698.741 /137.400 |
+| 1 /50 /first | 1082.009 | 2042.176 | 2467.590 | 41.291 | 115.224 /751.392 |
+| 1 /50 /steady | 884.869 | 1510.017 | 1783.557 | 51.788 | 0.367 /716.670 |
+| 2 /10 /first | 947.973 | 2044.213 | 2421.286 | 44.759 | 811.483 /149.772 |
+| 2 /10 /steady | 839.050 | 1673.081 | 2188.254 | 51.002 | 694.420 /140.017 |
+| 2 /50 /first | 1119.559 | 1903.670 | 2112.712 | 41.332 | 117.845 /772.861 |
+| 2 /50 /steady | 777.742 | 1609.878 | 1851.527 | 52.669 | 0.383 /668.649 |
+
+Dense SQL is **15 statements/attempt**, 5 acquisitions/attempt, 10,000 candidates
+examined /10,000 items returned per burst (20/20 per request, metric ratio 1).
+Examined counts consumed candidates, not every prefetched key or physical SQL row;
+the bounded candidate/body batch still holds up to 100. Source SQL is unchanged;
+separate owner transactions no longer share the page-wide persistence context.
+The measured statement count includes owner/enrichment/setup queries and is not
+claimed lower than round2. Driver implicit BEGIN/COMMIT and observer SQL are
+excluded from statement counts, not from elapsed
+time. All dense counters acquired=returned=2,500 per burst, acquisitionFailures=0.
+Pool10 first/steady mean lease hold is 45.954 /38.046ms in run1 and 43.751 /38.852ms
+in run2, versus baseline 216.062 /184.227ms. These are **per lease**, not per
+request; acquisition count increases from one page lease to five owner leases.
+Maximum pool10 acquisition wait is 1,574.574 /1,378.049ms (run1 first/steady),
+1,658.211 /1,459.666ms (run2), below the unchanged 5s bound. Peak pending remains
+43 /40, so contention is reduced, not eliminated. Pool50 shifts contention to DB
+execution (CPU/runnable and BufferMapping waits); its larger pool is not the fix.
+
+All sparse scenarios return **100/100** per pool/run, zero failures. Success-only
+p95 ms and SQL statements per attempt:
+
+| Scenario | Run1 pool10 /50 | Run2 pool10 /50 | SQL/attempt |
+|---|---|---|---|
+| no_sources | 227.481 /86.451 | 263.028 /81.387 | 6 |
+| rare_old | 432.638 /238.865 | 470.607 /255.080 | 12 |
+| last_page | 500.866 /394.967 | 514.710 /431.247 | 11 |
+| mostly_rejected | 254.871 /129.782 | 273.532 /125.522 | 6 |
+| overlap | 1528.155 /1419.634 | 1592.547 /1520.010 | 15 |
+| exhausted | 241.092 /225.762 | 261.702 /242.949 | 5 |
+
+R1 physical post-node work remains **0 /3 /1 /0** for no_sources /rare_old /
+last_page /exhausted on both pools in both runs; corresponding shared hit/read
+buffers are **18/0, 43/0, 37/0, 18/0**. Their EXPLAIN execution ranges
+0.937–2.492ms (planning 3.891–8.017ms). Mostly-rejected work 4,900 and overlap
+11,598 remain source-local work, not hidden by pre-privacy LIMIT. Candidate/body
+plans and all buffers are retained in both logs. Dense candidate execution
+58.094–77.705ms and hydrate 3.436–4.628ms are serial EXPLAIN observations, not
+50-reader request latency. Both runs' captured plans have no JIT compilation;
+the original transaction-local candidate setting and restoration regression remain.
+Every diagnostic phase reports zero unavailable DB samples and no unreturned
+leases/acquisition errors. Sampling can miss brief waits and is not a complete trace.
+
+App/media Compose config, changed-doc local links and whitespace pass. Pinned
+default redacted Gitleaks scans 43 baseline commits with no leaks; external
+synthetic positive control passes, only the two accepted historical fingerprints
+remain. Staged/final history scans and actual commit routing are in the mailbox.
+No source/API/schema/dependency/permission or migration change beyond the read
+transaction boundary; no production diagnostics endpoint or launch-capacity claim.
+**Dense p95 <500ms is still unmet in all eight bursts** (and pool10 last-page /
+overlap can exceed 500ms). All-success reliability now passes twice, but this
+synthetic shared-host evidence is not an SLA or phase acceptance. Failed baseline,
+negative regression and main's failed run remain available alongside both passes.
 
 ## Round 2 stabilization — P56-R1
 

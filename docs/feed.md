@@ -41,6 +41,15 @@ newer text using an old grant. Profile attribution and engagement are batched af
 eligibility. Media descriptors are not capabilities. Engagement is optional/null
 if its source becomes inaccessible after the coherent body statement.
 
+Round 3 read-resource refinement: feed orchestration does not start a page-wide
+transaction. Each content/engagement owner API retains its short read transaction;
+sorting, cursor crypto and metrics do not retain that transaction's connection.
+Coherent source/body authorization is the same single-statement snapshot, not a
+page-wide or cross-page snapshot. Caller-owned transactions still follow the owner
+APIs' normal REQUIRED semantics. Command transactions/guard order are unchanged.
+This reduces repeated whole-page pool occupancy without changing source SQL,
+cursor/refill/privacy, pool sizes/timeouts, authorization caching or API contracts.
+
 Cursors use existing authenticated encryption (integrity plus concealment), binding
 viewer/mode/scope/requested size. Cutoff is PostgreSQL clock_timestamp(), expiry is
 fixed at first-page time +30 minutes and never renewed during traversal. The concrete

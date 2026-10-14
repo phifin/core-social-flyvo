@@ -62,7 +62,10 @@ class FeedBenchmarkTool {
     public Connection getConnection() throws SQLException {
       long start = System.nanoTime();
       try {
-        return trace(super.getConnection());
+        return trace(super.getConnection(), start);
+      } catch (SQLException failure) {
+        FeedBenchmarkDiagnostics.failedAcquire(System.nanoTime() - start);
+        throw failure;
       } finally {
         ACQUISITIONS.incrementAndGet();
         ACQUIRE_NANOS.addAndGet(System.nanoTime() - start);
@@ -70,7 +73,16 @@ class FeedBenchmarkTool {
     }
 
     public Connection getConnection(String u, String p) throws SQLException {
-      return trace(super.getConnection(u, p));
+      long start = System.nanoTime();
+      try {
+        return trace(super.getConnection(u, p), start);
+      } catch (SQLException failure) {
+        FeedBenchmarkDiagnostics.failedAcquire(System.nanoTime() - start);
+        throw failure;
+      } finally {
+        ACQUISITIONS.incrementAndGet();
+        ACQUIRE_NANOS.addAndGet(System.nanoTime() - start);
+      }
     }
 
     public void close() throws Exception {
@@ -85,12 +97,20 @@ class FeedBenchmarkTool {
       }
     }
 
-    Connection trace(Connection c) {
+    Connection trace(Connection c, long started) {
+      long lease = FeedBenchmarkDiagnostics.borrowed(System.nanoTime() - started);
       return (Connection)
           Proxy.newProxyInstance(
               Connection.class.getClassLoader(),
               new Class[] {Connection.class},
               (proxy, method, args) -> {
+                if (method.getName().equals("close")) {
+                  try {
+                    return invoke(c, method, args);
+                  } finally {
+                    FeedBenchmarkDiagnostics.released(lease);
+                  }
+                }
                 var result = invoke(c, method, args);
                 if (method.getName().equals("createStatement") && result instanceof Statement st) {
                   return Proxy.newProxyInstance(
@@ -107,6 +127,7 @@ class FeedBenchmarkTool {
                         try {
                           return invoke(st, m, a);
                         } finally {
+                          FeedBenchmarkDiagnostics.executed(System.nanoTime() - start);
                           EXECUTE_NANOS
                               .computeIfAbsent(sql, k -> new AtomicLong())
                               .addAndGet(System.nanoTime() - start);
@@ -139,6 +160,7 @@ class FeedBenchmarkTool {
                         try {
                           return invoke(ps, m, a);
                         } finally {
+                          FeedBenchmarkDiagnostics.executed(System.nanoTime() - start);
                           EXECUTE_NANOS
                               .computeIfAbsent(sql, k -> new AtomicLong())
                               .addAndGet(System.nanoTime() - start);
@@ -306,70 +328,94 @@ class FeedBenchmarkTool {
             metrics.get("feed.candidates.examined").tag("mode", "home").counter().count();
         double returnedStart =
             metrics.get("feed.items.returned").tag("mode", "home").counter().count();
-        var latencies = new ConcurrentLinkedQueue<Long>();
-        var barrier = new CyclicBarrier(50);
-        long measuredStart = System.nanoTime();
-        try (var pool = Executors.newFixedThreadPool(50)) {
-          var futures =
-              readers.stream()
-                  .map(
-                      reader ->
-                          pool.submit(
-                              () -> {
-                                barrier.await(10, TimeUnit.SECONDS);
-                                for (int round = 0; round < 10; round++) {
-                                  long start = System.nanoTime();
-                                  try {
-                                    var page = feeds.home(reader, 20, null);
-                                    assertThat(page.items()).hasSize(20);
-                                    latencies.add(System.nanoTime() - start);
-                                  } catch (RuntimeException failure) {
-                                    loadFailures.add(
-                                        "pool="
-                                            + poolSize
-                                            + " scenario="
-                                            + scenario
-                                            + " "
-                                            + failure.getClass().getSimpleName());
+        try (var diagnostic = new FeedBenchmarkDiagnostics(hikari, observationConnection())) {
+          int failuresBefore = loadFailures.size();
+          var latencies = new ConcurrentLinkedQueue<Long>();
+          var barrier = new CyclicBarrier(50);
+          long measuredStart = System.nanoTime();
+          try (var pool = Executors.newFixedThreadPool(50)) {
+            var futures =
+                readers.stream()
+                    .map(
+                        reader ->
+                            pool.submit(
+                                () -> {
+                                  barrier.await(10, TimeUnit.SECONDS);
+                                  for (int round = 0; round < 10; round++) {
+                                    long start = System.nanoTime();
+                                    try {
+                                      var page = feeds.home(reader, 20, null);
+                                      assertThat(page.items()).hasSize(20);
+                                      latencies.add(System.nanoTime() - start);
+                                    } catch (RuntimeException failure) {
+                                      System.out.println(
+                                          "FEED_BENCH failure="
+                                              + json.writeValueAsString(
+                                                  diagnostic.failure(
+                                                      poolSize, scenario, round + 1, start,
+                                                      failure)));
+                                      loadFailures.add(
+                                          "pool="
+                                              + poolSize
+                                              + " scenario="
+                                              + scenario
+                                              + " "
+                                              + failure.getClass().getSimpleName());
+                                    }
                                   }
-                                }
-                                return true;
-                              }))
-                  .toList();
-          for (var future : futures) assertThat(future.get(180, TimeUnit.SECONDS)).isTrue();
+                                  return true;
+                                }))
+                    .toList();
+            for (var future : futures) assertThat(future.get(180, TimeUnit.SECONDS)).isTrue();
+          }
+          long statements = STATEMENTS.get();
+          System.out.println("FEED_BENCH cumulative_request_failures=" + loadFailures.size());
+          System.out.printf(
+              Locale.ROOT,
+              "FEED_BENCH outcomes pool=%d scenario=%s attempts=500 successes=%d failures=%d error_rate=%.6f percentiles=success_only%n",
+              poolSize,
+              scenario,
+              latencies.size(),
+              loadFailures.size() - failuresBefore,
+              (loadFailures.size() - failuresBefore) / 500.0);
+          var times = latencies.stream().sorted().toList();
+          double seconds = (System.nanoTime() - measuredStart) / 1e9;
+          double
+              examined =
+                  metrics.get("feed.candidates.examined").tag("mode", "home").counter().count()
+                      - examinedStart,
+              returned =
+                  metrics.get("feed.items.returned").tag("mode", "home").counter().count()
+                      - returnedStart;
+          System.out.printf(
+              Locale.ROOT,
+              "FEED_BENCH results scenario=%s requests=%d concurrent_readers=50 seconds=%.3f throughput=%.3f p50_ms=%.3f p95_ms=%.3f p99_ms=%.3f sql_per_attempt=%.3f examined=%.0f returned=%.0f scan_ratio=%.3f p95_target_met=%s%n",
+              scenario,
+              times.size(),
+              seconds,
+              times.size() / seconds,
+              percentile(times, .50),
+              percentile(times, .95),
+              percentile(times, .99),
+              (double) statements / 500,
+              examined,
+              returned,
+              examined / returned,
+              percentile(times, .95) < 500);
+          profile(scenario, 500);
+          System.out.println(
+              "FEED_BENCH diagnostics pool="
+                  + poolSize
+                  + " scenario="
+                  + scenario
+                  + " "
+                  + json.writeValueAsString(diagnostic.summary()));
         }
-        long statements = STATEMENTS.get();
-        System.out.println("FEED_BENCH cumulative_request_failures=" + loadFailures.size());
-        var times = latencies.stream().sorted().toList();
-        double seconds = (System.nanoTime() - measuredStart) / 1e9;
-        double
-            examined =
-                metrics.get("feed.candidates.examined").tag("mode", "home").counter().count()
-                    - examinedStart,
-            returned =
-                metrics.get("feed.items.returned").tag("mode", "home").counter().count()
-                    - returnedStart;
-        System.out.printf(
-            Locale.ROOT,
-            "FEED_BENCH results scenario=%s requests=%d concurrent_readers=50 seconds=%.3f throughput=%.3f p50_ms=%.3f p95_ms=%.3f p99_ms=%.3f sql_per_request=%.3f examined=%.0f returned=%.0f scan_ratio=%.3f p95_target_met=%s%n",
-            scenario,
-            times.size(),
-            seconds,
-            times.size() / seconds,
-            percentile(times, .50),
-            percentile(times, .95),
-            percentile(times, .99),
-            (double) statements / times.size(),
-            examined,
-            returned,
-            examined / returned,
-            percentile(times, .95) < 500);
-        profile(scenario, times.size());
       }
       feeds.home(readers.getFirst(), 20, null);
       explain("dense_candidate_pool_" + poolSize, candidateTrace, readers.getFirst());
       explain("dense_hydrate_pool_" + poolSize, hydrateTrace, readers.getFirst());
-      sparseScenarios(poolSize, readers.getFirst());
+      sparseScenarios(poolSize, readers.getFirst(), loadFailures, hikari);
     }
     for (var mode : List.of(ContentQueries.FeedMode.COMMUNITY, ContentQueries.FeedMode.TIMELINE)) {
       UUID scope =
@@ -398,6 +444,7 @@ class FeedBenchmarkTool {
   }
 
   double percentile(List<Long> values, double q) {
+    if (values.isEmpty()) return Double.NaN;
     return values.get(Math.min(values.size() - 1, (int) Math.ceil(q * values.size()) - 1)) / 1e6;
   }
 
@@ -409,12 +456,17 @@ class FeedBenchmarkTool {
         tx.execute(
             s -> {
               // Apply the actual owner path's LOCAL settings, not a copied test tuning.
-              content.scanCandidates(
-                  actor,
-                  new ContentQueries.FeedScope(ContentQueries.FeedMode.HOME, null),
-                  1,
-                  Instant.now(),
-                  null);
+              var scope = new ContentQueries.FeedScope(ContentQueries.FeedMode.HOME, null);
+              if (trace.sql().startsWith("SELECT p.*,")) {
+                var probe =
+                    trace.bindings().stream()
+                        .filter(UUID.class::isInstance)
+                        .map(UUID.class::cast)
+                        .filter(id -> !id.equals(actor.userId()))
+                        .findFirst()
+                        .orElseThrow();
+                content.hydrateAuthorized(actor, scope, List.of(probe));
+              } else content.scanCandidates(actor, scope, 1, Instant.now(), null);
               return jdbc.queryForObject(
                   "EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) " + trace.sql(),
                   String.class,
@@ -424,9 +476,24 @@ class FeedBenchmarkTool {
   }
 
   void resetProfile() {
+    FeedBenchmarkDiagnostics.reset();
     ACQUISITIONS.set(0);
     ACQUIRE_NANOS.set(0);
     EXECUTE_NANOS.clear();
+  }
+
+  Connection observationConnection() {
+    var properties = new Properties();
+    properties.setProperty("user", PG.getUsername());
+    properties.setProperty("password", PG.getPassword());
+    properties.setProperty("connectTimeout", "2");
+    properties.setProperty("socketTimeout", "2");
+    try {
+      return DriverManager.getConnection(PG.getJdbcUrl(), properties);
+    } catch (SQLException failure) {
+      throw new IllegalStateException(
+          "DIAGNOSTIC_CONNECTION_UNAVAILABLE " + FeedBenchmarkDiagnostics.causes(failure));
+    }
   }
 
   void profile(String scenario, int requests) {
@@ -441,7 +508,7 @@ class FeedBenchmarkTool {
     double all = EXECUTE_NANOS.values().stream().mapToLong(AtomicLong::get).sum() / 1e6 / requests;
     System.out.printf(
         Locale.ROOT,
-        "FEED_BENCH profile scenario=%s acquire_calls=%d acquire_ms_per_request=%.3f candidate_execute_ms_per_request=%.3f all_sql_execute_ms_per_request=%.3f%n",
+        "FEED_BENCH profile scenario=%s acquire_calls=%d acquire_ms_per_attempt=%.3f candidate_execute_ms_per_attempt=%.3f all_sql_execute_ms_per_attempt=%.3f%n",
         scenario,
         ACQUISITIONS.get(),
         ACQUIRE_NANOS.get() / 1e6 / requests,
@@ -449,7 +516,12 @@ class FeedBenchmarkTool {
         all);
   }
 
-  void sparseScenarios(int poolSize, ActorContext dense) throws Exception {
+  void sparseScenarios(
+      int poolSize,
+      ActorContext dense,
+      ConcurrentLinkedQueue<String> loadFailures,
+      com.zaxxer.hikari.HikariDataSource hikari)
+      throws Exception {
     // Readers beyond the original dense set have no graph/community sources.
     if (poolSize == 10) {
       jdbc.update(
@@ -578,36 +650,69 @@ class FeedBenchmarkTool {
       STATEMENTS.set(0);
       SQL_COUNTS.clear();
       resetProfile();
-      var latencies = new ConcurrentLinkedQueue<Long>();
-      var barrier = new CyclicBarrier(50);
-      try (var executor = Executors.newFixedThreadPool(50)) {
-        var futures = new ArrayList<Future<Boolean>>();
-        for (int i = 0; i < 50; i++)
-          futures.add(
-              executor.submit(
-                  () -> {
-                    barrier.await(10, TimeUnit.SECONDS);
-                    for (int r = 0; r < 2; r++) {
-                      long start = System.nanoTime();
-                      query.call();
-                      latencies.add(System.nanoTime() - start);
-                    }
-                    return true;
-                  }));
-        for (var future : futures) assertThat(future.get(180, TimeUnit.SECONDS)).isTrue();
+      try (var diagnostic = new FeedBenchmarkDiagnostics(hikari, observationConnection())) {
+        int failuresBefore = loadFailures.size();
+        var latencies = new ConcurrentLinkedQueue<Long>();
+        var barrier = new CyclicBarrier(50);
+        try (var executor = Executors.newFixedThreadPool(50)) {
+          var futures = new ArrayList<Future<Boolean>>();
+          for (int i = 0; i < 50; i++)
+            futures.add(
+                executor.submit(
+                    () -> {
+                      barrier.await(10, TimeUnit.SECONDS);
+                      for (int r = 0; r < 2; r++) {
+                        long start = System.nanoTime();
+                        try {
+                          query.call();
+                          latencies.add(System.nanoTime() - start);
+                        } catch (Exception failure) {
+                          System.out.println(
+                              "FEED_BENCH failure="
+                                  + json.writeValueAsString(
+                                      diagnostic.failure(
+                                          poolSize, scenario, r + 1, start, failure)));
+                          loadFailures.add(
+                              "pool="
+                                  + poolSize
+                                  + " scenario="
+                                  + scenario
+                                  + " "
+                                  + failure.getClass().getSimpleName());
+                        }
+                      }
+                      return true;
+                    }));
+          for (var future : futures) assertThat(future.get(180, TimeUnit.SECONDS)).isTrue();
+        }
+        var times = latencies.stream().sorted().toList();
+        System.out.printf(
+            Locale.ROOT,
+            "FEED_BENCH outcomes pool=%d scenario=%s attempts=100 successes=%d failures=%d error_rate=%.6f percentiles=success_only%n",
+            poolSize,
+            scenario,
+            times.size(),
+            loadFailures.size() - failuresBefore,
+            (loadFailures.size() - failuresBefore) / 100.0);
+        System.out.printf(
+            Locale.ROOT,
+            "FEED_BENCH sparse_results pool=%d scenario=%s requests=%d concurrent_readers=50 p50_ms=%.3f p95_ms=%.3f p99_ms=%.3f sql_per_attempt=%.3f%n",
+            poolSize,
+            scenario,
+            times.size(),
+            percentile(times, .5),
+            percentile(times, .95),
+            percentile(times, .99),
+            (double) STATEMENTS.get() / 100);
+        profile(scenario, 100);
+        System.out.println(
+            "FEED_BENCH diagnostics pool="
+                + poolSize
+                + " scenario="
+                + scenario
+                + " "
+                + json.writeValueAsString(diagnostic.summary()));
       }
-      var times = latencies.stream().sorted().toList();
-      System.out.printf(
-          Locale.ROOT,
-          "FEED_BENCH sparse_results pool=%d scenario=%s requests=%d concurrent_readers=50 p50_ms=%.3f p95_ms=%.3f p99_ms=%.3f sql_per_request=%.3f%n",
-          poolSize,
-          scenario,
-          times.size(),
-          percentile(times, .5),
-          percentile(times, .95),
-          percentile(times, .99),
-          (double) STATEMENTS.get() / times.size());
-      profile(scenario, times.size());
     }
   }
 

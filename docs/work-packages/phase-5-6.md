@@ -3,10 +3,17 @@
 Status: ACTIVATED by main on 2026-10-11 at the user's request to review and continue.
 Delivery: implementation/internal package gates complete, pending main review;
 representative benchmark completed, initial p95 goal not met (see Phase 6 evidence).
-Round 2 stabilization for main's P56-R1 is READY_FOR_REVIEW: source-selective HOME SQL,
+Main resolved P56-R1 in review `6b90a10`; P56-R2 reliability is READY_FOR_REVIEW
+(round3), not self-resolved. Evidence identifies 5s acquisition starvation under
+the page-wide transaction; existing owner APIs now hold short read transactions.
+Final gates: 105 targeted/260 full tests PASS and two consecutive pool10/50
+benchmarks, each 3,200/3,200 requests PASS. Diagnostics, failed baseline, exact
+measurements and remaining latency gap are in the separate phase records/mailbox.
+The round2 developer delivery below is historical, not the current reliability gate.
+Round 2 stabilization for main's P56-R1 delivered source-selective HOME SQL,
 permanent sparse/empty/deep-page regressions, default-pool and benchmark-pool
 profiling and full package gates completed (102 targeted/257 full tests; 3,200
-successful benchmark requests). Main's P56-R1 disposition remains open for review.
+successful developer benchmark requests); main independently lost one dense request.
 Original delivery/benchmark and failed optimization evidence is retained;
 this is not acceptance or permission to alter privacy/cursor/timeout contracts.
 Phase 4 code `9bdc999` was accepted in `26d60ce`; see the fixed mailbox and

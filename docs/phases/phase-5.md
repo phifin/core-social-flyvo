@@ -5,7 +5,25 @@ Comments/reactions and reports/evidence/action correlation are implemented. Main
 [ADR-014](../adr/014-report-user-target-proof.md) on 2026-10-11 to unblock USER proof.
 Current routing and actual code hash: [mailbox](../agent-handoff.md).
 
-## Round 2 stabilization regression — 2026-10-13
+## Round 3 reliability regression — 2026-10-14
+
+P56-R2: report/interaction APIs, guards, ADR-014 dependency and evidence access
+are unchanged. Final package targeted gate passes **105 tests** (25 fast +80 PG,
+including all 22 ReportsIT and 22 InteractionsIT); full Java21 verify passes
+**260 tests** (49 fast +211 integration), zero failures/errors/skips. Logs in
+`.local/evidence/p56-r3/package-targeted.log` and `verify.log`. This retains the
+privacy, both-order race, concurrent duplicate/resolution and atomic audit/outbox
+regressions below; it is not a feed-only verification. Formatting, architecture/
+SQL boundary, OpenAPI, app/media Compose, changed-doc links and whitespace pass.
+Pinned baseline history scan: 43 commits/no leaks, unchanged two fingerprints;
+external synthetic positive control passes. Final staged/history scans and actual
+code commit are in the [mailbox](../agent-handoff.md).
+
+The measured read-resource fix, failed baseline and **two consecutive final-source
+3,200/3,200 PASS** benchmark outcomes are in [Phase 6 evidence](phase-6.md).
+Round3 is READY_FOR_REVIEW, not accepted; only main disposes of P56-R2.
+
+## Historical round 2 stabilization regression — 2026-10-13
 
 The current P56-R1 work passes the full package targeted command:
 23 fast tests plus 79 PostgreSQL integration tests (22 InteractionsIT,

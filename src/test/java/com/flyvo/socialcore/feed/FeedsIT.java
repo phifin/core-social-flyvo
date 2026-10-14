@@ -95,6 +95,7 @@ class FeedsIT {
   @Autowired MeterRegistry metrics;
   @Autowired org.springframework.transaction.PlatformTransactionManager manager;
   @MockitoSpyBean PostRepository store;
+  @MockitoSpyBean Secrets cursorSecrets;
   @Autowired JdbcTemplate jdbc;
   @Autowired tools.jackson.databind.ObjectMapper json;
   TransactionTemplate tx;
@@ -262,6 +263,68 @@ class FeedsIT {
     assertThat(FeedBenchmarkTool.physicalPostRows(json.readTree(plan).get(0).path("Plan")))
         .as("Physical post rows must not grow with unrelated history")
         .isLessThan(bound);
+  }
+
+  @Test
+  void ownerReadTransactionsReleaseBeforeCursorCryptoWhileSourceAndBodyStayTransactional() {
+    var viewer = user();
+    publish(viewer, "ONLY_ME", null, List.of());
+    publish(viewer, "ONLY_ME", null, List.of());
+    var scans = new java.util.concurrent.atomic.AtomicInteger();
+    var bodies = new java.util.concurrent.atomic.AtomicInteger();
+    var encrypted = new java.util.concurrent.atomic.AtomicInteger();
+    doAnswer(
+            call -> {
+              assertThat(
+                      org.springframework.transaction.support.TransactionSynchronizationManager
+                          .isActualTransactionActive())
+                  .isTrue();
+              assertThat(
+                      org.springframework.transaction.support.TransactionSynchronizationManager
+                          .isCurrentTransactionReadOnly())
+                  .isTrue();
+              scans.incrementAndGet();
+              return call.callRealMethod();
+            })
+        .when(store)
+        .feedCandidates(any(), any(), anyInt(), any(), any(), any());
+    doAnswer(
+            call -> {
+              assertThat(
+                      org.springframework.transaction.support.TransactionSynchronizationManager
+                          .isActualTransactionActive())
+                  .isTrue();
+              assertThat(
+                      org.springframework.transaction.support.TransactionSynchronizationManager
+                          .isCurrentTransactionReadOnly())
+                  .isTrue();
+              bodies.incrementAndGet();
+              return call.callRealMethod();
+            })
+        .when(store)
+        .feedLoad(any(), any(), anyList(), any());
+    doAnswer(
+            call -> {
+              assertThat(
+                      org.springframework.transaction.support.TransactionSynchronizationManager
+                          .isActualTransactionActive())
+                  .as("Cursor work must not retain a page transaction")
+                  .isFalse();
+              encrypted.incrementAndGet();
+              return call.callRealMethod();
+            })
+        .when(cursorSecrets)
+        .encrypt(startsWith("feed-cursor:v1:"), anyString());
+    var first = feeds.home(viewer, 1, null);
+    assertThat(first.items()).hasSize(1);
+    assertThat(first.nextCursor()).isNotNull();
+    var last = feeds.home(viewer, 1, first.nextCursor());
+    assertThat(last.items()).hasSize(1);
+    assertThat(last.nextCursor()).isNull();
+    assertThat(ids(first)).doesNotContainAnyElementsOf(ids(last));
+    assertThat(scans.get()).isEqualTo(2);
+    assertThat(bodies.get()).isEqualTo(2);
+    assertThat(encrypted.get()).isEqualTo(1);
   }
 
   @Test

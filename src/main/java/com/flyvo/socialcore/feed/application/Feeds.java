@@ -9,11 +9,9 @@ import java.time.*;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 
 @Service
-@Transactional(readOnly = true)
 public class Feeds implements FeedQueries {
   public static final int BATCH = 100, MAX_EXAMINED = 1000;
   public static final long QUERY_BUDGET_NANOS = TimeUnit.MILLISECONDS.toNanos(200);
@@ -68,8 +66,10 @@ public class Feeds implements FeedQueries {
     return page(actor, new FeedScope(FeedMode.TIMELINE, id), size, after);
   }
 
-  @Transactional(readOnly = true)
   public Page page(ActorContext actor, FeedScope scope, int size, String after) {
+    // Owner query APIs each hold their short read transaction. Orchestration,
+    // ranking, cursor crypto and metrics must not retain a pooled connection.
+    // Each source/body statement remains coherent; pages were never snapshots.
     if (size < 1 || size > 50) throw Failure.invalid();
     if (actor == null) actor = ActorContext.anonymous();
     long started = ticks.getAsLong(), queryNanos = 0;

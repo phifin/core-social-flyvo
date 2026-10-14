@@ -49,6 +49,24 @@ published keys when an eligible seed supplies the lower bound. Only a complete
 Empty/sparse/no-seed sources skip the probe. This adds no timeout setting or index
 and does not change the application's 100/1,000/200ms refill limits.
 
+Round 3 diagnoses pool acquisition separately from statement execution. Feed GET
+orchestration leaves transactions to the owner read APIs so connections are
+returned between owner calls, rather than retained through ranking/cursor/metrics.
+Candidate and coherent-body reads still execute in owner read-only transactions.
+Default pool 10, five-second acquisition/SQL/socket limits and minimum idle remain.
+The benchmark includes safe test-only cause classes/allowlisted SQLState/vendor
+codes, failed-attempt timing, active/idle/pending/total pool counters, lease versus
+JDBC-execute time, JVM/CPU/memory/GC and aggregated PostgreSQL wait metadata.
+It never prints exception messages, credentials, actor IDs, private SQL bindings
+or content in those diagnostics. Cause traversal is cycle-safe and capped at 16.
+One separate observer connection in the isolated benchmark container samples
+pg_stat_activity state/wait aggregates every 200ms (250ms statement limit); it
+does not serve feed requests or enlarge the application pool. Diagnostic sample
+failures/unavailable resource values are reported, not treated as an idle server.
+Success-only percentiles, attempted/successful/failed requests and error rate are
+explicit. No application retry, benchmark serialization or relaxed success gate.
+These diagnostics add no production endpoint, role privilege, dependency or service.
+
 Phase 4 [media operations](../ops/media.md) covers real local enablement, individual
 secret mounts, SDK endpoint split, bounded isolated processing, quota/reconciliation,
 lease recovery and restricted audited replay. Post/avatar APIs are implemented;
