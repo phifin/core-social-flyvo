@@ -2,6 +2,7 @@ package com.flyvo.socialcore.platform.infrastructure.persistence;
 
 import com.flyvo.socialcore.platform.api.DurableWork;
 import com.flyvo.socialcore.platform.api.EventConsumer;
+import com.flyvo.socialcore.platform.api.EventEnvelope;
 import com.flyvo.socialcore.platform.api.Secrets;
 import java.time.Clock;
 import java.time.Instant;
@@ -23,7 +24,7 @@ public class DurableWorkStore implements DurableWork {
   private final Secrets secrets;
   private final Clock clock;
   private final ObjectMapper json;
-  private final List<EventConsumer> consumers;
+  private final org.springframework.beans.factory.ObjectProvider<EventConsumer> consumers;
   private final TransactionTemplate tx;
 
   public DurableWorkStore(
@@ -31,7 +32,7 @@ public class DurableWorkStore implements DurableWork {
       Secrets secrets,
       Clock clock,
       ObjectMapper json,
-      List<EventConsumer> consumers,
+      org.springframework.beans.factory.ObjectProvider<EventConsumer> consumers,
       org.springframework.transaction.PlatformTransactionManager manager) {
     this.jdbc = jdbc;
     this.secrets = secrets;
@@ -331,7 +332,7 @@ public class DurableWorkStore implements DurableWork {
         payload,
         correlation(),
         now);
-    for (var consumer : consumers)
+    for (var consumer : consumers.orderedStream().toList())
       if (consumer.accepts(type))
         jdbc.update(
             "INSERT INTO platform.outbox_delivery(event_id,consumer_name,status,available_at) VALUES (?,?,'PENDING',?)",
@@ -467,15 +468,28 @@ public class DurableWorkStore implements DurableWork {
                     time(clock.instant()));
             if (fresh == 1) {
               var event =
-                  jdbc.queryForMap(
-                      "SELECT event_type,payload::text FROM platform.outbox_event WHERE id=?",
+                  jdbc.queryForObject(
+                      "SELECT id,event_type,schema_version,aggregate_type,aggregate_id,aggregate_version,event_sequence,occurred_at,correlation_id,causation_id,payload::text FROM platform.outbox_event WHERE id=?",
+                      (rs, n) ->
+                          new EventEnvelope(
+                              rs.getObject("id", UUID.class),
+                              rs.getString("event_type"),
+                              rs.getInt("schema_version"),
+                              rs.getString("aggregate_type"),
+                              rs.getObject("aggregate_id", UUID.class),
+                              rs.getLong("aggregate_version"),
+                              rs.getInt("event_sequence"),
+                              rs.getObject("occurred_at", OffsetDateTime.class).toInstant(),
+                              rs.getString("correlation_id"),
+                              rs.getObject("causation_id", UUID.class),
+                              rs.getString("payload")),
                       claim.id());
-              consumers.stream()
+              consumers
+                  .orderedStream()
                   .filter(c -> c.name().equals(claim.consumer()))
                   .findFirst()
                   .orElseThrow()
-                  .apply(
-                      claim.id(), (String) event.get("event_type"), (String) event.get("payload"));
+                  .apply(event);
             }
             int acknowledged =
                 jdbc.update(

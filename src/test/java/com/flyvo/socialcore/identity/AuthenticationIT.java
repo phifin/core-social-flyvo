@@ -99,7 +99,9 @@ class AuthenticationIT {
           return "ContractFact".equals(type);
         }
 
-        public void apply(UUID id, String type, String payload) {
+        public void apply(EventEnvelope event) {
+          UUID id = event.eventId();
+          String payload = event.payload();
           jdbc.update(
               "INSERT INTO platform.job(id,kind,dedup_key,payload,status,available_at,created_at) VALUES (?,'CONTRACT',?,'{}','COMPLETED',now(),now())",
               UUID.randomUUID(),

@@ -23,6 +23,16 @@ Graph events use the stable `graph.pair_revision` ID and increment its sequence 
 
 ## Minimal worker implementation
 
+The Phase 7 prerequisite exposes the stored `EventEnvelope` through
+`EventConsumer.apply(EventEnvelope)`, including schema/source versions, sequence,
+occurredAt, correlation and nullable causation. The existing fenced worker still
+owns receipt, DB effects and acknowledgement in one transaction; consumers never
+read platform tables. Consumer discovery is lazy to avoid the construction cycle
+between a consumer, its owner APIs and DurableWork. This does not defer registration:
+producer append resolves every registered consumer and writes deliveries in its
+transaction. Historical envelopes/payloads are delivered unchanged; no source
+version is guessed or filled in. This prerequisite alone adds no social consumer.
+
 Phase 5 reports append ReportSubmitted v1 (reportId/targetType/targetId), ReportReviewed
 and ReportResolved v1 (reportId/status), each using case ID/version. Case actions
 append ModerationActionApplied with actionId/reportId/typed targetId/action. Existing
