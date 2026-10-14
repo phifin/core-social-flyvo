@@ -1,10 +1,10 @@
 # Feed design and evolution
 
-Phase 6 implementation/package gates are complete after the full Phase 5 internal
-gate, pending main review. Source API/HTTP, privacy/cursor/refill tests and completed
+Phase 6 was accepted by main on 2026-10-14 after the full Phase 5 internal
+gate and independent final review. Source API/HTTP, privacy/cursor/refill tests and completed
 isolated representative benchmark are in [Phase 6 evidence](phases/phase-6.md).
 The measured 50-reader p95 target <500ms is **not met** on this recorded environment.
-No acceptance or production capacity is implied.
+Phase acceptance does not imply production capacity.
 
 `feed` is a first-class query module. It owns `GetHomeFeed`, `GetCommunityFeed`, `GetUserTimeline`, candidate orchestration, ranking and cursor encoding. Content owns visibility and hydration. A feed candidate is a post ID, immutable published timestamp and optional scoring facts; it is never a pre-authorized post body.
 

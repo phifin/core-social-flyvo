@@ -2,7 +2,7 @@
 
 A reusable Java backend core for social networks and communities. The core has no family, university, alumni, employer, or other application-specific domain concepts.
 
-**Current status: Phases 1–4 accepted; Phase 5 interactions/reports and Phase 6 chronological feeds implemented, not yet accepted.** Production readiness remains separately gated. The application is `social-core`, root package `com.flyvo.socialcore`; the checkout may remain `fly-social`. See separate [Phase 5 evidence](docs/phases/phase-5.md)/[Phase 6 evidence](docs/phases/phase-6.md), [Phase 4 evidence](docs/phases/phase-4.md), [content](docs/content.md), [moderation](docs/moderation.md), [community](docs/community.md), [graph](docs/graph.md) and [media](docs/media.md). Architecture documents describe the target; phase records describe delivery and exact verification/review state.
+**Current status: Phases 1–6 accepted after independent main review (2026-10-14).** Production readiness remains separately gated. The application is `social-core`, root package `com.flyvo.socialcore`; the checkout may remain `fly-social`. See separate [Phase 5 evidence](docs/phases/phase-5.md)/[Phase 6 evidence](docs/phases/phase-6.md), [Phase 4 evidence](docs/phases/phase-4.md), [content](docs/content.md), [moderation](docs/moderation.md), [community](docs/community.md), [graph](docs/graph.md) and [media](docs/media.md). Architecture documents describe the target; phase records describe delivery and exact verification/review state.
 
 ## Start here
 

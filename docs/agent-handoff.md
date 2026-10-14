@@ -4,9 +4,9 @@
 
 - Task: phase-5-6-interactions-reports-feeds
 - Round: 3
-- State: READY_FOR_REVIEW — round 3 reliability; P56-R2 awaits main review
-- Last writer: development, 2026-10-14 — completed assignment from main review 6b90a10
-- Next owner: main — review actual round 3 code/evidence and dispose of P56-R2
+- State: ACCEPTED — Phases 5–6, main round 3 review, 2026-10-14
+- Last writer: main — independent review of 32c1b1e and handoff aaf4d09
+- Next owner: main — archive acceptance and activate the next documented package
 - Accepted Phase 4 code: `9bdc9996b546d73356f177759806296cea40bc43`.
 - Phase 4 acceptance commit: `26d60ce`.
 - Review history: [accepted Phase 4](handoffs/phase-4-posts-media.md); R1–R5 resolved.
@@ -20,11 +20,65 @@
   each 3,200/3,200 PASS on pools 10/50. Failed baseline retained below.
 - Developer round 2: 102 targeted/257 full pass; 3,200 benchmark requests succeed.
 - Main round 2: 257 full pass; independent benchmark FAIL, 3,199/3,200 succeed.
-- Dense p95 goal remains unmet; no phase acceptance or production SLA claim.
+- Dense p95 goal remains unmet; phase acceptance is not a production SLA claim.
 - Full assignment: [Phases 5–6 package](work-packages/phase-5-6.md).
 - Main coordinates/reviews/pushes; the user manually opens the named development chat.
 
 ## Assignment and execution order
+
+### Main round 3 verdict — ACCEPTED, 2026-10-14
+
+Accepted code `32c1b1eb8609eeb8c61278e29efbedba14008db9`, handoff `aaf4d09`.
+P56-B1 and P56-R1 remain resolved; **P56-R2 is resolved by main**. No new blocking
+finding in the delivered delta. Production change only removes the feed-owned
+page transaction; owner reads retain short transactions, coherent source/body SQL
+and current permission checks. READ COMMITTED did not promise a page snapshot.
+No SQL/schema/default timeout/pool/dependency change or authorization relaxation.
+Inspected diagnostics, actual old-code acquisition failures, failing-before-fix
+regression and both consecutive developer all-success runs; source and retained
+evidence SHA-256 manifests match. Diagnostics do not prove a Hikari fairness bug
+or universal immunity to load saturation, and acceptance makes neither claim.
+
+Independent Java21 checks on unchanged executable source:
+
+- `./mvnw -B -ntp verify`: **260 PASS**, 49 fast +211 integration, zero failures,
+  errors/skips, BUILD SUCCESS in 2m50. Includes 19 FeedsIT, 22 InteractionsIT,
+  22 ReportsIT and all prior security/storage/migration regressions.
+  Log `/tmp/social-p56-r3-main-verify.log`.
+- Full heavy benchmark, after verify with no concurrent Maven workload:
+  `./mvnw -B -ntp test -Dtest=FeedsTest,ChronologicalRankerTest,FeedBenchmarkDiagnosticsTest,OpenApiContractTest,ArchitectureTest,PersistenceBoundaryTest`
+  `failsafe:integration-test failsafe:verify -Dit.test=FeedBenchmarkTool -Dfeed.benchmark=true`.
+  **16 prerequisites +1 heavy PASS**, BUILD SUCCESS in 6m11; **3,200/3,200 requests**,
+  zero errors/acquisition failures across pool10/50, all measured leases returned.
+  Log `/tmp/social-p56-r3-main-benchmark.log`. Million-post/10k-follow synthetic
+  fixture, 50 readers, unchanged shared 8-logical-CPU/~7.5GiB host and PG18.6;
+  CPU peaks 1.0. No retry/load cut/timeout workaround. One metadata observer
+  connection is excluded from app capacity; no unavailable diagnostic samples.
+- Dense pool10 first/steady p95 **2715.899/2267.505ms**, p99
+  **3321.205/2812.298ms**; pool50 p95 **2316.014/1717.306ms**, p99
+  **2616.891/2026.295ms**. Each burst 500/500; 15 SQL/attempt, five owner leases
+  per request. Pool10 mean lease hold 56.549/46.262ms, max acquisition wait
+  2164.440/2036.735ms. These are per-lease measures, not whole-request time.
+  Sparse no-source/rare-old/last/exhausted physical post rows **0/3/1/0** in
+  both pools; mostly-rejected/overlap 4900/11598; all 1,200 sparse requests pass.
+- App/media Compose config, whitespace and source/evidence manifests PASS.
+  Pinned redacted full-history Gitleaks **45 commits, no leaks** through aaf4d09;
+  external synthetic positive control PASS, two existing exact fingerprints
+  unchanged. Logs `/tmp/social-p56-r3-main-secrets.log` and
+  `/tmp/social-p56-r3-main-positive.log`. V0001–V0026 unchanged in this fix.
+
+The original gate failure is addressed with a measured resource-lifetime fix,
+regression and repeatable success, not waived. **Dense p95 <500ms remains unmet**;
+representative deployment capacity/latency tuning and all existing provider,
+storage, decoder, keys, retention and public-launch gates remain outstanding.
+The package required reporting latency, not silently declaring a production SLA.
+Prior failed runs below remain historical failures. Main changed documentation
+only. Remote was verified at Phase4 `03f8a98`; push is a separate main action.
+
+Next: archive this complete review history and assign the planned Phases 7–8
+package in a new named chat. No Phase 7/8 executable work is accepted or present.
+
+### Historical round 2 review
 
 ### Main round 2 verdict — code 21f7a5c, handoff a17d448
 
@@ -64,7 +118,11 @@ scan or false exhaustion was observed. The 18 real-PG feed tests include complet
 versus overflowing window, privacy before LIMIT, source overlap and JIT rollback.
 This supports closing the original finding independently of dense reliability.
 
-#### P56-R2 — P2 OPEN: required dense load gate still loses a request
+#### P56-R2 — RESOLVED by main round 3 (original priority P2)
+
+Disposition 2026-10-14: short owner transaction fix at 32c1b1e checked with
+260-test verify and independent 3,200/3,200 load PASS, plus the developer's two
+consecutive final-source passes. Original failure and required outcome follow.
 
 Anchors: `src/test/java/com/flyvo/socialcore/feed/FeedBenchmarkTool.java:320–336`
 (request/failure capture) and `:397` (all-requests-success assertion);

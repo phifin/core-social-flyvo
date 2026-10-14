@@ -6,7 +6,7 @@ Record the phase's actual migrations, module APIs, test commands/results, measur
 
 ## Phase 0 — Buildable architecture foundation
 
-Implementation status: [Phases 0–3](phases/phase-3.md) delivered locally, Phase 3 accepted after independent main review. [Phase 4](phases/phase-4.md) is accepted. [Phase 5](phases/phase-5.md) comments/reactions/reports and [Phase 6](phases/phase-6.md) chronological feeds are implemented, not accepted; exact verification/benchmark evidence is recorded separately. Reports follow accepted [ADR-014](adr/014-report-user-target-proof.md). Phase 7 and later phases are unimplemented. Current routing/review state is in the [mailbox](agent-handoff.md). External provider/production readiness is separately gated.
+Implementation status: [Phases 0–3](phases/phase-3.md) delivered locally, Phase 3 accepted after independent main review. [Phase 4](phases/phase-4.md) is accepted. [Phase 5](phases/phase-5.md) comments/reactions/reports and [Phase 6](phases/phase-6.md) chronological feeds are accepted by main on 2026-10-14; exact verification/benchmark evidence is recorded separately. Reports follow accepted [ADR-014](adr/014-report-user-target-proof.md). Phase 7 and later phases are unimplemented. Current routing/review state is in the [mailbox](agent-handoff.md). External provider/production readiness is separately gated.
 
 **Goal:** establish a reproducible repository that enforces the accepted design before business code exists.
 

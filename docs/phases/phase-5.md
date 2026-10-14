@@ -1,6 +1,10 @@
 # Phase 5 — conversations, reactions and report workflow
 
-Status: implemented, full internal Phase 5 gate PASS; **not accepted**.
+Status: **ACCEPTED by main, 2026-10-14**, package code `32c1b1e`.
+Independent final verify: 260 PASS (49 fast +211 integration), including all
+22 interaction and 22 report tests. Package benchmark: 3,200/3,200 PASS.
+P56-B1/R1/R2 resolved; historical delivery reports below retain their original
+pending-review state. Production readiness is separately gated.
 Comments/reactions and reports/evidence/action correlation are implemented. Main accepted
 [ADR-014](../adr/014-report-user-target-proof.md) on 2026-10-11 to unblock USER proof.
 Current routing and actual code hash: [mailbox](../agent-handoff.md).

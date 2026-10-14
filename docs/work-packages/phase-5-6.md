@@ -1,6 +1,9 @@
 # Next package: interactions, reports and chronological feeds
 
-Status: ACTIVATED by main on 2026-10-11 at the user's request to review and continue.
+Status: ACCEPTED by main on 2026-10-14 at code `32c1b1e`; P56-B1/R1/R2 resolved.
+Independent final gates: 260 tests PASS, benchmark 3,200/3,200 PASS. Dense p95
+goal remains unmet; production readiness remains separately gated. Original
+activation was 2026-10-11. The reports below preserve historical delivery state.
 Delivery: implementation/internal package gates complete, pending main review;
 representative benchmark completed, initial p95 goal not met (see Phase 6 evidence).
 Main resolved P56-R1 in review `6b90a10`; P56-R2 reliability is READY_FOR_REVIEW

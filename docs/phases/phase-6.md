@@ -1,6 +1,13 @@
 # Phase 6 — chronological source-authorized feeds
 
-Status: implemented, **READY_FOR_REVIEW (round 3 reliability)**. P56-R1 resolved
+Status: **ACCEPTED by main, 2026-10-14**, code `32c1b1e`; P56-R1/R2 resolved.
+Independent verify: 260 PASS; benchmark: 16 fast +1 heavy PASS, all 3,200 requests
+on pools10/50 succeed. Dense p95 pool10 first/steady 2715.899/2267.505ms, pool50
+2316.014/1717.306ms; initial <500ms goal still unmet. Sparse physical post rows
+no-source/rare/last/exhausted remain 0/3/1/0. No production capacity/SLA claim.
+Complete main evidence and preserved failures are in the review mailbox/archive.
+
+Historical developer handoff: implemented, READY_FOR_REVIEW (round 3). P56-R1 resolved
 by main; P56-R2 awaits main's disposition. Round 3 passes 105 targeted/260 full
 tests and two consecutive final-source benchmarks, each 3,200/3,200 requests.
 Main's earlier independent 3,199/3,200 failure and the diagnostic baseline failure
