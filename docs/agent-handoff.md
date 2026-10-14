@@ -3,10 +3,10 @@
 ## Routing
 
 - Task: phase-5-6-interactions-reports-feeds
-- Round: 2
-- State: CHANGES_REQUESTED — P56-R1 resolved; P56-R2 open
-- Last writer: main, 2026-10-13 — independent round 2 review and benchmark
-- Next owner: development — existing Phases 5–6 chat, reliability assignment below
+- Round: 3
+- State: READY_FOR_REVIEW — round 3 reliability; P56-R2 awaits main review
+- Last writer: development, 2026-10-14 — completed assignment from main review 6b90a10
+- Next owner: main — review actual round 3 code/evidence and dispose of P56-R2
 - Accepted Phase 4 code: `9bdc9996b546d73356f177759806296cea40bc43`.
 - Phase 4 acceptance commit: `26d60ce`.
 - Review history: [accepted Phase 4](handoffs/phase-4-posts-media.md); R1–R5 resolved.
@@ -15,6 +15,9 @@
 - Verified report code: `19849c96307d687958ede54df0b4fbd9cbf132a7`.
 - Round 1 feed/package code: `26dec3845f13f2f1536170b37586ea4287f20aa1`.
 - Verified round 2 stabilization code: `21f7a5c9f568666b94c892786d90c16ab202794a`.
+- Verified round 3 reliability code: `32c1b1eb8609eeb8c61278e29efbedba14008db9`.
+- Round 3: 105 targeted/260 full PASS; two consecutive final-source benchmarks
+  each 3,200/3,200 PASS on pools 10/50. Failed baseline retained below.
 - Developer round 2: 102 targeted/257 full pass; 3,200 benchmark requests succeed.
 - Main round 2: 257 full pass; independent benchmark FAIL, 3,199/3,200 succeed.
 - Dense p95 goal remains unmet; no phase acceptance or production SLA claim.
@@ -261,7 +264,144 @@ concurrent writers, push or Phase 7 implementation.
 
 ## Implementation report and findings
 
-### P56-R1 developer completion response — round 2, pending main review
+### Initial round 3 reliability plan — recorded IN_PROGRESS before implementation
+
+Baseline review `6b90a10`, executable code `21f7a5c`. Preserve main's P56-R1
+resolution and P56-R2 evidence; do not relabel its wrapper as a proven SQL timeout.
+First add test-only bounded/allowlisted diagnostics: cause classes and SQLState
+without exception messages or SQL bindings, request attempt/failure duration,
+Hikari active/idle/pending/total and acquisition outcomes, JVM/host resource
+counters and PostgreSQL wait aggregates using a separate diagnostic connection.
+Keep failures and success-only latency/error rate separate, retain the 50-reader/
+500-request bursts and all-success assertion. Reproduce on unchanged production
+SQL before selecting a fix; diagnose SQL execution versus transaction-held
+resources versus pool acquisition, not from successful latency alone.
+
+Use the existing owner APIs/source query and transaction seams for the measured
+fix; preserve R1 work bounds, canonical privacy/current coherent hydration, every
+source branch and cursor/refill/guard order. No planned API/dependency/schema or
+migration change (actual max V0026), cache/fan-out, retry, timeout/pool increase or
+benchmark serialization. Add a regression for the demonstrated cause, then the
+full package targeted/format/verify, Compose/OpenAPI/docs and pinned secret gates.
+Run the complete tool twice consecutively on final source with pool 10/50 in
+each run, no intervening source/config changes or concurrent Maven checks; keep
+both successes and failures and report hardware/limits. Update separate phase
+evidence, commit verified code, then real-hash READY_FOR_REVIEW mailbox for main.
+If diagnostics prove a contract/external-resource blocker, record exact evidence
+and a concrete decision proposal; no self-waived gate or Phase 7/8 work.
+
+### P56-R2 developer completion response — round 3, pending main review
+
+Actual verified code: `32c1b1eb8609eeb8c61278e29efbedba14008db9`, based on main
+review `6b90a10`. All executable files are the exact final-source bytes used by
+the gates and consecutive benchmarks below; only documentation changed afterward.
+P56-R1 remains resolved by main; **P56-R2 is not self-resolved**. Phase 5/6 remain
+unaccepted. No push, agents, Phase 7/8 or dependency/evidence-access expansion.
+
+1. **Safe diagnostics and cause established.** Test-only bounded cause classes/
+   SQLState/vendor code, failed duration, immediate Hikari active/idle/pending,
+   acquisition/lease counters, JVM/host resources and PostgreSQL wait aggregates.
+   No exception messages, tokens, credentials, actor IDs, private bindings or
+   content in diagnostics; tests check JSON safety and bounded/cyclic causes.
+   A separate 200ms metadata observer reads no SQL text/business rows and supplies
+   no request capacity. Sampling failures remain explicit; 0 unavailable samples
+   in both final runs. Existing EXPLAIN fixtures contain synthetic data only.
+2. **Unchanged-production baseline fails, retained.** Instrumented production
+   baseline yields 3,196/3,200 successes: four pool10 first-burst failures, all
+   other requests succeed. Cause is acquisition-time SQLTransientConnectionException
+   via JDBCConnectionException/CannotCreateTransactionException, before app SQL;
+   mean failed acquisition 5,003.067ms, active10/idle0/pending33–39. Not a SQL
+   statement timeout. All 496 successful leases return; mean hold 216.062ms,
+   max 417.723ms, with 220 acquisitions/210 returns by the first failure. Full-page
+   occupancy repeatedly prevents some first-attempt waiters acquiring within 5s;
+   evidence does not claim a connection leak or prove a Hikari fairness defect.
+   CPU ~0.97–0.99, active/runnable DB + short idle-in-transaction waits, no sampled
+   five-second transaction/GC pause. Shared-host contention is reported, not a waiver.
+3. **Measured resource fix, no contract workaround.** Remove only the feed-owned
+   page transaction. Existing owner APIs retain short read-only transactions;
+   orchestration/ranking/cursor crypto/metrics no longer hold that pooled lease.
+   Current coherent source/body authorization stays in the same SQL statement;
+   READ COMMITTED never promised a page snapshot. Caller transactions still use
+   normal REQUIRED owner semantics. R1 source SQL, all V0001–V0026, pool defaults,
+   5s acquisition/statement/socket limits, API/cursor/refill/source branches,
+   privacy, command guard/lock order and ADR-014 remain unchanged. No new SQL view,
+   dependency, endpoint, permission cache, fan-out, retry, serialization or load cut.
+4. **Regression and complete package gates.** Real-PG regression checks source/
+   body reads remain transactional/read-only, cursor encryption outside a page
+   transaction, and real two-page encrypted continuation with no duplicate/missing
+   item. It **fails against the old transaction** and passes with the fix. Final
+   Java21 targeted: **105 PASS** (25 fast +80 PG: 22 interactions, 22 reports,
+   19 feeds, 17 foundation). Final `./mvnw -B -ntp verify`: **260 PASS** (49 fast
+   +211 integration), zero failures/errors/skips. Formatting, OpenAPI, architecture/
+   SQL-view allowlist, V0022–V0026 fresh/upgrade, full privacy/concurrency/report
+   evidence/atomicity, all 33 Phase4IT, pinned storage/decoder/Compose isolation
+   and previous-phase regressions pass. No tests excluded or timeout increased.
+5. **Two consecutive complete final-source benchmarks PASS.** Measured 2026-10-13,
+   finishing 20:06:27 /20:11:12 +07:00, each 16 fast prerequisites +1 heavy PASS.
+   Each run: pool10 then pool50, 50 readers, four dense 500-request bursts and
+   twelve sparse 100-request scenarios, **3,200/3,200 successes; error rate 0**.
+   No intervening source/config edit or concurrent Maven workload, retries or
+   discarded failures. Independent fresh pinned PG18.6 million-post/10k-follow
+   skewed fixture per run, same shared four-core/eight-thread i7-1165G7/~7.5GiB
+   host, JVM max 2,011,168,768 bytes. Cgroup limits unavailable; no hardware/capacity
+   change claimed. Observer adds one metadata-only connection, not app-pool slots.
+
+   Dense success-only p95/p99 ms (all 500 requests successful in every cell):
+
+   | Pool /burst | Run 1 | Run 2 |
+   |---|---|---|
+   | 10 /first | 2018.699 /2694.553 | 2044.213 /2421.286 |
+   | 10 /steady | 1753.182 /2220.474 | 1673.081 /2188.254 |
+   | 50 /first | 2042.176 /2467.590 | 1903.670 /2112.712 |
+   | 50 /steady | 1510.017 /1783.557 | 1609.878 /1851.527 |
+
+   Pool10 first/steady mean lease hold: run1 45.954 /38.046ms, run2
+   43.751 /38.852ms, versus baseline 216.062 /184.227ms. Five owner acquisitions
+   per dense request versus one page lease; do not compare per-lease means as
+   total request time. Max pool10 acquisition waits 1,574.574 /1,378.049ms and
+   1,658.211 /1,459.666ms; zero acquisition failures, acquired=returned=2,500 per
+   dense burst. Pending still peaks 43/40 and CPU ~0.99–1.00: contention is not
+   eliminated. Dense SQL **15 statements/attempt**, consumed examined/returned
+   10,000/10,000 per burst (ratio1, not physical scan work). SQL/setup/enrichment
+   included, observer/implicit driver BEGIN/COMMIT excluded; elapsed includes
+   transaction overhead. Means use all attempts, percentiles successful requests.
+
+   All six sparse cases pass 100/100 per pool/run. Empty/rare/last/exhausted
+   physical post-node work remains **0/3/1/0**, hit/read buffers
+   **18/0, 43/0, 37/0, 18/0** in all four pool/run combinations. Full sparse/dense
+   latencies, acquisition/execution, EXPLAIN/planning and resource observations
+   are in [Phase 6 evidence](phases/phase-6.md); [Phase 5 evidence](phases/phase-5.md)
+   separately records report/interaction regression coverage.
+6. **Delivery checks.** App/media Compose config, changed-doc links and whitespace
+   PASS. Pinned default redacted Gitleaks baseline **43 commits** and verified
+   code history **44 commits**, no leaks; code staged patch PASS. External
+   synthetic positive control PASS, unchanged two exact historical fingerprints,
+   no scanner exclusion/config change. Separate mailbox staged-patch scan PASS
+   (`staged-handoff.log`); complete post-handoff history scan is reported
+   in the final chat without inventing this commit's own hash.
+
+Evidence retained in ignored mode-700 `.local/evidence/p56-r3/` (local access,
+not a public artifact): `main-round2-benchmark.log` (main's 3,199/3,200 FAIL),
+`baseline-production.sha256`, `baseline-diagnostics.log` (3,196/3,200 FAIL),
+`regression-format-initial.log` (initial formatting failure),
+`regression-before-fix.log` (expected negative behavior), `feed-transaction-gate.log`,
+`package-targeted.log`, `verify.log`, `benchmark-final-1.log`,
+`benchmark-final-2.log`, `final-source.sha256`, `source-check-between.log`,
+`source-check-after.log`, `evidence.sha256`, `compose-app.log`, `compose-media.log`,
+`history-before.log`, `history-code.log`, `secret-positive.log`, `staged-code.log`,
+`staged-handoff.log`.
+SHA-256 source checks pass between/after runs and at delivery; evidence digests
+preserve both failed and successful logs. This local evidence is not external CI.
+
+Material limitations: **dense p95 <500ms remains unmet in all eight final bursts**;
+pool10 last-page and both pools' overlap also exceed 500ms. Two all-success runs
+satisfy this development repeatability gate, not an SLA or universal immunity to
+resource saturation. Sampling is not a full trace; no claim that host contention
+alone caused the defect. Existing storage/provider/production launch gates remain
+pending under their prior policy. Main independently reviews actual code/results
+and decides P56-R2/phase disposition; no automatic acceptance or next-phase activation.
+
+### Historical P56-R1 developer response — round 2, reviewed by main above
 
 Actual code: `21f7a5c9f568666b94c892786d90c16ab202794a`, based on main review
 `2cc3e61`. Delivered the entire stabilization package and preserved main's finding
@@ -689,8 +829,9 @@ and external positive control are rerun before push.
 
 ## Next action
 
-Development addresses P56-R2 in the existing Phases 5–6 chat using the three-part
-reliability assignment above. Preserve resolved P56-B1/P56-R1, start from code
-`21f7a5c`, inspect actual max migration V0026 and never edit applied files. Return
-verified code, complete final-source evidence and a real-hash READY_FOR_REVIEW
-handoff for round 3. No phase acceptance, next-phase activation or push yet.
+Main reviews round 3 code `32c1b1eb8609eeb8c61278e29efbedba14008db9`, its exact
+final-source gates and both consecutive benchmark outcomes. Check the owner read
+transaction boundary, safe diagnostic metadata and retained failed baseline;
+preserve resolved P56-B1/P56-R1 and assess the remaining latency goal separately.
+Only main disposes of P56-R2/accepts phases or authorizes another assignment.
+Development is READY_FOR_REVIEW; no push, self-acceptance or Phase 7/8 activation.
