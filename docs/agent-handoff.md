@@ -54,6 +54,19 @@ mailbox commit with actual hashes, limitations and READY_FOR_REVIEW to main.
 
 ## Implementation report
 
+### Main remote checkpoint — 2026-10-14
+
+Main performed normal fast-forward push to
+`origin` = `https://github.com/phifin/core-social-flyvo.git`, branch `master`,
+from `03f8a98` to `ff2e6f75c0e4ed20d4e34c494ab837aeef3be032` and verified that
+exact remote hash with ls-remote. This delivers accepted Phases 5–6 plus the
+documentation-only Phase 7/8 assignment/ADR, not implemented Phase 7/8.
+Final pre-push full-history pinned redacted scan: 47 commits, no leaks; staged
+coordination patch and changed-document links pass. Archive preservation was
+checked against acceptance commit, allowing only relative-link adjustment.
+Remote CI result has not been checked; local verification is recorded in the
+accepted archive. No deployment/release or dev-thread push is authorized.
+
 Not started. Development records concrete plan and actual results here; do not
 replace the accepted archive or invent future commit hashes.
 
