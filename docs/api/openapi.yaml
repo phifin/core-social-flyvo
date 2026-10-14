@@ -2525,6 +2525,88 @@ paths:
       responses:
         '200': {description: Current source-authorized private no-store feed, content: {application/json: {schema: {$ref: '#/components/schemas/FeedPage'}}}}
         default: {$ref: '#/components/responses/Problem'}
+  /api/v1/notifications:
+    get:
+      operationId: listNotifications
+      summary: Current recipient inbox with filtered actor counts
+      security: [{BearerAuth: []}]
+      description: Semantic items only, no stored message or body. Continue empty pages until nextCursor is null. New activity can reorder groups; refresh to recover moved items. Cursor expires after 30 minutes and binds viewer and size. A resource ceiling fails explicitly with 503 rather than returning partial counts.
+      parameters:
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+        - {name: after, in: query, schema: {type: string, maxLength: 2048}}
+      responses:
+        '200':
+          description: Recipient page, no total
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/NotificationItem'}}
+                  nextCursor: {type: [string, 'null']}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/notifications/unread-count:
+    get:
+      operationId: notificationUnreadCount
+      summary: Exact count of currently eligible unread groups
+      security: [{BearerAuth: []}]
+      responses:
+        '200':
+          description: No hidden target or actor counts; explicit 503 when bounded work is exhausted
+          content:
+            application/json:
+              schema: {type: object, required: [unreadCount], properties: {unreadCount: {type: integer, format: int64, minimum: 0}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/notifications/{id}/read:
+    put:
+      operationId: readNotification
+      summary: Advance readVersion through observed activityVersion
+      security: [{BearerAuth: []}]
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false, required: [activityVersion], properties: {activityVersion: {type: integer, format: int64, minimum: 0}}}
+      responses:
+        '204': {description: Observed activity marked read; future/new activity remains unread}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/notifications/read:
+    post:
+      operationId: readAllNotifications
+      summary: Mark server-observed eligible versions read
+      security: [{BearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+      responses:
+        '204': {description: Observed snapshot read; concurrent new activity remains unread}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/me/notification-preferences:
+    get:
+      operationId: getNotificationPreferences
+      summary: Recipient per-kind in-app settings
+      security: [{BearerAuth: []}]
+      responses:
+        '200': {description: Explicit settings, defaults enabled, content: {application/json: {schema: {$ref: '#/components/schemas/NotificationPreferences'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+    patch:
+      operationId: changeNotificationPreferences
+      summary: Atomically set selected in-app kinds
+      security: [{BearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/NotificationPreferences'}}}
+      responses:
+        '200': {description: Current complete settings; security email unaffected, content: {application/json: {schema: {$ref: '#/components/schemas/NotificationPreferences'}}}}
+        default: {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
     BearerAuth:
@@ -2623,6 +2705,36 @@ components:
           schema:
             "$ref": "#/components/schemas/Problem"
   schemas:
+    NotificationKind:
+      type: string
+      enum: [FRIEND_REQUEST, FRIENDSHIP_ACCEPTED, COMMUNITY_INVITATION, COMMENT_ON_POST, REPLY_TO_COMMENT, MENTION, REACTION_ON_CONTENT]
+    NotificationItem:
+      type: object
+      required: [id, kind, targetType, targetId, activityVersion, readVersion, lastActivityAt, actorCount, actors]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {$ref: '#/components/schemas/NotificationKind'}
+        targetType: {type: string, enum: [POST, COMMENT, FRIEND_REQUEST, COMMUNITY_INVITATION]}
+        targetId: {type: string, format: uuid}
+        activityVersion: {type: integer, format: int64, minimum: 1}
+        readVersion: {type: integer, format: int64, minimum: 0}
+        lastActivityAt: {type: string, format: date-time}
+        actorCount: {type: integer, format: int64, minimum: 1}
+        actors:
+          type: array
+          maxItems: 3
+          items: {type: object, required: [userId, displayName], properties: {userId: {type: string, format: uuid}, displayName: {type: string}}}
+    NotificationPreferences:
+      type: object
+      additionalProperties: false
+      required: [inApp]
+      properties:
+        inApp:
+          type: object
+          minProperties: 1
+          maxProperties: 7
+          propertyNames: {$ref: '#/components/schemas/NotificationKind'}
+          additionalProperties: {type: boolean}
     FeedPage:
       type: object
       required: [items, nextCursor]

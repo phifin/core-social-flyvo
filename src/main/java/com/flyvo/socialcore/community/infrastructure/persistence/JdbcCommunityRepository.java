@@ -15,6 +15,29 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public class JdbcCommunityRepository implements CommunityRepository {
+  public List<com.flyvo.socialcore.community.api.CommunityNotificationSources.Source>
+      notificationSources(List<UUID> ids, Instant now) {
+    if (ids.isEmpty()) return List.of();
+    var args = new java.util.ArrayList<Object>();
+    args.add(time(now));
+    args.addAll(ids);
+    return jdbc.query(
+        "SELECT i.id,i.community_id,i.invitee_id,i.inviter_id,i.status,i.expires_at,c.version,(c.status='ACTIVE' AND COALESCE(m.status,'')<>'BANNED' AND NOT (COALESCE(m.status,'')='ACTIVE' AND COALESCE(m.suspended_until>?,false))) eligible FROM community.invitation i JOIN community.community c ON c.id=i.community_id LEFT JOIN community.membership m ON m.community_id=i.community_id AND m.user_id=i.invitee_id WHERE i.id IN ("
+            + String.join(",", java.util.Collections.nCopies(ids.size(), "?"))
+            + ")",
+        (r, n) ->
+            new com.flyvo.socialcore.community.api.CommunityNotificationSources.Source(
+                r.getObject(1, UUID.class),
+                r.getObject(2, UUID.class),
+                r.getObject(3, UUID.class),
+                r.getObject(4, UUID.class),
+                r.getString(5),
+                r.getObject(6, OffsetDateTime.class).toInstant(),
+                r.getLong(7),
+                r.getBoolean(8)),
+        args.toArray());
+  }
+
   private final JdbcTemplate jdbc;
 
   public JdbcCommunityRepository(JdbcTemplate jdbc) {

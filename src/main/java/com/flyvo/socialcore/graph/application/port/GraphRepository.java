@@ -36,6 +36,9 @@ public interface GraphRepository {
 
   FriendRequest request(UUID id);
 
+  List<com.flyvo.socialcore.graph.api.GraphNotificationSources.Source> notificationSources(
+      List<UUID> requests);
+
   FriendRequest pending(UserPair pair);
 
   void insert(FriendRequest request);

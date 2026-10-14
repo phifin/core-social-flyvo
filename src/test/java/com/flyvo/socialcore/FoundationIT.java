@@ -28,6 +28,8 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @Testcontainers
 @org.springframework.test.context.ActiveProfiles("test")
 class FoundationIT {
+  private static final int LATEST_MIGRATIONS = 27;
+
   @Container
   static final PostgreSQLContainer POSTGRES =
       new PostgreSQLContainer(
@@ -58,7 +60,7 @@ class FoundationIT {
                 "select count(*) from information_schema.schemata where schema_name = 'platform'",
                 Integer.class))
         .isEqualTo(1);
-    assertThat(flyway.info().applied()).hasSize(26);
+    assertThat(flyway.info().applied()).hasSize(LATEST_MIGRATIONS);
     flyway.validate();
     assertThat(flyway.migrate().migrationsExecuted).isZero();
     assertThat(entityManagerFactory.getProperties())
@@ -115,7 +117,7 @@ class FoundationIT {
         author);
     var upgrade =
         Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
-    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(26 - priorCount);
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(LATEST_MIGRATIONS - priorCount);
     upgrade.validate();
     assertThat(
             java.util.Arrays.stream(upgrade.info().applied())
@@ -153,7 +155,7 @@ class FoundationIT {
             .toList();
     var upgrade =
         Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
-    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(4);
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(LATEST_MIGRATIONS - 22);
     upgrade.validate();
     assertThat(
             java.util.Arrays.stream(upgrade.info().applied())
@@ -180,7 +182,7 @@ class FoundationIT {
             .toList();
     var upgrade =
         Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
-    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(5);
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(LATEST_MIGRATIONS - 21);
     upgrade.validate();
     assertThat(
             java.util.Arrays.stream(upgrade.info().applied())
@@ -228,7 +230,7 @@ class FoundationIT {
     var checksum = phaseZero.info().applied()[0].getChecksum();
     var upgrade =
         Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
-    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(25);
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(LATEST_MIGRATIONS - 1);
     assertThat(upgrade.info().applied()[0].getChecksum()).isEqualTo(checksum);
     upgrade.validate();
   }
@@ -261,7 +263,7 @@ class FoundationIT {
         id);
     var upgrade =
         Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
-    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(12);
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(LATEST_MIGRATIONS - 14);
     upgrade.validate();
     assertThat(
             java.util.Arrays.stream(upgrade.info().applied())
@@ -335,7 +337,7 @@ class FoundationIT {
         id);
     var upgrade =
         Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
-    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(18);
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(LATEST_MIGRATIONS - 8);
     upgrade.validate();
     assertThat(
             java.util.Arrays.stream(upgrade.info().applied())
@@ -377,7 +379,7 @@ class FoundationIT {
         id);
     var upgrade =
         Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
-    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(15);
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(LATEST_MIGRATIONS - 11);
     upgrade.validate();
     assertThat(
             java.util.Arrays.stream(upgrade.info().applied())

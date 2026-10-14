@@ -123,6 +123,13 @@ Staff cannot sanction self, owner, or equal/higher effective role. Only owner ca
 
 ## Surfaces affected by privacy changes
 
+Phase 7 slice A adds recipient-only semantic REST inbox/read/preferences/badge.
+Current owner proofs, ACTIVE accounts, bilateral blocks and recipient mutes/preferences
+filter every actor/target before names or counts. Notifications return no stored
+body or message fallback. Mentions cannot widen source audience. Read versions are
+observed, bulk read uses observed server versions, and scan-budget exhaustion is
+an explicit 503 rather than a hidden/truncated count. SSE is pending slice B.
+
 Phase 3 applies bilateral block and current FRIENDS to profile reads and permitted
 profile graph lists. Own graph lists recheck actor status and batch-filter inactive
 counterparts; blocks filter before pagination, except the actor's own block management

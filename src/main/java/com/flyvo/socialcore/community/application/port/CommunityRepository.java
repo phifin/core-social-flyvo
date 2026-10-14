@@ -36,6 +36,9 @@ public interface CommunityRepository {
 
   Invitation invitation(UUID id);
 
+  List<com.flyvo.socialcore.community.api.CommunityNotificationSources.Source> notificationSources(
+      List<UUID> invitations, Instant now);
+
   Invitation pendingInvitation(UUID community, UUID user);
 
   void invite(Invitation value);

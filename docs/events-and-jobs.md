@@ -76,6 +76,11 @@ Email jobs containing verification/reset links require recoverable secrets for d
 
 ## Notification semantics (Phase 7)
 
+The Phase 7 slice A implementation is described in [notifications](notifications.md).
+The production `notification-inbox-v1` consumer now registers the documented social
+source events. Stored envelope versions reach the consumer unchanged. Slice A is
+not the full Phase 7 gate: authenticated SSE and final package evidence follow.
+
 ### Phase 4 implemented worker extension
 
 `ExternalJobHandler` publishes prepare/effect/ack, not business callbacks into

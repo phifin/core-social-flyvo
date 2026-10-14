@@ -22,7 +22,8 @@ hydration, scoped expiring cursors and bounded refill. [Feed](docs/feed.md) docu
 current-state privacy/weak consistency; [benchmark evidence](docs/phases/phase-6.md)
 records representative load and limitations, including the unmet initial p95
 <500ms goal on local hardware, not production capacity. Phase 7
-notifications/SSE and later roadmap phases are unimplemented.
+has a locally implemented [semantic REST inbox slice](docs/notifications.md);
+authenticated SSE and the full Phase 7 gate remain pending. Phase 8 is unimplemented.
 Main has activated the [Phases 7–8 package](docs/work-packages/phase-7-8.md)
 for sequential development; this is an assignment, not implemented functionality.
 

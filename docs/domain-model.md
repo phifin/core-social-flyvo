@@ -100,6 +100,14 @@ Extensions add explicit subtype data (`post_poll`, `poll_option`, etc.) and vers
 
 `Notification` is a recipient-owned semantic record with kind, target references, bounded grouping window and activity/read versions. Actor contributions are stored separately so repeat delivery is idempotent and block/privacy changes can suppress them. It is not a rendered English sentence. Preferences and access are evaluated at delivery/read time. SSE sends invalidation signals, not permanently trusted content bodies. See [events and jobs](events-and-jobs.md).
 
+Phase 7 slice A now implements the semantic REST inbox and all seven kinds,
+observed read/bulk-read versions, current actor/target filtering and bounded
+90-day group cleanup with retained source ordering. Source-authorized attribution
+contains at most three names; no content body is stored in inbox rows. The route
+planner and producer before-state handle precedence and reordered reactivation.
+Authenticated SSE and the complete phase gate remain pending. See
+[notifications](notifications.md) for exact implementation limits.
+
 `Report` belongs to a reporter and references exactly one supported target (post/comment/community/user), category, optional detail, evidence snapshot and lifecycle OPEN, IN_REVIEW, RESOLVED, DISMISSED. It is not public content. Submission requires ability to access the target at submission time; disappearance afterward does not destroy the case. One unresolved report per reporter/target avoids spam; different reporters may report the same target.
 
 `ModerationAction` is append-only actor, scope, target, action, reason, before/after references and time. Actions include REMOVE_CONTENT, RESTORE_CONTENT, SUSPEND_MEMBER, BAN_MEMBER, UNBAN_MEMBER, SUSPEND_ACCOUNT and RESOLVE_REPORT. Community staff act only within their community and role hierarchy. Global suspension requires separate platform ADMIN, assigned operationally, never via registration/profile input. The action, owner-module change, report transition and required audit commit atomically. Restoration does not undo an author's deletion; it only clears a moderation removal if still otherwise valid.

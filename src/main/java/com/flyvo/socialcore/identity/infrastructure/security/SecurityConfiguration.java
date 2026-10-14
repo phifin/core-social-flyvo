@@ -82,6 +82,18 @@ class SecurityConfiguration {
                     .authenticated()
                     .requestMatchers(
                         HttpMethod.GET,
+                        "/api/v1/notifications",
+                        "/api/v1/notifications/unread-count",
+                        "/api/v1/me/notification-preferences")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.PUT, "/api/v1/notifications/*/read")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/api/v1/notifications/read")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.PATCH, "/api/v1/me/notification-preferences")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.GET,
                         "/api/v1/me/reports",
                         "/api/v1/communities/*/moderation/reports",
                         "/api/v1/communities/*/moderation/reports/*",

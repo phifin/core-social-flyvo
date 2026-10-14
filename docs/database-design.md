@@ -209,6 +209,14 @@ Quota reservation counts pending declared bytes against pending and total budget
 
 ## Notifications, search and moderation
 
+Phase 7 slice A adds V0027 (V0001–V0026 unchanged): notification groups,
+contributions/source_state/preferences and recipient_state watermark. The owning
+recipient row serializes before source/group/contribution writes and is retained
+independently of groups. Active source ordering outlives 90-day inbox cleanup;
+inactive ordering persists at least 120 days, with a 30-day event replay horizon.
+No notification foreign SQL consumer is added. See [implemented inbox](notifications.md)
+for scan/read/cleanup limits. Search and Phase 8 case extensions remain pending.
+
 | Table | Important columns | Constraints / indexes |
 |---|---|---|
 | `notification.notification` | id, recipient_id FK account, kind, target_type, target_id uuid, grouping_key text, group_window_start?, activity_version bigint, read_version bigint default 0, last_activity_at, suppressed_at?, created_at, **V** | U(recipient_id,grouping_key); reaction key includes kind/target/hour, other keys include event ID; read_version <= activity_version; `(recipient_id,last_activity_at DESC,id DESC)`; partial unread index WHERE read_version < activity_version |
