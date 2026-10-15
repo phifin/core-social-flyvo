@@ -74,6 +74,10 @@ app:
     from: ${MAIL_FROM:no-reply@social-core.invalid}
   worker:
     enabled: ${WORKER_ENABLED:true}
+  notification:
+    stream:
+      max-global: ${NOTIFICATION_STREAM_MAX_GLOBAL:100}
+      max-per-user: ${NOTIFICATION_STREAM_MAX_PER_USER:2}
   database:
     url: ${DB_URL:}
     username: ${DB_USERNAME:}

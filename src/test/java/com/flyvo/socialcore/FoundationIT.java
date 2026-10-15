@@ -70,6 +70,12 @@ class FoundationIT {
   }
 
   @Test
+  void semanticInboxUpgradePreservesAllTwentySixChecksumsAndExistingPost() {
+    assertFeedIndexUpgrade(
+        "0026", 26, "notification.inbox_recipient_page", "recipient_id", "last_activity_at DESC");
+  }
+
+  @Test
   void homeSourceIndexUpgradePreservesTwentyThreeChecksumsAndExistingPost() {
     assertFeedIndexUpgrade(
         "0023", 23, "content.post_personal_author", "INCLUDE (audience)", "community_id IS NULL");

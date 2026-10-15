@@ -83,6 +83,12 @@ Single-instance deployment is a Phase 1 limiter assumption. Before multiple publ
 
 ## Logging, audit and observability
 
+Phase 7 notification REST/SSE uses the existing worker and current owner proofs;
+[notification operations](../ops/notifications.md) specifies quotas, replay/cleanup,
+five-second session checks, bounded nonblocking transport and shutdown ordering.
+No stream owns a DB connection between checks. Stream/auth failures leave REST
+authoritative, and no metrics endpoint becomes public.
+
 Phase 1 setup, provider approval gates, persistent local/mounted production keys,
 rotation and worker recovery are in [identity operations](../ops/identity.md).
 Its worker exposes queue/dead/retry depth, oldest pending age and failure count.

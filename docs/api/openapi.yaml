@@ -1,8 +1,8 @@
 openapi: "3.1.0"
 info:
-  title: "social-core accounts, communities, graph, content, moderation and feeds"
-  version: "0.6.0"
-  description: "Phases 0–4 accepted; Phase 5 comments/reactions/reports and Phase 6 chronological feeds implemented pending main review. All unsafe API calls require CSRF cookie/header and exact trusted Origin, including Bearer and anonymous capability requests. Every Bearer validates current PostgreSQL session/account; dependency outage is 503. Auth/API responses are no-store. Unsupported routes remain deny-by-default. Browser deployment is same-site TLS."
+  title: "social-core accounts, communities, graph, content, moderation, feeds and notifications"
+  version: "0.7.0"
+  description: "Phases 0–6 accepted; Phase 7 semantic inbox and authenticated SSE implemented with internal gate passed, pending main review. Phase 8 is not yet implemented. All unsafe API calls require CSRF cookie/header and exact trusted Origin, including Bearer and anonymous capability requests. Every Bearer validates current PostgreSQL session/account; dependency outage is 503. Auth/API responses are no-store. Unsupported routes remain deny-by-default. Browser deployment is same-site TLS."
 paths:
   "/actuator/health":
     get:
@@ -2547,6 +2547,7 @@ paths:
                   nextCursor: {type: [string, 'null']}
         default: {$ref: '#/components/responses/Problem'}
   /api/v1/notifications/unread-count:
+    description: Recipient-only source-backed badge, not a global count
     get:
       operationId: notificationUnreadCount
       summary: Exact count of currently eligible unread groups
@@ -2557,6 +2558,28 @@ paths:
           content:
             application/json:
               schema: {type: object, required: [unreadCount], properties: {unreadCount: {type: integer, format: int64, minimum: 0}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/notifications/stream:
+    get:
+      operationId: streamNotifications
+      summary: Bearer fetch SSE invalidation hints; reconnect refreshes REST
+      security: [{BearerAuth: []}]
+      description: Actual verified JWT exp closes the connection without clock-skew extension. Current session/account checks every five seconds have a three-second fail-closed deadline including executor queue time. Frames contain only a generic notifications.changed hint, opaque random event ID or heartbeat comment; never actor/target details or counts. Current owner eligibility is checked and a generic repair hint also covers disappearance. Last-Event-ID is ignored as best effort, not durable replay. All query parameters are rejected; tokens are accepted only in the Authorization header. Default caps two streams/user and 100/global. Rate budget ten attempts/minute per user/IP. Disconnect, backpressure or required-auth outage closes the stream; REST remains authoritative.
+      parameters:
+        - {name: Last-Event-ID, in: header, required: false, schema: {type: string}}
+      responses:
+        '200':
+          description: Nonblocking SSE, no-store, closes at actual expiry
+          content:
+            text/event-stream:
+              schema: {type: string}
+        '429':
+          description: Stream cap or rate budget exhausted
+          headers:
+            Retry-After: {schema: {type: integer}, description: Five seconds for stream caps, sixty for rate budget}
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
         default: {$ref: '#/components/responses/Problem'}
   /api/v1/notifications/{id}/read:
     put:

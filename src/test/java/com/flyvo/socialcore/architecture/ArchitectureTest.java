@@ -48,6 +48,29 @@ class ArchitectureTest {
   }
 
   @Test
+  void notificationIdentityDependencyIsOnlyStreamProofAndCurrentSession() {
+    var calls =
+        PRODUCTION.stream()
+            .filter(c -> c.getPackageName().contains(".notification."))
+            .flatMap(c -> c.getMethodCallsFromSelf().stream())
+            .filter(c -> c.getTargetOwner().getPackageName().contains(".identity."))
+            .toList();
+    assertThat(calls).isNotEmpty();
+    assertThat(calls)
+        .allSatisfy(
+            call -> {
+              String type = call.getTargetOwner().getName();
+              assertThat(type)
+                  .isIn(
+                      ROOT + ".identity.api.StreamAuthentication",
+                      ROOT + ".identity.api.StreamAuthentication$Proof",
+                      ROOT + ".identity.api.SessionQueries");
+              if (!type.contains("$"))
+                assertThat(call.getTarget().getName()).isIn("verify", "requireCurrent");
+            });
+  }
+
+  @Test
   void deliberatelyForbiddenFixtureIsDetected() {
     var fixtures = new ClassFileImporter().importPackages("com.flyvo.archfixtures");
     var result = ModuleRules.boundaries("com.flyvo.archfixtures").evaluate(fixtures);

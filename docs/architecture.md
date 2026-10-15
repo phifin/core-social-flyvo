@@ -10,6 +10,10 @@ Do not build a reusable framework or plugin engine. Reusability means neutral co
 
 Use Java 21, the existing Boot 4.1.1 baseline, Maven Wrapper, Spring MVC, Spring Security, JPA/Hibernate, PostgreSQL 18 and Flyway. Resolve actual dependency compatibility in Phase 0; do not copy Boot 3 starter names blindly. Java 21 is compatible with the documented Boot baseline. [Spring Boot system requirements](https://docs.spring.io/spring-boot/system-requirements.html).
 
+Phase 7 uses the compatible Tomcat 11.0.27 patch (all managed Tomcat artifacts via
+one property), fixing the observed 11.0.24 nonblocking write/completion race. No
+Boot baseline, transport model or pool/timeout change; see package runtime evidence.
+
 ## Module ownership
 
 | Module | Owns | Published contracts (illustrative names, required responsibilities) |
@@ -90,6 +94,9 @@ current-session checks for SSE lifecycle. Implementation is assigned to Phases
 7–8, not present at acceptance of Phases 5–6. No credential access, token issuance,
 identity internals/SQL or positive session cache is allowed. Development must
 align the dependency map and add narrow-call architecture regression coverage.
+Phase 7 now implements this seam with StreamAuthentication.Proof/verify and
+SessionQueries.requireCurrent only; focused architecture tests reject broader
+identity calls. Ordinary REST validation and current-session semantics are retained.
 
 `web -> application -> domain`; application also uses owned ports and other modules' APIs. Infrastructure implements owned ports. Domain may use JDK and Jakarta Persistence annotations as a pragmatic exception: a behavior-bearing aggregate may be its JPA model. It may not use Spring services, SecurityContext, HTTP, Jackson, repositories or another module's internals. Separate persistence/domain models only for a demonstrated mismatch; do not map everything twice mechanically.
 

@@ -105,7 +105,8 @@ observed read/bulk-read versions, current actor/target filtering and bounded
 90-day group cleanup with retained source ordering. Source-authorized attribution
 contains at most three names; no content body is stored in inbox rows. The route
 planner and producer before-state handle precedence and reordered reactivation.
-Authenticated SSE and the complete phase gate remain pending. See
+Authenticated SSE is now implemented through ADR-015; the complete phase gate
+and independent review are recorded separately. See
 [notifications](notifications.md) for exact implementation limits.
 
 `Report` belongs to a reporter and references exactly one supported target (post/comment/community/user), category, optional detail, evidence snapshot and lifecycle OPEN, IN_REVIEW, RESOLVED, DISMISSED. It is not public content. Submission requires ability to access the target at submission time; disappearance afterward does not destroy the case. One unresolved report per reporter/target avoids spam; different reporters may report the same target.

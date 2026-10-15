@@ -22,10 +22,11 @@ hydration, scoped expiring cursors and bounded refill. [Feed](docs/feed.md) docu
 current-state privacy/weak consistency; [benchmark evidence](docs/phases/phase-6.md)
 records representative load and limitations, including the unmet initial p95
 <500ms goal on local hardware, not production capacity. Phase 7
-has a locally implemented [semantic REST inbox slice](docs/notifications.md);
-authenticated SSE and the full Phase 7 gate remain pending. Phase 8 is unimplemented.
+has a locally implemented [semantic inbox and authenticated SSE](docs/notifications.md);
+the [Phase 7 internal gate](docs/phases/phase-7.md) passed298 tests, pending main
+review. Phase 8 is unimplemented.
 Main has activated the [Phases 7–8 package](docs/work-packages/phase-7-8.md)
-for sequential development; this is an assignment, not implemented functionality.
+for sequential development; activation does not accept either phase.
 
 For sequential development/review threads, read the fixed [agent handoff](docs/agent-handoff.md) and [thread workflow](docs/thread-workflow.md).
 
@@ -43,6 +44,11 @@ For sequential development/review threads, read the fixed [agent handoff](docs/a
 One Maven Spring Boot application, Java 21, PostgreSQL, Flyway, Spring Data JPA/Hibernate, Spring MVC REST, Docker Compose, Testcontainers and ArchUnit. Public API prefix: `/api/v1`. Production is a modular monolith. An HTTP process and a worker process may later run from the same artifact.
 
 The build pins Java 21, Boot 4.1.1 and Maven Wrapper 3.9.16. PostgreSQL 18.6 is pinned by digest in Compose and Testcontainers. Use Boot-managed dependency versions, including Hibernate, Flyway, Jackson and JUnit. No Redis, message broker or dedicated search engine is required initially.
+
+Phase 7 overrides the managed Tomcat patch to 11.0.27 as one aligned artifact set:
+11.0.24's late nonblocking write/completion race can leak native async requests.
+Boot/Servlet contracts and pool/timeouts are unchanged; real slow-reader teardown
+checks both native async and servlet allocation counters, not just app reservations.
 
 One deliberate adjustment to the requested testing defaults: Boot 4 manages JUnit 6; retain its supported Jupiter stack (the familiar `org.junit.jupiter` programming model) instead of forcing a JUnit 5 dependency downgrade. All testing requirements otherwise apply unchanged. See [ADR-001](docs/adr/001-runtime-and-modularity.md) and [Spring Boot's testing documentation](https://docs.spring.io/spring-boot/reference/testing/index.html).
 

@@ -25,6 +25,7 @@ class OpenApiContractTest {
             Map.entry("/api/v1/feeds/home", List.of("get")),
             Map.entry("/api/v1/notifications", List.of("get")),
             Map.entry("/api/v1/notifications/unread-count", List.of("get")),
+            Map.entry("/api/v1/notifications/stream", List.of("get")),
             Map.entry("/api/v1/notifications/{id}/read", List.of("put")),
             Map.entry("/api/v1/notifications/read", List.of("post")),
             Map.entry("/api/v1/me/notification-preferences", List.of("get", "patch")),

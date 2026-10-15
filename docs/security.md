@@ -128,7 +128,12 @@ Current owner proofs, ACTIVE accounts, bilateral blocks and recipient mutes/pref
 filter every actor/target before names or counts. Notifications return no stored
 body or message fallback. Mentions cannot widen source audience. Read versions are
 observed, bulk read uses observed server versions, and scan-budget exhaustion is
-an explicit 503 rather than a hidden/truncated count. SSE is pending slice B.
+an explicit 503 rather than a hidden/truncated count. SSE now uses ADR-015's
+verified actual-expiry proof plus current session/account checks, bounded
+nonblocking invalidations, and shutdown before web-server drain. No raw token is
+retained in stream state or accepted through query parameters; ordinary REST
+validation/CSRF/current-state checks remain unchanged. Full phase evidence/review
+is separate from feature implementation.
 
 Phase 3 applies bilateral block and current FRIENDS to profile reads and permitted
 profile graph lists. Own graph lists recheck actor status and batch-filter inactive

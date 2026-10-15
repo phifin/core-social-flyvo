@@ -69,7 +69,8 @@ Bearer fetch GET /notifications/stream; no raw token retained, no URL credential
 Only changed invalidation/heartbeat frames; REST refresh on reconnect. Poll durable
 recipient watermark, recheck current session/account at ≤10-second heartbeat,
 schedule actual exp closure. Bound streams (2/user, 100/global), shared scheduler,
-writer executor/queue and slow-client timeout; release on every terminal path.
+nonblocking writer/two-frame queue, shared check executor and slow-client timeout;
+release on every terminal path.
 No connection or transaction spans a stream. No extra broker/service.
 
 Real Tomcat HTTP tests cover JWT gates, actual exp/skew, logout/all/session revoke,
@@ -150,10 +151,65 @@ documentation commit. No push, agents, phase acceptance or Phase 9 implementatio
   passing with no skips. Named regressions cover reactivation-before-delete,
   receipt/effect/fence rollback, cross-hour lifecycle, current actor filtering,
   recipient IDOR and bulk-read/new-activity interleaving. Full Phase 7 gate has
-  not run and B/C/D have not started. V0027 preserves all applied migrations;
+  not run at that checkpoint and B/C/D had not started. V0027 preserves all applied migrations;
   older FoundationIT checksum/data/constraint assertions remain intact, expected
   latest migration counts advance to27.
 - Refinement: recipient serialization comes before all notification source/group
   writes, avoiding a reverse watermark/group lock order with read commands.
   Internal background proofs accept recipient UUID explicitly; no fabricated
   session or HTTP/system bypass is introduced.
+- B implementation uses ADR-015 StreamAuthentication.Proof/verify plus existing
+  SessionQueries only. Shared nonblocking transport, two-frame queues, typed
+  caps, current-source repair and early shutdown are implemented. Verification
+  remains in progress; Phase 8 C/D have not started.
+- 2026-10-15 runtime investigation: native targeted tests passed but one earlier
+  fork logged a 30-second shutdown wait. IntelliJ non-suspending probes confirmed
+  complete paths and streams=0; a paused shutdown/native stack located Tomcat's
+  active-request drain before @PreDestroy. A separate open-stream context-close
+  regression failed its five-second deadline, then passed in27ms after moving
+  stream stop before the web-server drain via SmartLifecycle. The standalone
+  test owns its context to avoid Spring TestContext restart callbacks. Agent
+  breakpoints/debug sessions were removed; user breakpoints stayed unchanged.
+  Evidence: .local/evidence/p78/sse-shutdown-before.log and sse-shutdown-after.log.
+- The first full Phase7 verify ran52 fast +242 PG tests and failed one native
+  slow-reader teardown (container async count remained1), despite logical
+  reservations reaching0. This is a failed gate, not accepted/flaky-to-ignore.
+  A focused late-onError regression failed (native complete expected twice,
+  observed once). Cleanup now releases metrics/reservations once but completes
+  subsequent native error cycles, with onComplete only releasing. Both native
+  async and servlet allocated counters must return0 in every HTTP test teardown.
+  Final verification is pending; C/D remain gated.
+- A second full verify still failed the same native teardown despite the late-error
+  application fix. IntelliJ conditional logpoint in Tomcat AsyncStateMachine.recycle
+  captured `COMPLETING`, error `NONE`, through ConnectionHandler.release; the
+  context retained1 async request with0 sockets/waiting processors. The 11.0.24
+  write-notification/completion race throws before post-processing. The compatible
+  Tomcat11.0.27 patch explicitly returns LONG for that late notification so normal
+  completion/decrement runs. Override all managed Tomcat artifacts together via
+  tomcat.version; Boot4.1.1/Java21 and resource limits stay unchanged. Repeat the
+  real slow-reader regression three times and retain native resource assertions.
+  Official source/changelog: https://tomcat.apache.org/tomcat-11.0-doc/changelog.html
+  and https://github.com/apache/tomcat/compare/11.0.24...11.0.27 . Verification pending.
+- Patch-only targeted verification on actual11.0.27 still failed1/3 repeated
+  slow-reader teardowns; it is not reported green. AsyncContext.complete does not
+  abort a blocked final native flush. The existing Tomcat transport now supplies
+  a stream-only native abort hook before backpressured completion, with serialized
+  terminal callbacks and no hook call after completion/recycling. Native-buffer
+  work retains its unsent deadline even after the Java queue empties. No new
+  dependency or global timeout/pool change. First focused checkpoint:8 fast +3
+  native slow-reader repetitions PASS (110–376ms, ≤2 frames, both native counters0).
+  Full verify with the additional buffered-frame deadline regression is pending.
+  IDE launch retained11.0.24 after the Maven override; CLI XML/log proves actual
+  11.0.27 verification. All agent probes removed; no debug sessions remain.
+- Full native-abort verify passed54 fast +244 PG tests (zero errors/skips), but
+  still logged a forced JVM exit at30s. The native counters pass; the actual dump
+  now locates shutdown in HikariPool.shutdown/connection-adder awaiting termination,
+  not Tomcat's active-request drain. The three new Spring/Testcontainers classes
+  explicitly evict their cached context after class so their pools do not outlive
+  the owned database container. No production pool, timeout or test assertion is
+  changed. A clean full-suite shutdown is being verified before closing the gate.
+- Final Phase7 gate2026-10-15: Spotless + full verify PASS54 fast/244 integration
+  (298 total), zero failures/errors/skips and no forced-fork-exit warning. New
+  contexts close after class. Exact resource/lag values and prior failures are in
+  [Phase7 evidence](../phases/phase-7.md). Internal gate allows C/D within this
+  assignment only; neither phase is accepted. Commit B before starting C.

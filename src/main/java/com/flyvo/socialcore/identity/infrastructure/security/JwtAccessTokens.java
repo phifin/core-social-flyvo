@@ -1,5 +1,6 @@
 package com.flyvo.socialcore.identity.infrastructure.security;
 
+import com.flyvo.socialcore.identity.api.StreamAuthentication;
 import com.flyvo.socialcore.identity.application.port.AccessTokens;
 import com.flyvo.socialcore.platform.api.ActorContext;
 import com.flyvo.socialcore.platform.api.Failure;
@@ -28,7 +29,7 @@ import org.springframework.security.oauth2.jwt.*;
 import org.springframework.stereotype.Component;
 
 @Component
-public class JwtAccessTokens implements AccessTokens {
+public class JwtAccessTokens implements AccessTokens, StreamAuthentication {
   private final NimbusJwtEncoder encoder;
   private final List<NimbusJwtDecoder> decoders = new ArrayList<>();
   private final Clock clock;
@@ -146,12 +147,24 @@ public class JwtAccessTokens implements AccessTokens {
   }
 
   public ActorContext validate(String token) {
+    return verified(token).actor();
+  }
+
+  public Proof verify(String token) {
+    var proof = verified(token);
+    if (!clock.instant().isBefore(proof.expiresAt())) throw Failure.unauthorized();
+    return proof;
+  }
+
+  private Proof verified(String token) {
     if (token == null || token.length() > 8192) throw Failure.unauthorized();
     for (var decoder : decoders)
       try {
         var jwt = decoder.decode(token);
-        return new ActorContext(
-            UUID.fromString(jwt.getSubject()), UUID.fromString(jwt.getClaimAsString("sid")));
+        return new Proof(
+            new ActorContext(
+                UUID.fromString(jwt.getSubject()), UUID.fromString(jwt.getClaimAsString("sid"))),
+            jwt.getExpiresAt());
       } catch (JwtException | IllegalArgumentException ignored) {
       }
     throw Failure.unauthorized();

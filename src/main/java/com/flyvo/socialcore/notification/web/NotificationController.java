@@ -26,7 +26,9 @@ public class NotificationController {
     return a;
   }
 
-  record Read(long activityVersion) {}
+  record Read(
+      @jakarta.validation.constraints.NotNull @jakarta.validation.constraints.Min(0)
+          Long activityVersion) {}
 
   record Unread(long unreadCount) {}
 
@@ -47,7 +49,10 @@ public class NotificationController {
 
   @PutMapping("/notifications/{id}/read")
   @ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
-  public void read(Authentication auth, @PathVariable UUID id, @RequestBody Read request) {
+  public void read(
+      Authentication auth,
+      @PathVariable UUID id,
+      @jakarta.validation.Valid @RequestBody Read request) {
     commands.read(actor(auth), id, request.activityVersion());
   }
 

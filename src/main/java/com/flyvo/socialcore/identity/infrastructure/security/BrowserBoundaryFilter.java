@@ -26,6 +26,9 @@ public class BrowserBoundaryFilter extends OncePerRequestFilter {
   private static final RequestMatcher OAUTH_CALLBACK =
       PathPatternRequestMatcher.withDefaults()
           .matcher(HttpMethod.GET, "/api/v1/auth/oauth/{provider}/callback");
+  private static final RequestMatcher NOTIFICATION_STREAM =
+      PathPatternRequestMatcher.withDefaults()
+          .matcher(HttpMethod.GET, "/api/v1/notifications/stream");
   private final String origin;
   private final HandlerExceptionResolver errors;
   private final Secrets secrets;
@@ -68,6 +71,20 @@ public class BrowserBoundaryFilter extends OncePerRequestFilter {
     String path = request.getRequestURI();
     boolean unsafe = !java.util.Set.of("GET", "HEAD", "OPTIONS").contains(request.getMethod());
     if (path.startsWith("/api/v1/")) response.setHeader("Cache-Control", "no-store");
+    if (NOTIFICATION_STREAM.matches(request)) {
+      var authentication =
+          org.springframework.security.core.context.SecurityContextHolder.getContext()
+              .getAuthentication();
+      if (authentication != null
+          && authentication.getPrincipal()
+              instanceof com.flyvo.socialcore.platform.api.ActorContext actor
+          && (!take("stream-ip:" + request.getRemoteAddr(), 10, 60000)
+              || !take("stream-user:" + actor.userId(), 10, 60000))) {
+        response.setHeader("Retry-After", "60");
+        errors.resolveException(request, response, null, new Failure(429, "RATE_LIMITED"));
+        return;
+      }
+    }
     // Top-level OAuth GETs need abuse protection without unsafe-method Origin/CSRF checks.
     // Share each budget across both providers; reject before insertion/state consumption/network.
     boolean authorize = OAUTH_AUTHORIZE.matches(request);

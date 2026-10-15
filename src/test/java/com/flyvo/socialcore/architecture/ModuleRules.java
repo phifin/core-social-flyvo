@@ -21,7 +21,9 @@ final class ModuleRules {
           Map.entry("media", Set.of("account")),
           Map.entry("content", Set.of("account", "graph", "community", "media", "profile")),
           Map.entry("feed", Set.of("content", "graph", "community", "profile")),
-          Map.entry("notification", Set.of("content", "community", "graph", "profile", "account")),
+          Map.entry(
+              "notification",
+              Set.of("content", "community", "graph", "profile", "account", "identity")),
           Map.entry("search", Set.of("content", "community", "profile", "account")),
           Map.entry("moderation", Set.of("content", "community", "account", "profile")),
           Map.entry("platform", Set.of()));

@@ -35,6 +35,7 @@ class SecurityConfiguration {
             "If-Match",
             "Idempotency-Key",
             "X-Request-ID"));
+    cors.addAllowedHeader("Last-Event-ID");
     cors.setExposedHeaders(java.util.List.of("ETag", "X-Request-ID"));
     cors.setAllowCredentials(true);
     var source = new org.springframework.web.cors.UrlBasedCorsConfigurationSource();
@@ -84,6 +85,7 @@ class SecurityConfiguration {
                         HttpMethod.GET,
                         "/api/v1/notifications",
                         "/api/v1/notifications/unread-count",
+                        "/api/v1/notifications/stream",
                         "/api/v1/me/notification-preferences")
                     .authenticated()
                     .requestMatchers(HttpMethod.PUT, "/api/v1/notifications/*/read")

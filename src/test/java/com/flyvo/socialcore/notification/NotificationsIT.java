@@ -25,6 +25,7 @@ import org.springframework.boot.test.context.*;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.*;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.*;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -36,6 +37,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @Testcontainers
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class NotificationsIT {
   @Container
   static final PostgreSQLContainer PG =
@@ -91,6 +93,7 @@ class NotificationsIT {
   @Autowired JdbcTemplate jdbc;
   @Autowired org.springframework.transaction.PlatformTransactionManager manager;
   @MockitoSpyBean InboxRepository store;
+  @MockitoSpyBean ContentNotificationSources sourceProofs;
   TransactionTemplate tx;
 
   @BeforeEach
@@ -521,6 +524,156 @@ class NotificationsIT {
     jdbc.update("DELETE FROM platform.consumer_receipt WHERE event_id=?", created);
     dispatch(created);
     assertThat(queries.inbox(owner, 100, null).items()).isEmpty();
+  }
+
+  @Test
+  void replacementFriendshipDoesNotRevivePreviousAcceptanceNotification() {
+    var requester = user();
+    var recipient = user();
+    UUID first = null;
+    for (int round = 0; round < 2; round++) {
+      var request = graph.request(requester, recipient.userId());
+      graph.respond(recipient, request.id(), "accept");
+      var accepted =
+          jdbc.queryForObject(
+              "SELECT id FROM platform.outbox_event WHERE event_type='FriendshipEstablished' AND payload->>'requestId'=?",
+              UUID.class,
+              request.id().toString());
+      dispatch(accepted);
+      var current = queries.inbox(requester, 100, null).items();
+      assertThat(current).hasSize(1);
+      if (round == 0) {
+        first = current.getFirst().id();
+        graph.unfriend(requester, recipient.userId());
+        assertThat(queries.unread(requester)).isZero();
+      } else assertThat(current.getFirst().id()).isNotEqualTo(first);
+    }
+  }
+
+  @Test
+  void fiftyCommentGroupsUseOneBatchedCurrentSourceProof() {
+    var owner = user();
+    var actor = user();
+    var p = post(owner, "PUBLIC", List.of());
+    for (int i = 0; i < 50; i++) {
+      var c = interactions.create(actor, p.id(), null, "Synthetic bounded group " + i, null);
+      dispatch(event(c.id(), "CommentCreated", 0));
+    }
+    clearInvocations(sourceProofs);
+    assertThat(queries.inbox(owner, 50, null).items()).hasSize(50);
+    verify(sourceProofs, times(1))
+        .eligible(
+            eq(owner.userId()),
+            eq(ContentNotificationSources.Type.COMMENT),
+            eq("COMMENT_ON_POST"),
+            argThat(ids -> ids.size() == 50));
+  }
+
+  @Test
+  void friendRequestExpiryAndCurrentInactiveInviterHideExistingUnreadWithoutWorker() {
+    var requester = user();
+    var recipient = user();
+    var r = graph.request(requester, recipient.userId());
+    var e =
+        jdbc.queryForObject(
+            "SELECT id FROM platform.outbox_event WHERE event_type='FriendRequestCreated' AND payload->>'requestId'=?",
+            UUID.class,
+            r.id().toString());
+    dispatch(e);
+    assertThat(queries.unread(recipient)).isEqualTo(1);
+    clock.now = clock.now.plusSeconds(30L * 86400);
+    assertThat(queries.unread(recipient)).isZero();
+    var owner = user();
+    var invitee = user();
+    var community =
+        communities.create(
+            owner,
+            "expiry-" + UUID.randomUUID(),
+            "Synthetic invitation",
+            "",
+            "PRIVATE",
+            "INVITE_ONLY",
+            null);
+    var invitation = admissions.invite(owner, community.id(), invitee.userId(), null);
+    var invited =
+        jdbc.queryForObject(
+            "SELECT id FROM platform.outbox_event WHERE event_type='CommunityInvitationCreated' AND payload->>'sourceId'=?",
+            UUID.class,
+            invitation.id().toString());
+    dispatch(invited);
+    assertThat(queries.unread(invitee)).isEqualTo(1);
+    jdbc.update("UPDATE account.user_account SET status='SUSPENDED' WHERE id=?", owner.userId());
+    assertThat(queries.unread(invitee)).isZero();
+  }
+
+  @Test
+  void boundedUnreadAndBulkReadFailExplicitlyWithoutTruncationOrPartialRead() {
+    var owner = user();
+    var actor = user();
+    var p = post(owner, "PUBLIC", List.of());
+    var c = interactions.create(actor, p.id(), null, "Synthetic capacity fixture", null);
+    jdbc.update(
+        "INSERT INTO notification.notification(id,recipient_id,kind,target_type,target_id,grouping_key,activity_version,last_activity_at,created_at) SELECT md5(?::text||g::text)::uuid,?,'COMMENT_ON_POST','COMMENT',?,'COMMENT:'||g::text,1,?,? FROM generate_series(1,10001) g",
+        owner.userId(),
+        owner.userId(),
+        c.id(),
+        clock.instant().atOffset(ZoneOffset.UTC),
+        clock.instant().atOffset(ZoneOffset.UTC));
+    jdbc.update(
+        "INSERT INTO notification.contribution(id,notification_id,source_event_id,actor_id,source_type,source_id,source_version,active,occurred_at) SELECT md5('contribution:'||id::text)::uuid,id,md5('event:'||id::text)::uuid,?,'COMMENT',?,0,true,? FROM notification.notification WHERE recipient_id=?",
+        actor.userId(),
+        c.id(),
+        clock.instant().atOffset(ZoneOffset.UTC),
+        owner.userId());
+    assertThatThrownBy(() -> queries.unread(owner))
+        .isInstanceOfSatisfying(
+            Failure.class,
+            f -> {
+              assertThat(f.status()).isEqualTo(503);
+              assertThat(f.code()).isEqualTo("NOTIFICATION_SCAN_LIMIT");
+            });
+    assertThatThrownBy(() -> commands.readAll(owner)).isInstanceOf(Failure.class);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM notification.notification WHERE recipient_id=? AND read_version<>0",
+                Integer.class,
+                owner.userId()))
+        .isZero();
+  }
+
+  @Test
+  void recordsRealWorkerNotificationLagForOneHundredReactionEvents() {
+    clock.now = Instant.now();
+    var owner = user();
+    var actors = List.of(user(), user(), user(), user());
+    long started = System.nanoTime();
+    var events = new ArrayList<UUID>();
+    for (int group = 0; group < 25; group++) {
+      clock.now = Instant.now();
+      var p = post(owner, "PUBLIC", List.of());
+      for (var actor : actors) {
+        clock.now = Instant.now();
+        var r = interactions.react(actor, p.id(), null, Interactions.ReactionType.LIKE);
+        var e = event(r.id(), "ReactionChanged", r.version());
+        clock.now = Instant.now();
+        dispatch(e);
+        events.add(e);
+      }
+    }
+    var lag =
+        jdbc.queryForObject(
+            "SELECT max(extract(epoch FROM (d.completed_at-e.occurred_at))) FROM platform.outbox_event e JOIN platform.outbox_delivery d ON d.event_id=e.id WHERE d.consumer_name='notification-inbox-v1' AND e.id IN ("
+                + String.join(",", Collections.nCopies(events.size(), "?"))
+                + ")",
+            Double.class,
+            events.toArray());
+    assertThat(lag).isLessThan(30);
+    assertThat(queries.unread(owner)).isEqualTo(25);
+    System.out.println(
+        "Notification lag workload=100 reactions/25 posts/4 actors; max-seconds="
+            + lag
+            + "; elapsed-ms="
+            + TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
   }
 
   @Test

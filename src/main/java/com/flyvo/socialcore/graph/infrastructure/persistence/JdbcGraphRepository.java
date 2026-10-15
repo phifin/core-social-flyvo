@@ -67,7 +67,7 @@ public class JdbcGraphRepository implements GraphRepository {
       List<UUID> ids) {
     if (ids.isEmpty()) return List.of();
     return jdbc.query(
-        "SELECT r.id,r.requester_id,r.addressee_id,r.status,r.expires_at,p.version,EXISTS(SELECT 1 FROM graph.friendship f WHERE f.low_user_id=r.low_user_id AND f.high_user_id=r.high_user_id) friends FROM graph.friend_request r JOIN graph.pair_revision p ON p.low_user_id=r.low_user_id AND p.high_user_id=r.high_user_id WHERE r.id IN ("
+        "SELECT r.id,r.requester_id,r.addressee_id,r.status,r.expires_at,p.version,EXISTS(SELECT 1 FROM graph.friendship f WHERE f.low_user_id=r.low_user_id AND f.high_user_id=r.high_user_id AND f.request_id=r.id) friends FROM graph.friend_request r JOIN graph.pair_revision p ON p.low_user_id=r.low_user_id AND p.high_user_id=r.high_user_id WHERE r.id IN ("
             + String.join(",", Collections.nCopies(ids.size(), "?"))
             + ")",
         (r, n) ->

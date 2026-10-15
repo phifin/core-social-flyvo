@@ -48,9 +48,19 @@ class JwtAccessTokensTest {
     var actor = new ActorContext(UUID.randomUUID(), UUID.randomUUID());
     var issued = tokens.issue(actor);
     assertThat(tokens.validate(issued)).isEqualTo(actor);
+    assertThat(tokens.verify(issued).actor()).isEqualTo(actor);
+    assertThat(tokens.verify(issued).expiresAt()).isEqualTo(now.plusSeconds(300));
     var claims = SignedJWT.parse(issued).getJWTClaimsSet();
     assertThat(claims.getClaims()).doesNotContainKeys("email", "roles", "memberships");
     assertThat(tokens.validate(sign(claims, old, "old", JWSAlgorithm.RS256))).isEqualTo(actor);
+    var atExpiry =
+        new JWTClaimsSet.Builder(claims)
+            .issueTime(Date.from(now.minusSeconds(60)))
+            .expirationTime(Date.from(now))
+            .build();
+    var skewToken = sign(atExpiry, pair, "new", JWSAlgorithm.RS256);
+    assertThat(tokens.validate(skewToken)).isEqualTo(actor);
+    assertThatThrownBy(() -> tokens.verify(skewToken)).isInstanceOf(Failure.class);
     for (String change :
         List.of(
             "issuer",
