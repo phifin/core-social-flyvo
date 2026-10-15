@@ -4,6 +4,14 @@ This is a migration design specification, not executable DDL. Implement only the
 
 ## Notation and common rules
 
+Implemented slice C adds V0028 search.document (kind/UUID key, source/account version
+vector, owner/scope UUIDs, tombstone/missing flags, restricted key/name/body, simple
+tsvector/GIN, pattern and owner/scope indexes) and search.rebuild (one active/kind,
+stage/version/UUID checkpoint/examined/changed). No edits to V0001–V0027 or SQL-view
+allowlist. DB time supplies projection timestamps/cutoffs. Bounded snapshot count/
+checksum proof is diagnostic, never authorization; unknown absence version stays
+NULL and last-known ordering survives redaction. See [search](search-and-caching.md).
+
 `id` means `uuid PRIMARY KEY`. `U` means UNIQUE, `FK` an actual database foreign key, `?` nullable; other listed fields are NOT NULL unless a state-dependent note says otherwise. Time columns are `timestamptz` mapped to `Instant`; `created_at` defaults to database current time. Mutable aggregates have `updated_at` and `version bigint NOT NULL DEFAULT 0` (denoted **V** below) with JPA optimistic locking. State enums use `varchar` plus CHECK constraints, not ordinal or PostgreSQL enum types. `hash` is `bytea`; text lengths and nonnegative numeric checks are migration constraints as well as input validation.
 
 Cross-module FKs are intentional referential integrity in one database. Reference UUID columns, never cross-module JPA associations. Use `ON DELETE RESTRICT` between aggregates/modules, and hard-delete only through explicit retention workflows; dependent rows within an aggregate may use CASCADE after review. Index referencing FKs used for traversal/deletion: PostgreSQL does not automatically create such indexes. Tables not explicitly listed as soft-deleted are not to receive a generic `deleted` flag.

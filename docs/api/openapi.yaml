@@ -1,8 +1,8 @@
 openapi: "3.1.0"
 info:
   title: "social-core accounts, communities, graph, content, moderation, feeds and notifications"
-  version: "0.7.0"
-  description: "Phases 0–6 accepted; Phase 7 semantic inbox and authenticated SSE implemented with internal gate passed, pending main review. Phase 8 is not yet implemented. All unsafe API calls require CSRF cookie/header and exact trusted Origin, including Bearer and anonymous capability requests. Every Bearer validates current PostgreSQL session/account; dependency outage is 503. Auth/API responses are no-store. Unsupported routes remain deny-by-default. Browser deployment is same-site TLS."
+  version: "0.8.0"
+  description: "Phases 0–6 accepted; Phase 7 semantic inbox/SSE internal gate passed pending main review. Phase 8 search slice is locally implemented; moderation operations/full package gate remain. All unsafe API calls require CSRF cookie/header and exact trusted Origin, including Bearer and anonymous capability requests. Every Bearer validates current PostgreSQL session/account; dependency outage is 503. Auth/API responses are no-store. Unsupported routes remain deny-by-default. Browser deployment is same-site TLS."
 paths:
   "/actuator/health":
     get:
@@ -2630,6 +2630,79 @@ paths:
       responses:
         '200': {description: Current complete settings; security email unaffected, content: {application/json: {schema: {$ref: '#/components/schemas/NotificationPreferences'}}}}
         default: {$ref: '#/components/responses/Problem'}
+  /api/v1/search/users:
+    get:
+      operationId: searchUsers
+      summary: Source-authorized user name/handle discovery
+      security: [{BearerAuth: []}]
+      description: Plain NFC/lowercase terms, 1..8 words containing letters/digits. Simple PostgreSQL tokenization, no accent folding/stemming/operator language. Exact/prefix normalized handles/names supplement full-text matching. Current account/profile scope/bilateral blocks apply before names. Thirty requests/minute per user/IP; rate denial is 429/Retry-After60. No hidden total or projection-text fallback. Opaque cursor binds viewer/query/type/filter/size/cutoff, expires30 minutes; updates may omit results until refresh, and bounded refill may return empty continued pages.
+      parameters:
+        - {$ref: '#/components/parameters/SearchQuery'}
+        - {$ref: '#/components/parameters/SearchSize'}
+        - {$ref: '#/components/parameters/SearchAfter'}
+      responses:
+        '200': {description: Currently eligible cards, content: {application/json: {schema: {$ref: '#/components/schemas/SearchUsersPage'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/search/communities:
+    get:
+      operationId: searchCommunities
+      summary: Current authenticated community discovery cards
+      security: [{BearerAuth: []}]
+      description: Same bounded plain-query/rate/cursor contract as user search. Existing private community name/description discovery cards do not grant post/member access. Archived communities are omitted. Snippets contain at most240 Unicode code points from current owner data, never stored projection text.
+      parameters:
+        - {$ref: '#/components/parameters/SearchQuery'}
+        - {$ref: '#/components/parameters/SearchSize'}
+        - {$ref: '#/components/parameters/SearchAfter'}
+      responses:
+        '200': {description: Authorized discovery cards, content: {application/json: {schema: {$ref: '#/components/schemas/SearchCommunitiesPage'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/search/posts:
+    get:
+      operationId: searchPosts
+      summary: Source-authorized simple full-text post discovery
+      security: [{BearerAuth: []}]
+      description: Same bounded plain-query/rate/cursor contract; no body wildcard matching. Current source body and policy share the owner's statement. Index staleness never grants audience/member/account/block access. Optional communityId is cursor-bound and currently scope-authorized even for an empty page. Snippet is at most240 Unicode code points of authorized current plain text; no stale highlights, stored text fallback, score or hidden total. Mute retains existing home-only semantics.
+      parameters:
+        - {$ref: '#/components/parameters/SearchQuery'}
+        - {$ref: '#/components/parameters/SearchSize'}
+        - {$ref: '#/components/parameters/SearchAfter'}
+        - {name: communityId, in: query, required: false, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Authorized current post snippets, content: {application/json: {schema: {$ref: '#/components/schemas/SearchPostsPage'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/admin/search/rebuilds:
+    post:
+      operationId: startSearchRebuild
+      summary: Current ADMIN starts or resumes an audited bounded rebuild
+      security: [{BearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+      description: EXPORT then RECONCILE in100-source fenced jobs; versioned owner snapshots and checksums, not raw event bodies. New rebuild omits resumeId/expectedVersion. Resume requires both and matching current version/kind; stale is412, completed/active-kind conflict409. No raw exports exposed. This is not a frozen cross-source snapshot.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind]
+              properties:
+                kind: {type: string, enum: [USER, COMMUNITY, POST]}
+                resumeId: {type: [string, 'null'], format: uuid}
+                expectedVersion: {type: [integer, 'null'], minimum: 0}
+      responses:
+        '202': {description: Audited rebuild scheduled, content: {application/json: {schema: {$ref: '#/components/schemas/SearchRebuild'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/admin/search/rebuilds/{id}:
+    get:
+      operationId: readSearchRebuild
+      summary: Attributable current ADMIN rebuild status
+      security: [{BearerAuth: []}]
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200': {description: Audited operator-only progress, content: {application/json: {schema: {$ref: '#/components/schemas/SearchRebuild'}}}}
+        default: {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
     BearerAuth:
@@ -2642,6 +2715,19 @@ components:
       name: "refresh"
       description: "Host-only Secure HttpOnly SameSite=Strict; Path=/api/v1/auth. Local localhost profile alone allows HTTP."
   parameters:
+    SearchQuery:
+      name: q
+      in: query
+      required: true
+      schema: {type: string, minLength: 2, maxLength: 200}
+    SearchSize:
+      name: size
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 50, default: 20}
+    SearchAfter:
+      name: after
+      in: query
+      schema: {type: string, maxLength: 4096}
     CommentId:
       name: id
       in: path
@@ -2728,6 +2814,65 @@ components:
           schema:
             "$ref": "#/components/schemas/Problem"
   schemas:
+    SearchUser:
+      type: object
+      required: [id, handle, name, version]
+      properties:
+        id: {type: string, format: uuid}
+        handle: {type: string}
+        name: {type: string}
+        version: {type: integer, format: int64}
+    SearchCommunity:
+      type: object
+      required: [id, slug, name, snippet, visibility, version]
+      properties:
+        id: {type: string, format: uuid}
+        slug: {type: string}
+        name: {type: string}
+        snippet: {type: string, maxLength: 240}
+        visibility: {type: string, enum: [PUBLIC, PRIVATE]}
+        version: {type: integer, format: int64}
+    SearchPost:
+      type: object
+      required: [id, authorId, displayName, communityId, snippet, publishedAt, version]
+      properties:
+        id: {type: string, format: uuid}
+        authorId: {type: string, format: uuid}
+        displayName: {type: [string, 'null']}
+        communityId: {type: [string, 'null'], format: uuid}
+        snippet: {type: string, maxLength: 240}
+        publishedAt: {type: string, format: date-time}
+        version: {type: integer, format: int64}
+    SearchUsersPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/SearchUser'}}
+        nextCursor: {type: [string, 'null']}
+    SearchCommunitiesPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/SearchCommunity'}}
+        nextCursor: {type: [string, 'null']}
+    SearchPostsPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/SearchPost'}}
+        nextCursor: {type: [string, 'null']}
+    SearchRebuild:
+      type: object
+      required: [id, kind, stage, version, examined, changed, createdAt, completedAt]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string, enum: [USER, COMMUNITY, POST]}
+        stage: {type: string, enum: [EXPORT, RECONCILE, DONE]}
+        version: {type: integer, format: int64}
+        examined: {type: integer, format: int64}
+        changed: {type: integer, format: int64}
+        createdAt: {type: string, format: date-time}
+        completedAt: {type: [string, 'null'], format: date-time}
     NotificationKind:
       type: string
       enum: [FRIEND_REQUEST, FRIENDSHIP_ACCEPTED, COMMUNITY_INVITATION, COMMENT_ON_POST, REPLY_TO_COMMENT, MENTION, REACTION_ON_CONTENT]

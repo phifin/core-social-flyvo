@@ -14,4 +14,6 @@ public interface ProfileRepository {
   void flush();
 
   java.util.List<Profile> summaries(java.util.List<UUID> users);
+
+  java.util.List<UUID> scan(UUID after, int limit);
 }

@@ -13,6 +13,15 @@ public interface PostRepository {
 
   List<Post> load(List<UUID> ids);
 
+  record SearchSource(
+      UUID id, UUID authorId, UUID communityId, long version, String status, String body) {}
+
+  List<SearchSource> searchSources(List<UUID> ids);
+
+  List<UUID> searchScan(UUID after, int limit);
+
+  List<Post> searchLoad(UUID viewer, List<UUID> ids, UUID community, Instant now);
+
   Instant databaseTime();
 
   List<Key> feedCandidates(

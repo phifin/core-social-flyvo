@@ -51,6 +51,15 @@ public class Accounts implements AccountCommands, AccountQueries {
     return facts(value);
   }
 
+  @Transactional(readOnly = true)
+  public java.util.Map<UUID, Account> snapshots(java.util.List<UUID> ids) {
+    if (ids == null || ids.size() > 100 || ids.stream().anyMatch(java.util.Objects::isNull))
+      throw Failure.invalid();
+    return entities.snapshots(ids).stream()
+        .map(this::facts)
+        .collect(java.util.stream.Collectors.toUnmodifiableMap(Account::id, a -> a));
+  }
+
   @Transactional(propagation = Propagation.MANDATORY)
   public UUID createVerified() {
     var account = new UserAccount(UUID.randomUUID(), clock.instant());

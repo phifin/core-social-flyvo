@@ -29,6 +29,8 @@ public class BrowserBoundaryFilter extends OncePerRequestFilter {
   private static final RequestMatcher NOTIFICATION_STREAM =
       PathPatternRequestMatcher.withDefaults()
           .matcher(HttpMethod.GET, "/api/v1/notifications/stream");
+  private static final RequestMatcher SEARCH =
+      PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.GET, "/api/v1/search/{kind}");
   private final String origin;
   private final HandlerExceptionResolver errors;
   private final Secrets secrets;
@@ -71,6 +73,20 @@ public class BrowserBoundaryFilter extends OncePerRequestFilter {
     String path = request.getRequestURI();
     boolean unsafe = !java.util.Set.of("GET", "HEAD", "OPTIONS").contains(request.getMethod());
     if (path.startsWith("/api/v1/")) response.setHeader("Cache-Control", "no-store");
+    if (SEARCH.matches(request)) {
+      var authentication =
+          org.springframework.security.core.context.SecurityContextHolder.getContext()
+              .getAuthentication();
+      if (authentication != null
+          && authentication.getPrincipal()
+              instanceof com.flyvo.socialcore.platform.api.ActorContext actor
+          && (!take("search-ip:" + request.getRemoteAddr(), 30, 60000)
+              || !take("search-user:" + actor.userId(), 30, 60000))) {
+        response.setHeader("Retry-After", "60");
+        errors.resolveException(request, response, null, new Failure(429, "RATE_LIMITED"));
+        return;
+      }
+    }
     if (NOTIFICATION_STREAM.matches(request)) {
       var authentication =
           org.springframework.security.core.context.SecurityContextHolder.getContext()

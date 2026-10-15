@@ -103,6 +103,49 @@ text races, missing source/stale create, restart/live-write rebuild ordering,
 cursor ties/tamper/scope, parser/injection/expensive inputs and query counts.
 Measure EXPLAIN and initial <30s projection lag with workload/hardware recorded.
 
+### C implementation refinement after the Phase7 gate
+
+B is committed as `af07427`, full298-test gate passed before C. The owner seams
+will be ProfileSearchSources, CommunitySearchSources and ContentSearchSources:
+inspect/export ≤100 UUIDs/current versions, UUID keyset scans including inactive
+sources, and separate current authorized hydration. AccountQueries adds one bounded
+versioned snapshot map (no credentials). Profile hydration loads text/scope together,
+then current batched account/graph facts. Content hydration uses the same canonical
+FACTS/ELIGIBLE SQL in the statement returning body/relations; no projection-body
+fallback, generic profile directory or foreign SQL allowlist change. Community
+hydration returns existing authenticated discovery-card fields, not private posts.
+
+V0028 document key is (kind,source_id), source/author-account version vector,
+owner ID, tombstone/missing-source flags, restricted handle/name/body, generated
+simple tsvector, GIN and name/handle pattern indexes. Owner-confirmed absence is
+sticky (UUIDs are not reused), with nullable unknown version rather than inventing
+one from a legacy envelope; retain last known versions when available. Current
+snapshots, not payload text, drive live updates. Both vector components must not
+regress; duplicate identical state leaves updated_at unchanged. Inactive source or
+account redacts projection text immediately on projection; current hydration denies
+immediately even before that delivery.
+
+Public routes remain GET /search/users, /communities, /posts. Only posts supports
+an optional communityId filter, with explicit current scope proof even if empty.
+q is NFC/lower/space-normalized, 2..200 chars and1..8 plain Unicode terms; no query
+operator language, body wildcard, unaccent or stemming. Exact/prefix normalized
+name/handle is additional matching for users/communities. Default20/max50. Integer
+rank DESC/UUID ASC, DB cutoff, encrypted viewer/query/type/filter/size/rank/id and
+30-minute expiry; ≤1000 examined in100-row batches/200ms refill budget (not an
+in-flight timeout). Advance only through examined candidates, return no rank or
+hidden total, tolerate empty continued pages and mutable-projection omissions.
+Implement the documented30/minute user/IP search GET limiter independently.
+
+Register search-documents-v1 before backfill. Account lifecycle effects use bounded
+SEARCH_ACCOUNT jobs scanning indexed owner IDs; POST/profile/community deliveries
+inspect current owner snapshots directly. Audited ADMIN POST /admin/search/rebuilds
+starts or resumes a type-specific checkpointed EXPORT then RECONCILE pass; GET
+status is also attributable. One job owns100-source work/checkpoint/next-job in the
+existing fenced transaction. Reconcile refreshes indexed IDs and marks absent
+sources; live newer vectors beat older export. Lock actor account before rebuild
+state for operator commands; jobs lock rebuild state then document UUID order;
+live events lock documents only. No owner business locks or network calls.
+
 ## D — scoped moderation operations and package gate
 
 V0029 extends existing reports with assignment, terminal timestamp, bounded
@@ -213,3 +256,19 @@ documentation commit. No push, agents, phase acceptance or Phase 9 implementatio
   contexts close after class. Exact resource/lag values and prior failures are in
   [Phase7 evidence](../phases/phase-7.md). Internal gate allows C/D within this
   assignment only; neither phase is accepted. Commit B before starting C.
+- C checkpoint: full verify317 PASS (55 fast +262 PG), zero failures/errors/skips,
+  no forced JVM exit. Search15 PG cases +2 actual-scheduler/query-plan cases,
+  all19 feeds/19 foundation/30 authentication and earlier regressions pass.
+  Logs search-gate-targeted.log (63 PASS before later integrity/operator cases)
+  and search-full-final.log. Real scheduler10-post burst20,275ms/max20.056s;
+  page50 uses6 SQL; fresh/maintained plans4.338/0.098ms, selective GIN after normal
+  VACUUM ANALYZE without forced planner switches. Snapshot checksum proof uses
+  one bounded owned read; unknown versions are never fabricated. Source scope UUID
+  is indexed for post filtering. DB time supplies projection timestamp and cutoff.
+  The first full C attempt failed two test-harness assumptions: contract fixture
+  delivery lost priority to the new registered consumer's backlog, and Spring
+  translated the deliberate checksum exception. Fixture due ordering now isolates
+  the same real receipt/dedup path with unchanged exact assertions; checksum test
+  asserts the actual translated exception and repairs its Unicode payload. Prior
+  failures remain evidence, not green. Commit C before D. Heavy benchmark/Compose/
+  final scanners remain package gates; no phase acceptance or handoff here.

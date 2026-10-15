@@ -46,6 +46,52 @@ public class JdbcPosts implements PostRepository {
     return loadWhere(ids, "", List.of());
   }
 
+  public List<SearchSource> searchSources(List<UUID> ids) {
+    if (ids.isEmpty()) return List.of();
+    return jdbc.query(
+        "SELECT id,author_id,community_id,version,status,body FROM content.post WHERE id IN ("
+            + String.join(",", Collections.nCopies(ids.size(), "?"))
+            + ")",
+        (r, n) ->
+            new SearchSource(
+                r.getObject(1, UUID.class),
+                r.getObject(2, UUID.class),
+                r.getObject(3, UUID.class),
+                r.getLong(4),
+                r.getString(5),
+                r.getString(6)),
+        ids.toArray());
+  }
+
+  public List<UUID> searchScan(UUID after, int limit) {
+    return jdbc.queryForList(
+        "SELECT id FROM content.post "
+            + (after == null ? "" : "WHERE id>? ")
+            + "ORDER BY id LIMIT ?",
+        UUID.class,
+        after == null ? new Object[] {limit} : new Object[] {after, limit});
+  }
+
+  public List<Post> searchLoad(UUID viewer, List<UUID> ids, UUID community, Instant now) {
+    if (ids.isEmpty()) return List.of();
+    var policy = policyArgs(viewer, now);
+    var args = new ArrayList<>(policy.subList(0, 2));
+    args.addAll(ids);
+    args.addAll(policy.subList(2, policy.size()));
+    if (community != null) args.add(community);
+    return loadWhere(
+        ids,
+        " AND p.id IN (SELECT id FROM ("
+            + FEED_FACTS
+            + " WHERE p.id IN ("
+            + String.join(",", Collections.nCopies(ids.size(), "?"))
+            + ")) facts WHERE "
+            + ELIGIBLE
+            + (community == null ? "" : " AND community_id=?")
+            + ")",
+        args);
+  }
+
   private List<Post> loadWhere(List<UUID> ids, String extra, List<Object> extraArgs) {
     if (ids.isEmpty()) return List.of();
     String params = String.join(",", Collections.nCopies(ids.size(), "?"));

@@ -10,6 +10,8 @@ public interface CommunityRepository {
 
   List<Community> communities(List<UUID> ids);
 
+  List<UUID> searchScan(UUID after, int limit);
+
   void create(Community value, Instant now);
 
   void settings(

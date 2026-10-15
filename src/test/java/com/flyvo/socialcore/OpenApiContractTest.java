@@ -23,6 +23,11 @@ class OpenApiContractTest {
     Map.ofEntries(
             Map.entry("/api/v1/posts", List.of("get", "post")),
             Map.entry("/api/v1/feeds/home", List.of("get")),
+            Map.entry("/api/v1/search/users", List.of("get")),
+            Map.entry("/api/v1/search/communities", List.of("get")),
+            Map.entry("/api/v1/search/posts", List.of("get")),
+            Map.entry("/api/v1/admin/search/rebuilds", List.of("post")),
+            Map.entry("/api/v1/admin/search/rebuilds/{id}", List.of("get")),
             Map.entry("/api/v1/notifications", List.of("get")),
             Map.entry("/api/v1/notifications/unread-count", List.of("get")),
             Map.entry("/api/v1/notifications/stream", List.of("get")),

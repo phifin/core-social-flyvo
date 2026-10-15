@@ -83,6 +83,15 @@ class SecurityConfiguration {
                     .authenticated()
                     .requestMatchers(
                         HttpMethod.GET,
+                        "/api/v1/search/users",
+                        "/api/v1/search/communities",
+                        "/api/v1/search/posts",
+                        "/api/v1/admin/search/rebuilds/*")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/api/v1/admin/search/rebuilds")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.GET,
                         "/api/v1/notifications",
                         "/api/v1/notifications/unread-count",
                         "/api/v1/notifications/stream",

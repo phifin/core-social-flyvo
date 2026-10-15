@@ -2,6 +2,52 @@
 
 ## PostgreSQL search (Phase 8)
 
+Slice C is implemented locally, pending full package verification/main review;
+moderation operations remain slice D. See [operations](../ops/search.md).
+
+V0028 owns kind/UUID/source version, independent author-account version, owner/
+scope UUIDs, tombstone/missing flags and restricted key/name/body. Current owner
+exports/scans are≤100 through ProfileSearchSources, CommunitySearchSources and
+ContentSearchSources. Live search-documents-v1 registers before operator backfill;
+it inspects current owner state, not payload text/envelope versions, including
+legacy envelope0. Neither vector component regresses; identical state leaves
+updated_at unchanged. Physical absence is sticky (IDs not reused), unknown version
+NULL/last-known metadata retained. Inactive sources use restorable versioned
+tombstones instead. No foreign SQL consumer, dependency or runtime service.
+
+Authenticated GET /search/users, /communities, /posts use NFC/lower/space-normalized
+plain terms:2..200 UTF-16 units,1..8 words with letters/digits, literal handle/name
+prefix plus simple AND full text. No body wildcard/operator language/stemming/
+unaccent/trgm. Vietnamese fixtures distinguish Hà Nội/ha noi and Nguyễn/nguyen,
+not linguistic support. Default20/max50, independent30/minute user/IP GET budget,
+existing5s SQL timeout. Posts optionally filter communityId, checked even if empty.
+
+Candidate IDs/integer rank never authorize. Current owner hydration precedes names
+and≤240-code-point plain snippets. Content body/relations/policy share one SQL
+statement; profile text/scope load together before batched account/graph facts.
+Private community cards grant no private post/member access. Mute stays home-only.
+No stored highlights, projection body fallback, scores or public hidden totals.
+
+Encrypted rank DESC/UUID ASC cursors bind viewer/query/type/filter/size, DB cutoff
+and30-minute expiry. updated_at/cutoff both use DB time. Refill examines≤1000 in
+100-row batches/200ms work (not an in-flight timeout); cursor is last examined,
+not fetched. Empty continued pages/omissions under mutable updates require refresh.
+Orchestration holds no transaction during crypto/refill or positive auth cache.
+
+Current ADMIN starts/resumes audited EXPORT→RECONCILE at /admin/search/rebuilds,
+without public export routes. Each fenced existing-worker job owns100 snapshots,
+upserts, count/checksum comparison, checkpoint and next job atomically. Standard
+JCA/PostgreSQL SHA-256 checks equal-version text/normalized fields in one bounded
+owned-table read; genuinely newer vectors supersede older snapshots. Diagnostic
+integrity is not an auth protocol. Failure retries with no partial checkpoint.
+Reconcile refreshes indexed missing IDs; account jobs scan indexed owner keys.
+Examined/changed counts are per-pass work, not a frozen global/public total.
+
+Locks: platform delivery/job row → rebuild state when used → document kind/UUID.
+Export reads take no owner business lock/network call. Operator account guard
+precedes rebuild state; unique resume job keys avoid waiting on a running job row
+while holding state it needs. Retain ordering through replay; no Phase9 erasure.
+
 Search has a dedicated application API and infrastructure adapter. `search.document` is a rebuildable projection keyed by source type/ID/version, updated from durable events. It stores only text needed for users, communities and posts, with PostgreSQL full-text `tsvector` and GIN indexes. Use the `simple` configuration initially to avoid silently assuming English; support exact/prefix handles and normalized community names. Vietnamese/other language tokenization and accent behavior require relevance fixtures before adding language-specific dictionaries or unaccent. `pg_trgm` is an optional measured enhancement for names, not a default wildcard scan over post bodies.
 
 Search query limits: 2..200 characters, bounded terms, limit default 20/max 50, statement timeout and per-user/IP limits. Parameterize `websearch_to_tsquery`/appropriate query builders. Rank by text match then deterministic ID. PostgreSQL search pages use signed cursor `(rank,id,queryHash,viewer,asOf)`; `asOf` restricts projection updated_at to the first page. Concurrent updates can omit a result until refresh; no stable-result snapshot promise. Do not use an offset into live results for deep pagination. If a truly stable ranked session is needed, use a bounded candidate snapshot as in feed rather than pretending the cutoff is a snapshot.

@@ -1,5 +1,11 @@
 # Domain model and product invariants
 
+Phase8 search slice C now projects bounded current owner snapshots with independent
+source/account versions and retained tombstones, never granting access or stored
+name/body fallbacks. Current owner authorization precedes snippets/cards. Private
+community discovery is not post/member permission. [Search](search-and-caching.md)
+defines cursor weak consistency/rebuild diagnostics; moderation operations remain D.
+
 This is the source of truth for lifecycle semantics. Database details are in [database-design.md](database-design.md); permission precedence is in [security.md](security.md). All configurable limits have defaults; changing a limit does not authorize changing a lifecycle.
 
 ## Account, identity and profile

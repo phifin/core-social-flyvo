@@ -50,4 +50,15 @@ class JpaProfileRepository implements ProfileRepository {
         .setParameter("users", users)
         .getResultList();
   }
+
+  public java.util.List<UUID> scan(UUID after, int limit) {
+    var query =
+        entities.createQuery(
+            "select p.userId from Profile p "
+                + (after == null ? "" : "where p.userId > :after ")
+                + "order by p.userId",
+            UUID.class);
+    if (after != null) query.setParameter("after", after);
+    return query.setMaxResults(limit).getResultList();
+  }
 }

@@ -2,6 +2,11 @@
 
 ## Deployment baseline
 
+Phase8 slice C adds [search recovery/measurements](../ops/search.md): audited ADMIN
+backfill/resume, source-version/checksum reconciliation and low-cardinality metrics.
+This is not Phase8 acceptance or a production capacity claim; final package checks
+also cover moderation operations, Compose, scanner and feed all-success benchmark.
+
 Phase 5's content interaction slice uses existing PostgreSQL/outbox/jobs and the
 platform encryption key, without a new dependency/service. [Content](content.md)
 records 30-minute interaction cursors, 64 KiB comment bodies, 100-row page/batch

@@ -121,6 +121,15 @@ public class JdbcCommunityRepository implements CommunityRepository {
         ids.toArray());
   }
 
+  public List<UUID> searchScan(UUID after, int limit) {
+    return jdbc.queryForList(
+        "SELECT id FROM community.community "
+            + (after == null ? "" : "WHERE id>? ")
+            + "ORDER BY id LIMIT ?",
+        UUID.class,
+        after == null ? new Object[] {limit} : new Object[] {after, limit});
+  }
+
   public void create(Community c, Instant now) {
     jdbc.update(
         "INSERT INTO community.community(id,slug_normalized,name,description,visibility,join_mode,status,owner_user_id,created_at,updated_at) VALUES (?,?,?,?,?,?,'ACTIVE',?,?,?)",

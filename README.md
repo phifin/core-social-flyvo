@@ -24,7 +24,8 @@ records representative load and limitations, including the unmet initial p95
 <500ms goal on local hardware, not production capacity. Phase 7
 has a locally implemented [semantic inbox and authenticated SSE](docs/notifications.md);
 the [Phase 7 internal gate](docs/phases/phase-7.md) passed298 tests, pending main
-review. Phase 8 is unimplemented.
+review. Phase8's [source-authorized search](docs/search-and-caching.md) is locally
+implemented; scoped moderation operations and full package verification remain.
 Main has activated the [Phases 7–8 package](docs/work-packages/phase-7-8.md)
 for sequential development; activation does not accept either phase.
 

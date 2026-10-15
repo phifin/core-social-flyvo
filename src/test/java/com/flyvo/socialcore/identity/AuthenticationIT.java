@@ -1127,14 +1127,19 @@ class AuthenticationIT {
     var aggregate = UUID.randomUUID();
     tx.executeWithoutResult(
         status -> work.event("ContractFact", "contract", aggregate, 0, 0, "{}"));
-    jobs.consumeOne(UUID.randomUUID());
     var event =
         jdbc.queryForObject(
             "SELECT id FROM platform.outbox_event WHERE aggregate_id=?", UUID.class, aggregate);
+    // Isolate the contract delivery from other registered consumers' fixture
+    // backlog; keep the real claim/receipt/effect path and exact dedup assertions.
+    jdbc.update(
+        "UPDATE platform.outbox_delivery SET available_at=now()-interval '1 day' WHERE event_id=?",
+        event);
+    jobs.consumeOne(UUID.randomUUID());
     assertThat(count("SELECT count(*) FROM platform.consumer_receipt WHERE event_id=?", event))
         .isEqualTo(1);
     jdbc.update(
-        "UPDATE platform.outbox_delivery SET status='RETRY',available_at=now() WHERE event_id=?",
+        "UPDATE platform.outbox_delivery SET status='RETRY',available_at=now()-interval '1 day' WHERE event_id=?",
         event);
     jobs.consumeOne(UUID.randomUUID());
     assertThat(

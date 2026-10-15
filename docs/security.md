@@ -1,5 +1,12 @@
 # Authentication, authorization and privacy
 
+Slice C search now enforces source-before-snippet hydration through bounded owner
+APIs, current profile/account/block/member/audience policy and type/query/viewer/
+filter-bound encrypted cursors. Index text/rank/derived counts never grant access
+or act as fallbacks. ADMIN rebuild commands/status reads are attributable/current,
+and raw exports have no HTTP route. No positive permission cache or foreign SQL
+consumer is added. See [search contract](search-and-caching.md).
+
 Security rules here are implementation requirements. Product-specific privacy relaxations require an ADR and regression tests. Anonymous access is supported only for deliberately PUBLIC resources. “Public” means an unauthenticated person can read it; blocking a signed-in user cannot prevent that person from logging out to see PUBLIC material. Use restricted audiences for confidentiality.
 
 ## Local authentication

@@ -13,5 +13,8 @@ public interface AccountQueries {
 
   java.util.Set<UUID> activeIds(java.util.List<UUID> userIds);
 
+  /** Bounded current lifecycle versions, never identity credentials. */
+  java.util.Map<UUID, Account> snapshots(java.util.List<UUID> userIds);
+
   Account guard(UUID userId, boolean exclusive);
 }

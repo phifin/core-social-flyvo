@@ -1,5 +1,13 @@
 # Events, jobs and notification delivery
 
+Slice C registers search-documents-v1 for UserRegistered/ProfileUpdated, account
+status/deletion facts, CommunityCreated/Updated and post create/update/audience/
+delete/remove/restore. It consumes immutable envelopes but inspects current owner
+snapshots, never payload text or invented legacy versions. SEARCH_ACCOUNT scans
+owned indexed IDs≤100/batch; SEARCH_REBUILD checkpoints EXPORT/RECONCILE and next
+job atomically with bounded count/checksum proof. Current source hydration remains
+authoritative with delivery stopped. Reuse receipts/fencing/retry/DEAD, no new worker.
+
 Domain events describe completed facts. They are not RPC requests, audit logs, database row dumps or an event-sourced persistence model. Aggregate methods may collect local events; application commits aggregate changes and required durable outbox events/jobs in one PostgreSQL transaction. A local after-commit signal only reduces polling latency. No required behavior depends on `@Async` alone.
 
 ## Event envelope and catalog

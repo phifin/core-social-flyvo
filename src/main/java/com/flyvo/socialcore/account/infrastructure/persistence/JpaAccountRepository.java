@@ -39,6 +39,14 @@ class JpaAccountRepository implements AccountRepository {
     return value;
   }
 
+  public java.util.List<UserAccount> snapshots(java.util.List<UUID> ids) {
+    if (ids.isEmpty()) return java.util.List.of();
+    return entities
+        .createQuery("select a from UserAccount a where a.id in :ids", UserAccount.class)
+        .setParameter("ids", ids)
+        .getResultList();
+  }
+
   public void add(UserAccount account) {
     entities.persist(account);
   }

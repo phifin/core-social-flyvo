@@ -28,7 +28,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @Testcontainers
 @org.springframework.test.context.ActiveProfiles("test")
 class FoundationIT {
-  private static final int LATEST_MIGRATIONS = 27;
+  private static final int LATEST_MIGRATIONS = 28;
 
   @Container
   static final PostgreSQLContainer POSTGRES =
@@ -73,6 +73,11 @@ class FoundationIT {
   void semanticInboxUpgradePreservesAllTwentySixChecksumsAndExistingPost() {
     assertFeedIndexUpgrade(
         "0026", 26, "notification.inbox_recipient_page", "recipient_id", "last_activity_at DESC");
+  }
+
+  @Test
+  void searchUpgradePreservesAllTwentySevenChecksumsAndExistingPost() {
+    assertFeedIndexUpgrade("0027", 27, "search.document_fts", "gin", "search_vector");
   }
 
   @Test
