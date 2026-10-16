@@ -1,7 +1,8 @@
 # Phase 8 — search and scoped moderation operations
 
 Status: slice C and the D account-lifecycle prerequisite implemented/verified;
-the remainder of D and final package checks remain. Not
+the remainder of D is BLOCKED on main's [ADR-016 decision](../adr/016-moderation-private-payload-retention.md)
+(P78-D1); final package checks remain. Not
 accepted or READY_FOR_REVIEW. Phase7 internal gate passed before C, B code
 `af0742750cd1f1b00a02a1afcd6aa3d80d13db74`; see [Phase7 evidence](phase-7.md).
 Real C/D hashes are recorded in the fixed mailbox after their code commits.
@@ -117,3 +118,10 @@ claimed. Roles, ownership, community state and deleted content are not modified.
 Neither phase is accepted. Full package app/media Compose startup, heavy pool10/50
 all3200-success feed benchmark and post-D completion evidence remain required;
 the integration suite is not a substitute for those operational gates.
+
+Code: C `79da0ca692845a55e80cc7f67d6a4e5663845864`; D prerequisite
+`cd51ecae3d92a402fa8c70b1102501cafb857ffa`. After this code commit, pinned redacted
+gitleaks scans53 history commits with no leaks; staged patch is clean and synthetic
+generic-api-key positive control detects its expected fixture. No scanner/history
+weakening. Main must choose the retention storage/hold boundary before the remaining
+D migration; no moderation trigger, private payload or cleanup has changed.

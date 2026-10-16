@@ -28,6 +28,8 @@ review. Phase8's [source-authorized search](docs/search-and-caching.md) is local
 implemented; scoped moderation operations and full package verification remain.
 Its account lifecycle prerequisite prevents old sessions from reviving after
 suspend/reinstate; no new moderation HTTP surface is claimed by that prerequisite.
+Remaining D is [blocked on main's ADR-016 decision](docs/agent-handoff.md)
+about private payload retention/engineering holds; the proposed change is not implemented.
 Main has activated the [Phases 7–8 package](docs/work-packages/phase-7-8.md)
 for sequential development; activation does not accept either phase.
 

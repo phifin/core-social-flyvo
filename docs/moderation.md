@@ -66,3 +66,14 @@ Report JSON cap is 64 KiB; action bodies retain the existing 16 KiB cap. Existin
 per-user/IP write budgets apply. [OpenAPI](api/openapi.yaml) is the exact contract.
 Case redaction/key-rotation/legal evidence retention remain pre-launch gates; no
 new indefinite source-media hold or production readiness is claimed.
+
+## Phase8 development checkpoint — incomplete D
+
+The account owner now supplies guarded/versioned suspend/reinstate and durable
+session-epoch invalidation; no new moderation HTTP operation is claimed yet.
+Remaining assignment/filter/history/hold/retention work is BLOCKED on main's
+[proposed ADR-016](adr/016-moderation-private-payload-retention.md) decision (P78-D1).
+Private action fields and report evidence still have their accepted immutable
+storage/trigger protections. The proposed payload split/engineering hold policy
+is not implemented or self-approved. See [Phase8 evidence](phases/phase-8.md) and
+the [mailbox](agent-handoff.md) for actual hashes/checks and the exact next action.
