@@ -2051,7 +2051,14 @@ class Phase4IT {
     assertThatThrownBy(
             () ->
                 jdbc.update(
-                    "UPDATE moderation.action SET reason='changed' WHERE id=?", action.actionId()))
+                    "UPDATE moderation.action_detail SET ciphertext='changed'::bytea WHERE action_id=?",
+                    action.actionId()))
+        .isInstanceOf(org.springframework.dao.DataAccessException.class);
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    "UPDATE moderation.action SET action='RESTORE_CONTENT' WHERE id=?",
+                    action.actionId()))
         .isInstanceOf(org.springframework.dao.DataAccessException.class);
     denied(() -> reads.revisions(owner, p.id(), 20, Integer.MAX_VALUE), 404);
   }

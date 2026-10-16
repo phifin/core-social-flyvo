@@ -23,22 +23,24 @@ public record Report(
         || reporter == null
         || targetId == null
         || created == null
-        || keyId == null
-        || keyId.isBlank()
+        || status == null
+        || targetType == null
+        || (evidence == null) != (keyId == null)
+        || evidence == null && !java.util.Set.of("RESOLVED", "DISMISSED").contains(status)
+        || keyId != null && keyId.isBlank()
         || version < 0
         || !java.util.Set.of("POST", "COMMENT", "COMMUNITY", "USER").contains(targetType)
         || !java.util.Set.of("OPEN", "IN_REVIEW", "RESOLVED", "DISMISSED").contains(status)
         || (java.util.Set.of("RESOLVED", "DISMISSED").contains(status)) != (resolved != null)
         || targetType.equals("USER") && community != null
-        || evidence == null
-        || evidence.length == 0
-        || evidence.length > 65536) throw new IllegalArgumentException();
-    evidence = evidence.clone();
+        || evidence != null && (evidence.length == 0 || evidence.length > 65536))
+      throw new IllegalArgumentException();
+    evidence = evidence == null ? null : evidence.clone();
   }
 
   @Override
   public byte[] evidence() {
-    return evidence.clone();
+    return evidence == null ? null : evidence.clone();
   }
 
   public Report transition(boolean review, boolean dismiss, Instant now) {

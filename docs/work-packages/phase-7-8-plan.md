@@ -150,11 +150,69 @@ live events lock documents only. No owner business locks or network calls.
 
 Execution checkpoint2026-10-16: account lifecycle prerequisite is verified/committed
 at `cd51ecae3d92a402fa8c70b1102501cafb857ffa` (full323 PASS). Remaining D is
-READY_TO_RESUME after main's [ADR-016 acceptance](../adr/016-moderation-private-payload-retention.md),
-2026-10-16. P78-D1 design is resolved; storage/engineering holds are not yet
-implemented. Follow the accepted split, migration, encryption, common-root
-locking and bounded multi-pass redaction conditions before the next migration.
-Update this concrete implementation plan, then finish remaining D/package gates.
+completed after main's [ADR-016 acceptance](../adr/016-moderation-private-payload-retention.md),
+2026-10-16. P78-D1 design is resolved; V0030/V0031 and all D operations are now
+implemented/verified locally. Final full340, app/media Compose, all3200 pool10/50
+requests and scanners pass. The plan below preserves execution refinements;
+main review/acceptance remains separate. Exact evidence is in [Phase8](../phases/phase-8.md).
+
+### Resumed D execution plan at main152a7c9
+
+V0030 splits report evidence/action private payloads losslessly, with atomic SQL
+count/value proofs before old columns drop, deferred parent/payload completeness,
+no DELETE/reinsert, immutable ciphertext except one-way eligible redaction, and
+legacy→verified encrypted transition only. Migration runs in a controlled write
+stop: old/new binaries cannot write both schemas. V0031 adds assignment, root
+retention/hold controls and append-only bounded versioned history; legacy history
+versions stay unknown, never fabricated. Platform audit/action metadata triggers
+remain unconditional. Cases and case-linked actions share the existing case root;
+only standalone actions get a separate one-to-one retention root.
+
+Hold edits use If-Match, current scope proof, sorted account guards before
+community/root/payload, DB time, expiry≤365days, explicit renew/release and audit.
+Assignment validates current staff in immutable scope, grants no permission, and
+shares the case version/root with resolve/hold. Parameterized queue filters are
+status/assignee/unassigned; all staff queue/history/evidence/maintenance reads are
+attributable. Separate ADMIN account action HTTP uses the existing versioned owner
+command and full exclusive actor/target guards before action root; no role edits.
+
+Existing durable job handlers implement legacy encryption and retention, one root
+and≤100 payload rows per transaction. Encryption decrypts/compares complete legacy
+JSON before plaintext removal. Retry/fencing/audit/next job are atomic; no network
+key-service calls under locks. DB time/root guards recheck eligibility/hold.
+NONE→STARTED→DONE is irreversible; STARTED denies holds; bounded passes converge
+before DONE.365days starts at terminal resolved_at, standalone created_at;
+unresolved/current holds excluded. Recurring durable work and audited ADMIN resume
+reuse the same jobs. No alternate framework or runtime trigger exemption.
+
+Tests: fresh/upgrade checksums, exact legacy Unicode/null/JSON/ciphertext; real
+raw-SQL guards (not missing columns); both hold/cleanup race orders; >100 payload
+restart/fencing/rollback; crypto verification failure; cross-scope assignment/
+history/queue and revoked staff; ADMIN hierarchy/If-Match; auth/SSE old sessions
+and no content restoration. Operations: restricted metrics, static dashboard,
+write-stop/key lifetime/backfill convergence runbook. Then full verify, real
+app/media Compose, pool10/50 all3200-success benchmark, API/architecture/migrations
+and pinned history/staged/positive-control secret scans before full handoff.
+
+Operations refinement: expose the already-present Prometheus registry through an
+audited/current-ADMIN-only GET /api/v1/admin/moderation/metrics, using the existing
+case operations authorization boundary before scraping. Keep /actuator/prometheus
+and actuator internals deny-by-default; no new dependency/collector/service or
+long-lived credential model. Dashboard JSON/runbook are static artifacts for an
+operator-approved protected data source, not a public rollout.
+
+Account HTTP operability refinement: audited ADMIN GET /admin/moderation/accounts/{id}
+returns only current ID/status/read-only platform role/version plus ETag so the
+operator can obtain the target If-Match without guessing or identity/profile
+directory access. Complete sorted shared account guards and authority recheck;
+separate status command retains exclusive final modes. No epoch/credentials export.
+
+Scope-proof hardening: immutable case metadata (including source guard IDs) is
+read without payload first. Prove exact scope before any report root lock or
+ciphertext/legacy query, then obtain complete account/community/source/root guards
+in final order. A dedicated regression spies actual SQL/owner port and proves
+wrong-scope evidence/resolution/history/action paths touch no payload/root lock.
+System history copies no unguarded assignee FK; only ASSIGNED uses its guarded ID.
 
 ### D lifecycle refinement before implementation
 
@@ -301,3 +359,20 @@ documentation commit. No push, agents, phase acceptance or Phase 9 implementatio
   asserts the actual translated exception and repairs its Unicode payload. Prior
   failures remain evidence, not green. Commit C before D. Heavy benchmark/Compose/
   final scanners remain package gates; no phase acceptance or handoff here.
+- D resumed after152a7c9: V0030/V0031 owned payload/control boundary, verified
+  legacy encryption, bounded retention/explicit holds, scoped assignment/filter/
+  history, account HTTP and protected metrics/dashboard/runbook implemented.
+  Full340 PASS (57 fast+283 PG), zero failures/errors/skips/forced exit; final
+  scope-focused50 PASS. Fresh31/upgrade29 preserve all old checksums/values and
+  action/audit guards. Real crypto/audit/next-job/fencing failures roll back,
+  205/206/102-payload fixtures converge in bounded passes, both hold race orders
+  tested. Earlier failed compile/fixture attempts retained, not relabeled green.
+- Final package operations on the same executable source: app/media Compose
+  startup/bootstrap/readiness/security/resource probes pass, then task services
+  stopped without deleting volumes/data/keys. Committed heavy tool pool10/50,
+  1million posts/50 readers:3200 attempts/3200 successes/0 failures, all16 outcome
+  lines summed. Dense p95=1411.877–2259.538ms still misses500ms; no production SLA.
+  Pinned history/staged scans and synthetic positive control pass without changed
+  fingerprints. Source SHA-256 manifest remains identical after full/Compose/
+  benchmark. Only evidence/status docs follow; code then real-hash mailbox commits,
+  READY_FOR_REVIEW to main, not phase self-acceptance or remote delivery.

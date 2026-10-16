@@ -124,6 +124,13 @@ and independent review are recorded separately. See
 
 `Report` belongs to a reporter and references exactly one supported target (post/comment/community/user), category, optional detail, evidence snapshot and lifecycle OPEN, IN_REVIEW, RESOLVED, DISMISSED. It is not public content. Submission requires ability to access the target at submission time; disappearance afterward does not destroy the case. One unresolved report per reporter/target avoids spam; different reporters may report the same target.
 
-`ModerationAction` is append-only actor, scope, target, action, reason, before/after references and time. Actions include REMOVE_CONTENT, RESTORE_CONTENT, SUSPEND_MEMBER, BAN_MEMBER, UNBAN_MEMBER, SUSPEND_ACCOUNT and RESOLVE_REPORT. Community staff act only within their community and role hierarchy. Global suspension requires separate platform ADMIN, assigned operationally, never via registration/profile input. The action, owner-module change, report transition and required audit commit atomically. Restoration does not undo an author's deletion; it only clears a moderation removal if still otherwise valid.
+`ModerationAction` has append-only actor/scope/target/action/time metadata, with private reason/before/after in a retained encrypted payload under ADR-016. Actions include REMOVE_CONTENT, RESTORE_CONTENT, SUSPEND_MEMBER, BAN_MEMBER, UNBAN_MEMBER, SUSPEND_ACCOUNT, REINSTATE_ACCOUNT and RESOLVE_REPORT. Community staff act only within current scope/hierarchy. Platform status requires separate current ADMIN, never registration/profile fields. Action, owner transition, case/history, audit/outbox are atomic. Restore cannot undo author deletion.
+
+Phase8 extends existing reports/actions with non-authorizing staff assignment,
+attributable versioned history and engineering holds. Unresolved/held cases retain
+evidence/keys; eligible terminal roots enter irreversible STARTED, bounded
+redaction passes, then DONE. Payload/tombstones cannot be deleted/reinserted or
+restored. Linked actions share case root; standalone actions have their own
+hold/version root. No parallel case system, legal product or Phase9 erasure.
 
 Audit entries record actor/action/resource/request/outcome with redacted metadata. They are distinct from business events, debug logs and notification records.

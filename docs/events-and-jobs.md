@@ -1,5 +1,14 @@
 # Events, jobs and notification delivery
 
+Phase8 adds MODERATION_ENCRYPT/MODERATION_RETENTION DB-only handlers to the same
+fenced executor: one root/≤100 payloads, verified crypto/redaction/history/audit/
+continuation/fenced ack atomic.60s enqueue/audited ADMIN resume use these handlers;
+no second framework or retry bypass. ReportAssigned v1 carries reportId/current
+case aggregate version only. ACCOUNT-target ModerationActionApplied contains
+action/target IDs and operation; AccountStatusChanged stays v1. System cleanup
+audit uses null actor/typed operation, never a fabricated session. See
+[recovery](../ops/moderation.md).
+
 Slice C registers search-documents-v1 for UserRegistered/ProfileUpdated, account
 status/deletion facts, CommunityCreated/Updated and post create/update/audience/
 delete/remove/restore. It consumes immutable envelopes but inspects current owner

@@ -36,8 +36,8 @@ comment sourceVersion, reuse existing owner APIs, and cannot edit body or restor
 author deletion. Sanctions additionally require current membership sourceVersion
 and target the immutable reported content author; current self/owner/equal/higher
 role denials apply. Sanctions cannot target a caller-chosen user. Global actions are
-review/resolve/dismiss only; account suspension and assignment/filtering/retention
-operations remain Phase 8. Terminal cases cannot change again.
+review/resolve/dismiss only; Phase8 adds separate account operations, assignment,
+history and retention below. Terminal case status cannot change again.
 
 The owner source transition, case version/status, append-only typed action with
 report FK, mandatory audit and minimal v1 outbox commit or roll back together.
@@ -64,19 +64,38 @@ Reporter/queue pages are newest-first `(created_at,id)`, size 20/default, 100/ma
 offset 0–10,000, no totals/snapshot, nextCursor null (explicit offset pagination).
 Report JSON cap is 64 KiB; action bodies retain the existing 16 KiB cap. Existing
 per-user/IP write budgets apply. [OpenAPI](api/openapi.yaml) is the exact contract.
-Case redaction/key-rotation/legal evidence retention remain pre-launch gates; no
-new indefinite source-media hold or production readiness is claimed.
+Engineering case redaction is implemented below; key rotation/legal evidence
+requirements remain pre-launch gates. No indefinite media hold/readiness claim.
 
-## Phase8 development checkpoint — incomplete D
+## Phase8 — scoped operations under ADR-016
 
-The account owner now supplies guarded/versioned suspend/reinstate and durable
-session-epoch invalidation; no new moderation HTTP operation is claimed yet.
-Remaining assignment/filter/history/hold/retention work is ready to resume after
-main accepted [ADR-016](adr/016-moderation-private-payload-retention.md) on 2026-10-16
-(P78-D1 design resolved).
-Private action fields and report evidence still have their accepted immutable
-storage/trigger protections. The proposed payload split/engineering hold policy
-is accepted for implementation, not yet implemented. The decision retains
-immutable metadata/audit, lossless migration, one-way private payload transitions,
-explicit scoped holds and bounded atomic cleanup. See [Phase8 evidence](phases/phase-8.md) and
-the [mailbox](agent-handoff.md) for actual hashes/checks and the exact next action.
+V0030 losslessly splits report evidence/action detail from immutable metadata;
+V0031 adds existing-case assignment, bounded filtered queues, append-only versioned
+history, scoped holds and retention controls. Action metadata/platform audit
+mutation rejection stays unconditional. Parent/payload completeness is deferred,
+one-to-one; deletion/reassignment/substitution/restoration is forbidden. New detail
+is authenticated encrypted; legacy encryption verifies the complete decrypted
+value before removing plaintext. Old action case versions stay unknown/null,
+not invented. All scoped reads are attributable, including legacy private history.
+
+Assignment requires current eligible staff in immutable scope, never permission.
+Queue preserves flat report fields, adding staff-only controls; status/assignedTo/
+unassigned and pagination are bounded. Case If-Match serializes assignment,
+resolution and holds. Separate ADMIN account HTTP actions call the versioned
+owner, deny self/peer ADMIN, invalidate old session epochs, and modify neither
+roles, deleted content nor ownership/community state.
+
+Engineering holds use DB time, expiry≤365days per explicit audited decision and
+root version. Linked actions share their case root; no independent competing hold.
+Assignment does not release holds. Cleanup starts365days after terminal resolved_at
+(standalone: created_at), excluding unresolved/unexpired holds. Root→payload locks
+serialize both race orders. Irreversible STARTED denies new/renewed holds and
+resumes≤100-payload passes; DONE requires no private bytes left. Tombstones,
+metadata/history persist. Redacted reads never return fake blank evidence/fallback.
+
+Existing durable jobs provide retry/fencing, atomic audit and continuation.
+Keys remain until every referencing ciphertext is redacted. No key-rotation,
+legal-hold or Phase9 erasure service. Controlled write-stop, recovery, exact HTTP
+matrix and protected metrics/dashboard: [operations](../ops/moderation.md).
+[Phase8 evidence](phases/phase-8.md) and [mailbox](agent-handoff.md) record actual
+verification/review status, not self-acceptance.

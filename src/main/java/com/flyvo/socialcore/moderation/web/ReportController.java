@@ -1,5 +1,6 @@
 package com.flyvo.socialcore.moderation.web;
 
+import com.flyvo.socialcore.moderation.api.CaseOperations;
 import com.flyvo.socialcore.moderation.api.Reports;
 import com.flyvo.socialcore.platform.api.*;
 import java.net.URI;
@@ -12,9 +13,11 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 class ReportController {
   private final Reports reports;
+  private final CaseOperations operations;
 
-  ReportController(Reports reports) {
+  ReportController(Reports reports, CaseOperations operations) {
     this.reports = reports;
+    this.operations = operations;
   }
 
   record ActionRequest(
@@ -43,12 +46,16 @@ class ReportController {
     "/api/v1/communities/{community}/moderation/reports",
     "/api/v1/admin/moderation/reports"
   })
-  Reports.Page queue(
+  CaseOperations.Page queue(
       @AuthenticationPrincipal ActorContext actor,
       @PathVariable(required = false) UUID community,
+      @RequestParam(required = false) String status,
+      @RequestParam(required = false) UUID assignedTo,
+      @RequestParam(defaultValue = "false") boolean unassigned,
       @RequestParam(defaultValue = "20") int size,
       @RequestParam(defaultValue = "0") int offset) {
-    return reports.queue(actor, community, size, offset);
+    return operations.queue(
+        actor, community, new CaseOperations.Filter(status, assignedTo, unassigned), size, offset);
   }
 
   @GetMapping({

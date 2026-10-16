@@ -28,7 +28,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @Testcontainers
 @org.springframework.test.context.ActiveProfiles("test")
 class FoundationIT {
-  private static final int LATEST_MIGRATIONS = 29;
+  private static final int LATEST_MIGRATIONS = 31;
 
   @Container
   static final PostgreSQLContainer POSTGRES =
@@ -67,6 +67,119 @@ class FoundationIT {
         .containsEntry("hibernate.hbm2ddl.auto", "validate");
     assertThat(environment.getProperty("spring.jpa.open-in-view", Boolean.class)).isFalse();
     assertThat(jdbc.queryForObject("show timezone", String.class)).isEqualTo("UTC");
+  }
+
+  @Test
+  void moderationSplitPreservesTwentyNineChecksumsAndExactLegacyPayloads() {
+    var name = "moderation_upgrade_" + java.util.UUID.randomUUID().toString().replace("-", "");
+    new JdbcTemplate(dataSource).execute("CREATE DATABASE " + name);
+    var url = POSTGRES.getJdbcUrl().replace("/test?", "/" + name + "?");
+    var prior =
+        Flyway.configure()
+            .dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword())
+            .target("0029")
+            .load();
+    assertThat(prior.migrate().migrationsExecuted).isEqualTo(29);
+    var checksums =
+        java.util.Arrays.stream(prior.info().applied())
+            .map(org.flywaydb.core.api.MigrationInfo::getChecksum)
+            .toList();
+    var sql =
+        new JdbcTemplate(
+            new org.springframework.jdbc.datasource.DriverManagerDataSource(
+                url, POSTGRES.getUsername(), POSTGRES.getPassword()));
+    var user = java.util.UUID.randomUUID();
+    var report = java.util.UUID.randomUUID();
+    var action = java.util.UUID.randomUUID();
+    var ciphertext = new byte[] {0, 1, 2, (byte) 255, 34, 92};
+    String reason = "Lý do riêng tư: \"Tiếng Việt\"\nnull không phải chuỗi rỗng";
+    sql.update(
+        "INSERT INTO account.user_account(id,status,created_at,updated_at) VALUES (?,'ACTIVE',now(),now())",
+        user);
+    sql.update(
+        "INSERT INTO moderation.report(id,reporter_id,target_type,target_id,category,evidence_encrypted,evidence_key_id,status,created_at,updated_at,version) VALUES (?,?,'USER',?,'SPAM',?,'retained-synthetic-key','OPEN',now(),now(),7)",
+        report,
+        user,
+        user,
+        ciphertext);
+    sql.update(
+        "INSERT INTO moderation.action(id,report_id,actor_id,target_type,target_id,action,reason,before_state,after_state,request_id,created_at) VALUES (?,?,?,'REPORT',?,'REVIEW_REPORT',?,?::jsonb,?::jsonb,'synthetic-upgrade',now())",
+        action,
+        report,
+        user,
+        report,
+        reason,
+        "{\"text\":\"Tiếng Việt\",\"nested\":{\"value\":null},\"list\":[1,true]}",
+        "null");
+    var before =
+        sql.queryForObject(
+            "SELECT jsonb_build_object('reason',reason,'before',before_state,'after',after_state)::text FROM moderation.action WHERE id=?",
+            String.class,
+            action);
+    var immutableFunctions =
+        sql.queryForList(
+            "SELECT pg_get_functiondef('moderation.reject_action_mutation()'::regprocedure) AS action_guard,pg_get_functiondef('platform.reject_audit_mutation()'::regprocedure) AS audit_guard");
+    var upgrade =
+        Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(2);
+    upgrade.validate();
+    assertThat(
+            sql.queryForList(
+                "SELECT pg_get_functiondef('moderation.reject_action_mutation()'::regprocedure) AS action_guard,pg_get_functiondef('platform.reject_audit_mutation()'::regprocedure) AS audit_guard"))
+        .isEqualTo(immutableFunctions);
+    assertThat(
+            java.util.Arrays.stream(upgrade.info().applied())
+                .limit(29)
+                .map(org.flywaydb.core.api.MigrationInfo::getChecksum)
+                .toList())
+        .isEqualTo(checksums);
+    assertThat(
+            sql.queryForObject(
+                "SELECT ciphertext FROM moderation.report_evidence WHERE report_id=?",
+                byte[].class,
+                report))
+        .containsExactly(ciphertext);
+    assertThat(
+            sql.queryForObject(
+                "SELECT key_id FROM moderation.report_evidence WHERE report_id=?",
+                String.class,
+                report))
+        .isEqualTo("retained-synthetic-key");
+    assertThat(
+            sql.queryForObject(
+                "SELECT legacy_payload::text FROM moderation.action_detail WHERE action_id=?",
+                String.class,
+                action))
+        .isEqualTo(before);
+    assertThat(
+            sql.queryForObject(
+                "SELECT case_version FROM moderation.case_history WHERE action_id=?",
+                Long.class,
+                action))
+        .isNull();
+    assertThat(
+            sql.queryForObject(
+                "SELECT version FROM moderation.report WHERE id=?", Long.class, report))
+        .isEqualTo(7);
+    assertThatThrownBy(
+            () -> sql.update("UPDATE moderation.action SET target_id=? WHERE id=?", user, action))
+        .hasMessageContaining("append only");
+    assertThatThrownBy(
+            () ->
+                sql.update(
+                    "UPDATE moderation.report_evidence SET ciphertext=? WHERE report_id=?",
+                    new byte[] {3},
+                    report))
+        .hasMessageContaining("replacement/restoration forbidden");
+    assertThatThrownBy(
+            () ->
+                sql.update(
+                    "UPDATE moderation.action_detail SET legacy_payload='{}'::jsonb WHERE action_id=?",
+                    action))
+        .hasMessageContaining("replacement/restoration forbidden");
+    assertThatThrownBy(
+            () -> sql.update("DELETE FROM moderation.action_detail WHERE action_id=?", action))
+        .hasMessageContaining("tombstone retained");
   }
 
   @Test

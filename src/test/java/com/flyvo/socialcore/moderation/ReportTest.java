@@ -9,6 +9,65 @@ import org.junit.jupiter.api.Test;
 
 class ReportTest {
   @Test
+  void redactionIsAnExplicitTerminalNullPairNotBlankOrPartialEvidence() {
+    var now = Instant.parse("2026-10-11T00:00:00Z");
+    var r =
+        new Report(
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            "USER",
+            UUID.randomUUID(),
+            null,
+            null,
+            null,
+            "SPAM",
+            null,
+            null,
+            "RESOLVED",
+            now.minusSeconds(100),
+            now,
+            1);
+    assertThat(r.evidence()).isNull();
+    assertThat(r.keyId()).isNull();
+    assertThatThrownBy(
+            () ->
+                new Report(
+                    r.id(),
+                    r.reporter(),
+                    "USER",
+                    r.targetId(),
+                    null,
+                    null,
+                    null,
+                    "SPAM",
+                    null,
+                    "key",
+                    "RESOLVED",
+                    r.created(),
+                    now,
+                    1))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(
+            () ->
+                new Report(
+                    r.id(),
+                    r.reporter(),
+                    "USER",
+                    r.targetId(),
+                    null,
+                    null,
+                    null,
+                    "SPAM",
+                    null,
+                    null,
+                    "OPEN",
+                    r.created(),
+                    null,
+                    0))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
   void transitionsRetainIdentityEvidenceAndMonotonicVersionAndAreTerminal() {
     var ciphertext = new byte[] {1, 2, 3};
     var now = Instant.parse("2026-10-11T00:00:00Z");

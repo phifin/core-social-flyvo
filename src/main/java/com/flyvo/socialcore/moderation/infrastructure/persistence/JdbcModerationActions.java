@@ -1,5 +1,6 @@
 package com.flyvo.socialcore.moderation.infrastructure.persistence;
 
+import com.flyvo.socialcore.moderation.application.ActionPayloads;
 import com.flyvo.socialcore.moderation.application.port.ModerationActions;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -10,9 +11,11 @@ import org.springframework.stereotype.Repository;
 @Repository
 class JdbcModerationActions implements ModerationActions {
   private final JdbcTemplate jdbc;
+  private final ActionPayloads payloads;
 
-  JdbcModerationActions(JdbcTemplate jdbc) {
+  JdbcModerationActions(JdbcTemplate jdbc, ActionPayloads payloads) {
     this.jdbc = jdbc;
+    this.payloads = payloads;
   }
 
   public void appendCase(
@@ -29,7 +32,7 @@ class JdbcModerationActions implements ModerationActions {
       String request,
       Instant now) {
     jdbc.update(
-        "INSERT INTO moderation.action(id,report_id,actor_id,community_id,target_type,target_id,action,reason,before_state,after_state,request_id,created_at) VALUES (?,?,?,?,?,?,?, ?,?::jsonb,?::jsonb,?,?)",
+        "INSERT INTO moderation.action(id,report_id,actor_id,community_id,target_type,target_id,action,request_id,created_at) VALUES (?,?,?,?,?,?,?,?,?)",
         id,
         report,
         actor,
@@ -37,11 +40,16 @@ class JdbcModerationActions implements ModerationActions {
         targetType,
         target,
         action,
-        reason,
-        before,
-        after,
         request,
         now.atOffset(ZoneOffset.UTC));
+    var encrypted = payloads.encrypt(id, payloads.detail(reason, before, after));
+    jdbc.update(
+        "INSERT INTO moderation.action_detail(action_id,ciphertext,key_id) VALUES (?,?,?)",
+        id,
+        encrypted.ciphertext(),
+        encrypted.keyId());
+    if (report == null)
+      jdbc.update("INSERT INTO moderation.action_retention(action_id) VALUES (?)", id);
   }
 
   public void append(
@@ -55,18 +63,8 @@ class JdbcModerationActions implements ModerationActions {
       String after,
       String request,
       Instant now) {
-    jdbc.update(
-        "INSERT INTO moderation.action(id,actor_id,community_id,target_type,target_id,action,reason,before_state,after_state,request_id,created_at) VALUES (?,?,?,'MEMBER',?,?,?,?::jsonb,?::jsonb,?,?)",
-        id,
-        actor,
-        community,
-        target,
-        action,
-        reason,
-        before,
-        after,
-        request,
-        now.atOffset(ZoneOffset.UTC));
+    appendCase(
+        id, null, actor, community, "MEMBER", target, action, reason, before, after, request, now);
   }
 
   public void appendPost(
@@ -80,17 +78,7 @@ class JdbcModerationActions implements ModerationActions {
       String after,
       String request,
       Instant now) {
-    jdbc.update(
-        "INSERT INTO moderation.action(id,actor_id,community_id,target_type,target_id,action,reason,before_state,after_state,request_id,created_at) VALUES (?,?,?,'POST',?,?,?,?::jsonb,?::jsonb,?,?)",
-        id,
-        actor,
-        community,
-        post,
-        action,
-        reason,
-        before,
-        after,
-        request,
-        now.atOffset(ZoneOffset.UTC));
+    appendCase(
+        id, null, actor, community, "POST", post, action, reason, before, after, request, now);
   }
 }

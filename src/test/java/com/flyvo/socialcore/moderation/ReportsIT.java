@@ -50,6 +50,7 @@ class ReportsIT {
   }
 
   @Autowired Reports reports;
+  @Autowired com.flyvo.socialcore.moderation.api.CaseOperations operations;
   @Autowired AccountCommands accounts;
   @Autowired Profiles profiles;
   @Autowired ContentCommands posts;
@@ -163,6 +164,42 @@ class ReportsIT {
                   .isPositive();
               assertThat(f.isDone()).isFalse();
             });
+  }
+
+  @Test
+  void wrongScopeIsProvedBeforeAnyCiphertextLegacyReadOrReportRootLock() {
+    var a = user();
+    var b = user();
+    var reporter = user();
+    var scopeA = community(a);
+    var scopeB = community(b);
+    members.join(reporter, scopeB.id());
+    var p = publish(b, scopeB.id());
+    var r = report(reporter, Reports.Target.POST, p.id());
+    var action =
+        reports.resolve(b, scopeB.id(), 0, resolution(r, Reports.Action.RESOLVE_REPORT, null));
+    clearInvocations(store, jdbc);
+    denied(() -> reports.evidence(a, scopeA.id(), r.id()), 404);
+    denied(
+        () ->
+            reports.resolve(
+                a, scopeA.id(), r.version(), resolution(r, Reports.Action.RESOLVE_REPORT, null)),
+        404);
+    denied(() -> operations.history(a, scopeA.id(), r.id(), 20, 0), 404);
+    denied(() -> operations.action(a, scopeA.id(), action.actionId()), 404);
+    verify(store, never()).find(eq(r.id()), anyBoolean());
+    assertThat(
+            mockingDetails(jdbc).getInvocations().stream()
+                .map(i -> i.getArguments())
+                .filter(args -> args.length > 0 && args[0] instanceof String)
+                .map(args -> (String) args[0])
+                .toList())
+        .noneMatch(
+            sql ->
+                sql.contains("ciphertext")
+                    || sql.contains("legacy_payload")
+                    || sql.contains("evidence_encrypted")
+                    || sql.contains("FOR UPDATE"));
   }
 
   @Test
@@ -374,12 +411,14 @@ class ReportsIT {
     assertThatThrownBy(
             () ->
                 jdbc.update(
-                    "UPDATE moderation.report SET target_id=? WHERE id=?", actor.userId(), r.id()))
+                    "UPDATE moderation.report SET target_id=?,version=version+1 WHERE id=?",
+                    actor.userId(),
+                    r.id()))
         .isInstanceOf(org.springframework.dao.DataAccessException.class);
     assertThatThrownBy(
             () ->
                 jdbc.update(
-                    "UPDATE moderation.report SET evidence_encrypted=? WHERE id=?",
+                    "UPDATE moderation.report_evidence SET ciphertext=? WHERE report_id=?",
                     new byte[] {1},
                     r.id()))
         .isInstanceOf(org.springframework.dao.DataAccessException.class);
@@ -416,7 +455,9 @@ class ReportsIT {
       assertThat(e.summary()).isNotBlank();
       var raw =
           jdbc.queryForObject(
-              "SELECT evidence_encrypted FROM moderation.report WHERE id=?", byte[].class, r.id());
+              "SELECT ciphertext FROM moderation.report_evidence WHERE report_id=?",
+              byte[].class,
+              r.id());
       assertThat(new String(raw, java.nio.charset.StandardCharsets.UTF_8))
           .doesNotContain(e.summary(), e.detail());
       assertThat(

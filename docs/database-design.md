@@ -233,6 +233,16 @@ Quota reservation counts pending declared bytes against pending and total budget
 
 ## Notifications, search and moderation
 
+Phase8 moderation V0030/V0031 follow ADR-016: report_evidence/action_detail owned
+one-to-one payload/tombstones, lossless count/value proof before private parent
+columns drop, unconditional action/audit triggers unchanged. Report controls and
+standalone-only action_retention share DB-time/one-way root guards. case_history
+is append-only, unique known version, unknown legacy versions NULL. Deferred
+completeness rejects missing/deleted/reinserted/reassigned/substituted/restored
+payloads. NONE→STARTED→DONE requires eligibility and no remaining private payload.
+Queue/assignee/due/partial/key-reference indexes serve actual operations. Stopped
+writers are required; no mixed old/new binary guarantee or V0001–V0029 edits.
+
 Phase 7 slice A adds V0027 (V0001–V0026 unchanged): notification groups,
 contributions/source_state/preferences and recipient_state watermark. The owning
 recipient row serializes before source/group/contribution writes and is retained
@@ -248,8 +258,12 @@ for scan/read/cleanup limits. Search and Phase 8 case extensions remain pending.
 | `notification.source_state` | recipient_id FK account, kind, source_type, source_id uuid, actor_id FK account, latest_source_version bigint, active boolean, notification_id? FK notification | PK(recipient_id,kind,source_type,source_id,actor_id); serializes updates across grouping windows, rejects old create after newer delete; retain through replay horizon even if notification purged |
 | `notification.preference` | user_id FK account, kind, in_app_enabled boolean | PK(user_id,kind); defaults enabled except self-events |
 | `search.document` | target_type, target_id uuid, source_version bigint, title text, body text, search_vector tsvector, updated_at, deleted boolean | PK(target_type,target_id); GIN(search_vector); optional pg_trgm GIN on normalized name only after explain/benchmark |
-| `moderation.report` | id, reporter_id FK account, target_type, target_id uuid, community_id? FK, category, detail? varchar(4000), evidence_encrypted?, status, assigned_to? FK account, resolved_at?, created_at, **V** | partial U(reporter_id,target_type,target_id) WHERE status IN ('OPEN','IN_REVIEW'); `(community_id,status,created_at,id)` |
-| `moderation.action` | id, report_id? FK report, actor_id FK account, community_id? FK, target_type, target_id, action, reason varchar(2000), before_state jsonb, after_state jsonb, request_id, created_at | append-only; `(target_type,target_id,created_at)` and `(community_id,created_at,id)` |
+| `moderation.report` | id, reporter_id FK account, immutable target/scope/source actor IDs, category, status, assigned_to? FK account, resolved_at?, hold_until/reason?, retention_state, created_at, **V** | unique unresolved reporter/typed target; bounded scope/assignee/due/partial indexes; immutable identity/terminal state |
+| `moderation.report_evidence` | report_id PK/FK report, ciphertext?, key_id?, redacted_at? | one encrypted payload or irreversible tombstone; no DELETE/reinsert/substitution |
+| `moderation.action` | id, report_id? FK report, actor_id FK account, community_id? FK, typed target/FKs, action, request_id, created_at | unconditional append-only metadata; typed ACCOUNT added; target/scope/due indexes |
+| `moderation.action_detail` | action_id PK/FK action, legacy_payload?, ciphertext?, key_id?, redacted_at? | legacy exists only from lossless migration; new writes encrypted; verified legacy encryption / eligible redaction only |
+| `moderation.action_retention` | action_id PK/FK standalone action, hold_until/reason?, retention_state, version | forbidden for case-linked actions; immutable root identity/tombstone; one-way states |
+| `moderation.case_history` | id, report_id FK, case_version?, actor_id?, operation, action_id? FK U, assigned_to? FK, hold_until?, created_at | append-only; U(report_id,known version); action must belong to case; bounded time/UUID pages |
 
 Notification/search/report targets are semantic references, not unchecked permission grants. They intentionally survive target deletion and can represent multiple modules without reverse FKs. Validate existence/access on creation; consumers tolerate gone targets and recheck authorization. Search stores only required searchable content and is operationally private. Never return index snippets before source authorization.
 

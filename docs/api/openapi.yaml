@@ -2,7 +2,7 @@ openapi: "3.1.0"
 info:
   title: "social-core accounts, communities, graph, content, moderation, feeds and notifications"
   version: "0.8.0"
-  description: "Phases 0–6 accepted; Phase 7 semantic inbox/SSE internal gate passed pending main review. Phase 8 search slice is locally implemented; moderation operations/full package gate remain. All unsafe API calls require CSRF cookie/header and exact trusted Origin, including Bearer and anonymous capability requests. Every Bearer validates current PostgreSQL session/account; dependency outage is 503. Auth/API responses are no-store. Unsupported routes remain deny-by-default. Browser deployment is same-site TLS."
+  description: "Phases 0–6 accepted; Phase 7 semantic inbox/SSE internal gate passed pending main review. Phase 8 search and scoped moderation operations are locally implemented; final package verification/review are recorded separately. All unsafe API calls require CSRF cookie/header and exact trusted Origin, including Bearer and anonymous capability requests. Every Bearer validates current PostgreSQL session/account/epoch; dependency outage is 503. Auth/API responses are no-store. Unsupported routes remain deny-by-default. Browser deployment is same-site TLS."
 paths:
   "/actuator/health":
     get:
@@ -2413,10 +2413,13 @@ paths:
       summary: Current effective MODERATOR+ queue in this exact community
       security: [{BearerAuth: []}]
       parameters:
+        - {name: status, in: query, schema: {type: string, enum: [OPEN, IN_REVIEW, RESOLVED, DISMISSED]}}
+        - {name: assignedTo, in: query, schema: {type: string, format: uuid}}
+        - {name: unassigned, in: query, schema: {type: boolean, default: false}}
         - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
         - {name: offset, in: query, schema: {type: integer, minimum: 0, maximum: 10000, default: 0}}
       responses:
-        '200': {description: Private no-store case representation, content: {application/json: {schema: {$ref: '#/components/schemas/ReportPage'}}}}
+        '200': {description: Audited scoped metadata, mutually exclusive assignedTo/unassigned filters, content: {application/json: {schema: {$ref: '#/components/schemas/CasePage'}}}}
         default: {$ref: '#/components/responses/Problem'}
   /api/v1/admin/moderation/reports:
     get:
@@ -2424,10 +2427,13 @@ paths:
       summary: Current platform ADMIN global cases only
       security: [{BearerAuth: []}]
       parameters:
+        - {name: status, in: query, schema: {type: string, enum: [OPEN, IN_REVIEW, RESOLVED, DISMISSED]}}
+        - {name: assignedTo, in: query, schema: {type: string, format: uuid}}
+        - {name: unassigned, in: query, schema: {type: boolean, default: false}}
         - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
         - {name: offset, in: query, schema: {type: integer, minimum: 0, maximum: 10000, default: 0}}
       responses:
-        '200': {description: Private no-store case representation, content: {application/json: {schema: {$ref: '#/components/schemas/ReportPage'}}}}
+        '200': {description: Audited global-only metadata, mutually exclusive assignedTo/unassigned filters, content: {application/json: {schema: {$ref: '#/components/schemas/CasePage'}}}}
         default: {$ref: '#/components/responses/Problem'}
   /api/v1/communities/{community}/moderation/reports/{report}:
     parameters:
@@ -2484,6 +2490,201 @@ paths:
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ReportAction'}}}}
       responses:
         '200': {description: Private no-store case representation, content: {application/json: {schema: {$ref: '#/components/schemas/ReportResult'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/communities/{community}/moderation/reports/{report}/assignment:
+    parameters:
+      - {name: community, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: report, in: path, required: true, schema: {type: string, format: uuid}}
+    put:
+      operationId: assignCommunity
+      summary: "Current scoped eligible assignee; assignment grants no authority"
+      security: [{BearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CaseAssignment'}}}}
+      responses:
+        '200': {description: Current scoped private no-store response, content: {application/json: {schema: {$ref: '#/components/schemas/CaseView'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/admin/moderation/reports/{report}/assignment:
+    parameters:
+      - {name: report, in: path, required: true, schema: {type: string, format: uuid}}
+    put:
+      operationId: assignGlobal
+      summary: "Current scoped eligible assignee; assignment grants no authority"
+      security: [{BearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/CaseAssignment'}}}}
+      responses:
+        '200': {description: Current scoped private no-store response, content: {application/json: {schema: {$ref: '#/components/schemas/CaseView'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/communities/{community}/moderation/reports/{report}/history:
+    parameters:
+      - {name: community, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: report, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: historyCommunity
+      summary: "Attributable bounded history, legacy versions unknown"
+      security: [{BearerAuth: []}]
+      parameters:
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, maximum: 10000, default: 0}}
+      responses:
+        '200': {description: Current scoped private no-store response, content: {application/json: {schema: {$ref: '#/components/schemas/CaseHistory'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/admin/moderation/reports/{report}/history:
+    parameters:
+      - {name: report, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: historyGlobal
+      summary: "Attributable bounded history, legacy versions unknown"
+      security: [{BearerAuth: []}]
+      parameters:
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+        - {name: offset, in: query, schema: {type: integer, minimum: 0, maximum: 10000, default: 0}}
+      responses:
+        '200': {description: Current scoped private no-store response, content: {application/json: {schema: {$ref: '#/components/schemas/CaseHistory'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/communities/{community}/moderation/reports/{id}/hold:
+    parameters:
+      - {name: community, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    put:
+      operationId: caseHoldCommunity
+      summary: "Explicit engineering hold on the case root, rejects redaction already begun"
+      security: [{BearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ModerationHold'}}}}
+      responses:
+        '200': {description: Current scoped private no-store response, content: {application/json: {schema: {$ref: '#/components/schemas/ModerationControl'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/admin/moderation/reports/{id}/hold:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    put:
+      operationId: caseHoldGlobal
+      summary: "Explicit engineering hold on the case root, rejects redaction already begun"
+      security: [{BearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ModerationHold'}}}}
+      responses:
+        '200': {description: Current scoped private no-store response, content: {application/json: {schema: {$ref: '#/components/schemas/ModerationControl'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/communities/{community}/moderation/actions/{id}/hold:
+    parameters:
+      - {name: community, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    put:
+      operationId: actionHoldCommunity
+      summary: "Standalone action only; case-linked action must use its case hold"
+      security: [{BearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ModerationHold'}}}}
+      responses:
+        '200': {description: Current scoped private no-store response, content: {application/json: {schema: {$ref: '#/components/schemas/ModerationControl'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/admin/moderation/actions/{id}/hold:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    put:
+      operationId: actionHoldGlobal
+      summary: "Standalone action only; case-linked action must use its case hold"
+      security: [{BearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ModerationHold'}}}}
+      responses:
+        '200': {description: Current scoped private no-store response, content: {application/json: {schema: {$ref: '#/components/schemas/ModerationControl'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/communities/{community}/moderation/actions/{id}:
+    parameters:
+      - {name: community, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: actionDetailCommunity
+      summary: "Scoped attributable private action details or irreversible redacted tombstone"
+      security: [{BearerAuth: []}]
+      responses:
+        '200': {description: Current scoped private no-store response, content: {application/json: {schema: {$ref: '#/components/schemas/ModerationActionView'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/admin/moderation/actions/{id}:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: actionDetailGlobal
+      summary: "Scoped attributable private action details or irreversible redacted tombstone"
+      security: [{BearerAuth: []}]
+      responses:
+        '200': {description: Current scoped private no-store response, content: {application/json: {schema: {$ref: '#/components/schemas/ModerationActionView'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/admin/moderation/actions:
+    post:
+      operationId: moderateAccount
+      summary: Current platform ADMIN only, versioned account suspend/reinstate, deny self and peer ADMIN
+      security: [{BearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      description: If-Match is the target account version. Complete sorted exclusive account guards precede action/root. Status, authentication epoch, encrypted action, audit and outbox are atomic. Reinstatement never revives old sessions or deleted content and changes neither roles nor community ownership.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/AccountModerationRequest'}}}}
+      responses:
+        '200': {description: Changed account version in ETag, content: {application/json: {schema: {$ref: '#/components/schemas/AccountModerationResult'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/admin/moderation/accounts/{id}:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    get:
+      operationId: getModerationAccountState
+      summary: Audited current ADMIN-only minimal account state/version for If-Match
+      security: [{BearerAuth: []}]
+      description: Complete sorted shared actor/target guards, current authority recheck. No credentials, profile lookup, authentication epoch, identity SQL or general staff directory. Role is read-only, never accepted by status action input.
+      responses:
+        '200': {description: Current account state, version in ETag, content: {application/json: {schema: {$ref: '#/components/schemas/ModerationAccountState'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/admin/moderation/metrics:
+    get:
+      operationId: getRestrictedOperationsMetrics
+      summary: Audited current ADMIN-only Prometheus snapshot, no public actuator bypass
+      security: [{BearerAuth: []}]
+      description: Existing registry, fixed low-cardinality labels, no resource IDs/query text or new credential model. Required current account/session/ADMIN checks and audit fail closed. Continuous collector/gateway credentials remain operator deployment configuration; no service is enabled by default.
+      responses:
+        '200': {description: Private no-store registry snapshot, content: {text/plain: {schema: {type: string}}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/admin/moderation/maintenance/{operation}:
+    parameters:
+      - {name: operation, in: path, required: true, schema: {type: string, enum: [ENCRYPT, RETENTION]}}
+    get:
+      operationId: getModerationMaintenance
+      summary: Audited current ADMIN-only restricted progress, no private exports
+      security: [{BearerAuth: []}]
+      responses:
+        '200': {description: Current bounded-work progress, content: {application/json: {schema: {$ref: '#/components/schemas/ModerationProgress'}}}}
+        default: {$ref: '#/components/responses/Problem'}
+    post:
+      operationId: resumeModerationMaintenance
+      summary: Audited current ADMIN-only durable resume, old DEAD work is not silently deleted
+      security: [{BearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+      responses:
+        '200': {description: New durable pass requested, content: {application/json: {schema: {$ref: '#/components/schemas/ModerationProgress'}}}}
         default: {$ref: '#/components/responses/Problem'}
   /api/v1/feeds/home:
     get:
@@ -2964,13 +3165,139 @@ components:
       description: Bounded administration offset page, newest-first time/UUID; no totals or snapshot. Caller explicitly advances offset.
     ReportEvidence:
       type: object
-      required: [report, detail, capturedAt, summary]
+      required: [report, detail, capturedAt, summary, redacted]
       properties:
         report: {$ref: '#/components/schemas/Report'}
         detail: {type: [string, 'null'], maxLength: 4000}
-        capturedAt: {type: string, format: date-time}
-        summary: {type: string, maxLength: 2000}
+        capturedAt: {type: [string, 'null'], format: date-time}
+        summary: {type: [string, 'null'], maxLength: 2000}
+        redacted: {type: boolean}
       description: Only current scoped staff or platform ADMIN global case endpoints; every successful read is audited. Not ordinary target authority. Survives source deletion; no media URLs or raw objects.
+    CaseView:
+      type: object
+      required: [id, targetType, targetId, communityId, category, status, createdAt, resolvedAt, version, assignedTo, holdUntil, holdReason, retentionState]
+      properties:
+        id: {type: string, format: uuid}
+        targetType: {$ref: '#/components/schemas/ReportTarget'}
+        targetId: {type: string, format: uuid}
+        communityId: {type: [string, 'null'], format: uuid}
+        category: {$ref: '#/components/schemas/ReportCategory'}
+        status: {type: string, enum: [OPEN, IN_REVIEW, RESOLVED, DISMISSED]}
+        createdAt: {type: string, format: date-time}
+        resolvedAt: {type: [string, 'null'], format: date-time}
+        version: {type: integer, minimum: 0}
+        assignedTo: {type: [string, 'null'], format: uuid}
+        holdUntil: {type: [string, 'null'], format: date-time}
+        holdReason: {type: [string, 'null'], maxLength: 64}
+        retentionState: {type: string, enum: [NONE, STARTED, DONE]}
+      description: Staff-only queue/assignment metadata; existing flat report fields preserved. Assignment never grants authority. Hold expires by database time and is unrelated to assignee changes.
+    CasePage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/CaseView'}}
+        nextCursor: {type: 'null'}
+    CaseAssignment:
+      type: object
+      additionalProperties: false
+      properties:
+        assignedTo: {type: [string, 'null'], format: uuid}
+      description: Null unassigns. Current eligible staff in immutable scope only; terminal cases reject assignment; current case If-Match required.
+    ModerationHold:
+      type: object
+      additionalProperties: false
+      properties:
+        expiresAt: {type: [string, 'null'], format: date-time}
+        reasonCode: {type: [string, 'null'], pattern: '^[A-Z_]{1,64}$'}
+      description: Explicit engineering hold, not a legal product. Expiry must be after DB now and at most365 days ahead. Both null release. Current scoped staff/global ADMIN and root If-Match required; renewal is explicit. STARTED/DONE rejects new/renewed holds, no resurrection. Archived scope may retain evidence under current staff read authority. Linked actions use case root, never independent action hold.
+    ModerationControl:
+      type: object
+      required: [type, id, version, holdUntil, holdReason, retentionState]
+      properties:
+        type: {type: string, enum: [REPORT, ACTION]}
+        id: {type: string, format: uuid}
+        version: {type: integer, minimum: 0}
+        holdUntil: {type: [string, 'null'], format: date-time}
+        holdReason: {type: [string, 'null'], maxLength: 64}
+        retentionState: {type: string, enum: [NONE, STARTED, DONE]}
+    CaseHistoryEntry:
+      type: object
+      required: [id, caseVersion, actorId, operation, actionId, assignedTo, holdUntil, createdAt, redacted, reason, beforeState, afterState]
+      properties:
+        id: {type: string, format: uuid}
+        caseVersion: {type: [integer, 'null'], minimum: 0}
+        actorId: {type: [string, 'null'], format: uuid}
+        operation: {type: string, maxLength: 40}
+        actionId: {type: [string, 'null'], format: uuid}
+        assignedTo: {type: [string, 'null'], format: uuid}
+        holdUntil: {type: [string, 'null'], format: date-time}
+        createdAt: {type: string, format: date-time}
+        redacted: {type: boolean}
+        reason: {type: [string, 'null'], maxLength: 2000}
+        beforeState: {type: [string, 'null'], maxLength: 65536}
+        afterState: {type: [string, 'null'], maxLength: 65536}
+      description: Old action versions are unknown/null, not fabricated. System retention entries have null actor. Before/after are private JSON-encoded strings. Redaction returns null private fields, never fallback source data.
+    CaseHistory:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/CaseHistoryEntry'}}
+      description: Oldest-first createdAt/UUID, size20/default100/max, offset0..10000, no total/snapshot. Every successful read is scoped/audited in its transaction.
+    ModerationActionView:
+      type: object
+      required: [id, reportId, actorId, communityId, targetType, targetId, action, createdAt, redacted, reason, beforeState, afterState, control]
+      properties:
+        id: {type: string, format: uuid}
+        reportId: {type: [string, 'null'], format: uuid}
+        actorId: {type: string, format: uuid}
+        communityId: {type: [string, 'null'], format: uuid}
+        targetType: {type: string, enum: [REPORT, POST, COMMENT, MEMBER, ACCOUNT]}
+        targetId: {type: string, format: uuid}
+        action: {type: string, maxLength: 32}
+        createdAt: {type: string, format: date-time}
+        redacted: {type: boolean}
+        reason: {type: [string, 'null'], maxLength: 2000}
+        beforeState: {type: [string, 'null'], maxLength: 65536}
+        afterState: {type: [string, 'null'], maxLength: 65536}
+        control: {$ref: '#/components/schemas/ModerationControl'}
+    AccountModerationRequest:
+      description: Obtain the target source version through the audited ADMIN account-state read. Role/owner/actor are not input fields.
+      type: object
+      additionalProperties: false
+      required: [userId, action, reasonCode]
+      properties:
+        userId: {type: string, format: uuid}
+        action: {type: string, enum: [SUSPEND_ACCOUNT, REINSTATE_ACCOUNT]}
+        reasonCode: {type: string, pattern: '^[A-Z_]{1,64}$'}
+    AccountModerationResult:
+      type: object
+      required: [actionId, account]
+      properties:
+        actionId: {type: string, format: uuid}
+        account:
+          type: object
+          required: [userId, before, after, version]
+          properties:
+            userId: {type: string, format: uuid}
+            before: {type: string, enum: [ACTIVE, SUSPENDED]}
+            after: {type: string, enum: [ACTIVE, SUSPENDED]}
+            version: {type: integer, minimum: 0}
+    ModerationAccountState:
+      type: object
+      required: [userId, status, platformRole, version]
+      properties:
+        userId: {type: string, format: uuid}
+        status: {type: string, enum: [ACTIVE, SUSPENDED, DELETION_PENDING, PENDING_VERIFICATION, DELETED]}
+        platformRole: {type: string, enum: [USER, ADMIN]}
+        version: {type: integer, minimum: 0}
+    ModerationProgress:
+      type: object
+      required: [legacyPayloads, pendingCaseRoots, pendingActionRoots]
+      properties:
+        legacyPayloads: {type: integer, minimum: 0}
+        pendingCaseRoots: {type: integer, minimum: 0}
+        pendingActionRoots: {type: integer, minimum: 0}
+      description: Restricted operational counts, not user discovery totals. Pending roots mean partial STARTED work. Resume enqueues a new bounded durable pass, never weakens a guard or deletes DEAD history.
     ReportAction:
       type: object
       additionalProperties: false

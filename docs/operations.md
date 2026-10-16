@@ -2,6 +2,13 @@
 
 ## Deployment baseline
 
+Phase8 D adds [migration/backfill/retention recovery](../ops/moderation.md) and
+[static protected dashboard](../ops/dashboards/phase-7-8.json). Existing Prometheus
+registry is exposed only by audited current-ADMIN metrics API; actuator internals
+stay denied. No dashboard/collector service or credential model is enabled.
+Payload split requires stopped writers/key preservation, not rolling mixed-schema
+writes or Phase9 legal/erasure/public-launch approval.
+
 Phase8 slice C adds [search recovery/measurements](../ops/search.md): audited ADMIN
 backfill/resume, source-version/checksum reconciliation and low-cardinality metrics.
 This is not Phase8 acceptance or a production capacity claim; final package checks

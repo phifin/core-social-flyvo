@@ -47,6 +47,26 @@ class OpenApiContractTest {
             Map.entry("/api/v1/admin/moderation/reports", List.of("get")),
             Map.entry("/api/v1/admin/moderation/reports/{report}", List.of("get")),
             Map.entry("/api/v1/admin/moderation/reports/{report}/actions", List.of("post")),
+            Map.entry("/api/v1/admin/moderation/reports/{report}/assignment", List.of("put")),
+            Map.entry(
+                "/api/v1/communities/{community}/moderation/reports/{report}/assignment",
+                List.of("put")),
+            Map.entry("/api/v1/admin/moderation/reports/{report}/history", List.of("get")),
+            Map.entry(
+                "/api/v1/communities/{community}/moderation/reports/{report}/history",
+                List.of("get")),
+            Map.entry("/api/v1/admin/moderation/reports/{id}/hold", List.of("put")),
+            Map.entry(
+                "/api/v1/communities/{community}/moderation/reports/{id}/hold", List.of("put")),
+            Map.entry("/api/v1/admin/moderation/actions/{id}/hold", List.of("put")),
+            Map.entry(
+                "/api/v1/communities/{community}/moderation/actions/{id}/hold", List.of("put")),
+            Map.entry("/api/v1/admin/moderation/actions/{id}", List.of("get")),
+            Map.entry("/api/v1/communities/{community}/moderation/actions/{id}", List.of("get")),
+            Map.entry("/api/v1/admin/moderation/actions", List.of("post")),
+            Map.entry("/api/v1/admin/moderation/metrics", List.of("get")),
+            Map.entry("/api/v1/admin/moderation/accounts/{id}", List.of("get")),
+            Map.entry("/api/v1/admin/moderation/maintenance/{operation}", List.of("get", "post")),
             Map.entry("/api/v1/posts/{id}/comments", List.of("get", "post")),
             Map.entry("/api/v1/comments/{id}", List.of("get", "patch", "delete")),
             Map.entry("/api/v1/comments/{id}/replies", List.of("get", "post")),

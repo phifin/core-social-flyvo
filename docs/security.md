@@ -21,6 +21,14 @@ Perform expensive password hashing/verification outside long database locks, the
 
 ## Access tokens and refresh families
 
+Phase8 moderation follows ADR-016: authorize current scope and audit before private
+evidence/history/action detail is returned, including legacy plaintext. Assignment
+is no authority. Current scoped staff/global ADMIN and If-Match govern DB-time
+bounded holds; common root locks deny preservation claims once redaction starts.
+New payloads are encrypted; verified crypto backfill/redaction are one-way while
+metadata/audit remain immutable. Metrics recheck current ADMIN and commit audit;
+no public actuator bypass or long-lived scraper credential is introduced.
+
 Phase 1 refinements: changing a password or recovery email also invalidates
 outstanding password-reset proofs under the account guard, so an old mailbox
 proof cannot regain access after email change. Reset issuance uses its email lookup

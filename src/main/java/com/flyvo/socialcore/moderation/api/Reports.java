@@ -48,7 +48,8 @@ public interface Reports {
 
   record Page(List<View> items, String nextCursor) {}
 
-  record Evidence(View report, String detail, Instant capturedAt, String summary) {}
+  record Evidence(
+      View report, String detail, Instant capturedAt, String summary, boolean redacted) {}
 
   record Resolution(
       UUID reportId, Action action, String reason, Long sourceVersion, Instant suspendedUntil) {}

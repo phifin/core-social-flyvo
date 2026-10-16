@@ -2,7 +2,8 @@
 
 Status: **Accepted for implementation by main, 2026-10-16**, resolving the
 architecture decision P78-D1. Proposed by development on the same date.
-Not implemented or phase-accepted; no Phase9/legal erasure authorization.
+Implementation/verification status is recorded in [Phase8](../phases/phase-8.md);
+not phase-accepted, no Phase9/legal erasure authorization.
 
 ## Context and evidenced conflict
 
@@ -152,9 +153,8 @@ tests and complete the full package/benchmark/Compose/scanner gates.
 
 ## Current executable boundary
 
-V0029 only implements account/session epochs and guarded versioned lifecycle owner
-commands. It changes no moderation/audit trigger, payload, hold or retention rule.
-No assignment/history/retention or new platform moderation HTTP endpoint is claimed.
-The actual verified code hashes and checks belong in the fixed mailbox. Acceptance
-of this design unblocks development; implementation and security evidence still
-require main review with the complete Phases 7–8 package.
+At main's acceptance, V0029 only implemented account/session epochs and guarded versioned lifecycle owner
+commands. V0030/V0031 now implement the accepted payload/control boundary locally;
+the decision and Main implementation conditions above remain unchanged. Actual
+code hashes, full checks and review status belong in the fixed mailbox/Phase8
+record. This is design acceptance, not self-acceptance of the completed package.

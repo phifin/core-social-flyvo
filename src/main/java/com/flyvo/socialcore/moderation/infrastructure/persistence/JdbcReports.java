@@ -11,6 +11,8 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 class JdbcReports implements ReportRepository {
+  private static final String SELECT =
+      "SELECT r.*,e.ciphertext AS evidence_encrypted,e.key_id AS evidence_key_id FROM moderation.report r JOIN moderation.report_evidence e ON e.report_id=r.id";
   private final JdbcTemplate jdbc;
 
   JdbcReports(JdbcTemplate jdbc) {
@@ -38,10 +40,7 @@ class JdbcReports implements ReportRepository {
 
   public Report find(UUID id, boolean lock) {
     var rows =
-        jdbc.query(
-            "SELECT * FROM moderation.report WHERE id=?" + (lock ? " FOR UPDATE" : ""),
-            this::row,
-            id);
+        jdbc.query(SELECT + " WHERE r.id=?" + (lock ? " FOR UPDATE OF r" : ""), this::row, id);
     return rows.isEmpty() ? null : rows.getFirst();
   }
 
@@ -49,7 +48,7 @@ class JdbcReports implements ReportRepository {
     var t = r.created().atOffset(ZoneOffset.UTC);
     var ids =
         jdbc.queryForList(
-            "INSERT INTO moderation.report(id,reporter_id,target_type,target_id,community_id,source_author_id,parent_author_id,category,evidence_encrypted,evidence_key_id,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,'OPEN',?,?) ON CONFLICT (reporter_id,target_type,target_id) WHERE status IN ('OPEN','IN_REVIEW') DO NOTHING RETURNING id",
+            "INSERT INTO moderation.report(id,reporter_id,target_type,target_id,community_id,source_author_id,parent_author_id,category,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,'OPEN',?,?) ON CONFLICT (reporter_id,target_type,target_id) WHERE status IN ('OPEN','IN_REVIEW') DO NOTHING RETURNING id",
             UUID.class,
             r.id(),
             r.reporter(),
@@ -59,16 +58,22 @@ class JdbcReports implements ReportRepository {
             r.author(),
             r.parentAuthor(),
             r.category(),
-            r.evidence(),
-            r.keyId(),
             t,
             t);
-    if (!ids.isEmpty()) return r;
+    if (!ids.isEmpty()) {
+      jdbc.update(
+          "INSERT INTO moderation.report_evidence(report_id,ciphertext,key_id) VALUES (?,?,?)",
+          r.id(),
+          r.evidence(),
+          r.keyId());
+      return r;
+    }
     // The source guards precede this row lock; a committed resolver can remove
     // the conflict between statements. A missing row asks the client to retry.
     var rows =
         jdbc.query(
-            "SELECT * FROM moderation.report WHERE reporter_id=? AND target_type=? AND target_id=? AND status IN ('OPEN','IN_REVIEW') FOR UPDATE",
+            SELECT
+                + " WHERE r.reporter_id=? AND r.target_type=? AND r.target_id=? AND r.status IN ('OPEN','IN_REVIEW') FOR UPDATE OF r",
             this::row,
             r.reporter(),
             r.targetType(),
@@ -93,20 +98,21 @@ class JdbcReports implements ReportRepository {
   public List<Report> page(UUID reporter, UUID community, int size, int offset) {
     if (reporter != null)
       return jdbc.query(
-          "SELECT * FROM moderation.report WHERE reporter_id=? ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?",
+          SELECT + " WHERE r.reporter_id=? ORDER BY r.created_at DESC,r.id DESC LIMIT ? OFFSET ?",
           this::row,
           reporter,
           size,
           offset);
     if (community != null)
       return jdbc.query(
-          "SELECT * FROM moderation.report WHERE community_id=? ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?",
+          SELECT + " WHERE r.community_id=? ORDER BY r.created_at DESC,r.id DESC LIMIT ? OFFSET ?",
           this::row,
           community,
           size,
           offset);
     return jdbc.query(
-        "SELECT * FROM moderation.report WHERE community_id IS NULL ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?",
+        SELECT
+            + " WHERE r.community_id IS NULL ORDER BY r.created_at DESC,r.id DESC LIMIT ? OFFSET ?",
         this::row,
         size,
         offset);

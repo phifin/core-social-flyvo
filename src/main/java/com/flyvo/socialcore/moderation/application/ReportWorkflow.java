@@ -31,6 +31,7 @@ public class ReportWorkflow implements Reports {
   private final DurableWork work;
   private final Clock clock;
   private final ObjectMapper json;
+  private final CaseStore cases;
 
   public ReportWorkflow(
       ReportRepository store,
@@ -47,7 +48,8 @@ public class ReportWorkflow implements Reports {
       Secrets secrets,
       DurableWork work,
       Clock clock,
-      ObjectMapper json) {
+      ObjectMapper json,
+      CaseStore cases) {
     this.store = store;
     this.actions = actions;
     this.accounts = accounts;
@@ -63,6 +65,7 @@ public class ReportWorkflow implements Reports {
     this.work = work;
     this.clock = clock;
     this.json = json;
+    this.cases = cases;
   }
 
   public record Captured(Instant capturedAt, String detail, String summary) {}
@@ -194,6 +197,7 @@ public class ReportWorkflow implements Reports {
                 null,
                 0));
     if (r.id().equals(id)) {
+      cases.history(id, actor.userId(), "SUBMITTED", null);
       work.auditScoped(
           actor.userId(), "REPORT_SUBMITTED", "report", id, community, "SUCCESS", null);
       work.event(
@@ -213,10 +217,11 @@ public class ReportWorkflow implements Reports {
     if (size < 1 || size > 100 || offset < 0 || offset > 10000) throw Failure.invalid();
   }
 
-  @Transactional(readOnly = true)
+  @Transactional
   public Page own(ActorContext actor, int size, int offset) {
-    actor(actor);
+    guard(actor);
     page(size, offset);
+    work.audit(actor.userId(), "OWN_REPORTS_READ", "account", actor.userId(), "SUCCESS", null);
     return new Page(
         store.page(actor.userId(), null, size, offset).stream().map(this::view).toList(), null);
   }
@@ -226,6 +231,14 @@ public class ReportWorkflow implements Reports {
     guard(actor);
     page(size, offset);
     scope(actor, community, false, false);
+    work.auditScoped(
+        actor.userId(),
+        "CASE_QUEUE_READ",
+        "moderation",
+        community == null ? actor.userId() : community,
+        community,
+        "SUCCESS",
+        null);
     return new Page(
         store.page(null, community, size, offset).stream().map(this::view).toList(), null);
   }
@@ -234,12 +247,26 @@ public class ReportWorkflow implements Reports {
   public Evidence evidence(ActorContext actor, UUID community, UUID id) {
     guard(actor);
     scope(actor, community, false, false);
+    var root =
+        new CaseStore.Root(com.flyvo.socialcore.moderation.api.CaseOperations.Root.REPORT, id);
+    var metadata = cases.control(root, false);
+    if (metadata == null || !Objects.equals(metadata.community(), community))
+      throw new Failure(404, "NOT_FOUND");
+    cases.control(root, true);
     var r = existing(id, false);
     sameScope(r, community);
-    var snapshot = json.readValue(secrets.decrypt("report:" + id, r.evidence()), Captured.class);
+    var snapshot =
+        r.evidence() == null
+            ? null
+            : json.readValue(secrets.decrypt("report:" + id, r.evidence()), Captured.class);
     work.auditScoped(
         actor.userId(), "REPORT_EVIDENCE_READ", "report", id, community, "SUCCESS", null);
-    return new Evidence(view(r), snapshot.detail(), snapshot.capturedAt(), snapshot.summary());
+    return new Evidence(
+        view(r),
+        snapshot == null ? null : snapshot.detail(),
+        snapshot == null ? null : snapshot.capturedAt(),
+        snapshot == null ? null : snapshot.summary(),
+        snapshot == null);
   }
 
   @Transactional
@@ -252,9 +279,14 @@ public class ReportWorkflow implements Reports {
         || input.reason().isBlank()
         || input.reason().codePointCount(0, input.reason().length()) > 2000)
       throw Failure.invalid();
-    var first = existing(input.reportId(), false);
-    sameScope(first, community);
-    guard(actor, first.author(), first.parentAuthor());
+    var metadata =
+        cases.control(
+            new CaseStore.Root(
+                com.flyvo.socialcore.moderation.api.CaseOperations.Root.REPORT, input.reportId()),
+            false);
+    if (metadata == null || !Objects.equals(metadata.community(), community))
+      throw new Failure(404, "NOT_FOUND");
+    guard(actor, metadata.author(), metadata.parentAuthor());
     boolean sanction =
         Set.of(Action.SUSPEND_MEMBER, Action.BAN_MEMBER, Action.UNBAN_MEMBER)
             .contains(input.action());
@@ -262,6 +294,8 @@ public class ReportWorkflow implements Reports {
         || input.suspendedUntil() != null && input.action() != Action.SUSPEND_MEMBER)
       throw Failure.invalid();
     scope(actor, community, true, sanction);
+    var first = existing(input.reportId(), false);
+    sameScope(first, community);
     if (first.version() != expected) throw new Failure(412, "STALE_VERSION");
     if (!Set.of("OPEN", "IN_REVIEW").contains(first.status())) throw Failure.conflict();
     UUID actionId = UUID.randomUUID(), target = first.id();
@@ -343,6 +377,7 @@ public class ReportWorkflow implements Reports {
         json.writeValueAsString(after),
         request,
         clock.instant());
+    cases.history(current.id(), actor.userId(), input.action().name(), actionId);
     work.auditScoped(
         actor.userId(), input.action().name(), "report", current.id(), community, "SUCCESS", null);
     work.event(

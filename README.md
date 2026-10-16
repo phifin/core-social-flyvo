@@ -25,11 +25,15 @@ records representative load and limitations, including the unmet initial p95
 has a locally implemented [semantic inbox and authenticated SSE](docs/notifications.md);
 the [Phase 7 internal gate](docs/phases/phase-7.md) passed298 tests, pending main
 review. Phase8's [source-authorized search](docs/search-and-caching.md) is locally
-implemented; scoped moderation operations and full package verification remain.
-Its account lifecycle prerequisite prevents old sessions from reviving after
-suspend/reinstate; no new moderation HTTP surface is claimed by that prerequisite.
-Remaining D is [blocked on main's ADR-016 decision](docs/agent-handoff.md)
-about private payload retention/engineering holds; the proposed change is not implemented.
+implemented alongside [scoped moderation operations](docs/moderation.md) under
+accepted ADR-016: lossless payload split, verified encryption, explicit engineering
+holds, bounded retention, staff assignment/history and platform account actions.
+Suspend/reinstate never revives old sessions or deleted content. Protected
+[operations/metrics/dashboard](ops/moderation.md) reuse existing infrastructure.
+Final full340-test, app/media Compose, all3200 pool10/50 benchmark requests and
+secret scans pass; [Phase8 evidence](docs/phases/phase-8.md) records exact results
+and the unmet500ms feed p95 target. Main review/acceptance remains pending in the
+mailbox; no phase self-acceptance.
 Main has activated the [Phases 7–8 package](docs/work-packages/phase-7-8.md)
 for sequential development; activation does not accept either phase.
 

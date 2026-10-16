@@ -105,6 +105,30 @@ class SecurityConfiguration {
                     .authenticated()
                     .requestMatchers(
                         HttpMethod.GET,
+                        "/api/v1/communities/*/moderation/reports/*/history",
+                        "/api/v1/admin/moderation/reports/*/history",
+                        "/api/v1/communities/*/moderation/actions/*",
+                        "/api/v1/admin/moderation/actions/*",
+                        "/api/v1/admin/moderation/metrics",
+                        "/api/v1/admin/moderation/accounts/*",
+                        "/api/v1/admin/moderation/maintenance/*")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.PUT,
+                        "/api/v1/communities/*/moderation/reports/*/assignment",
+                        "/api/v1/admin/moderation/reports/*/assignment",
+                        "/api/v1/communities/*/moderation/reports/*/hold",
+                        "/api/v1/admin/moderation/reports/*/hold",
+                        "/api/v1/communities/*/moderation/actions/*/hold",
+                        "/api/v1/admin/moderation/actions/*/hold")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.POST,
+                        "/api/v1/admin/moderation/actions",
+                        "/api/v1/admin/moderation/maintenance/*")
+                    .authenticated()
+                    .requestMatchers(
+                        HttpMethod.GET,
                         "/api/v1/me/reports",
                         "/api/v1/communities/*/moderation/reports",
                         "/api/v1/communities/*/moderation/reports/*",

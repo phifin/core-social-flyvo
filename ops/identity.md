@@ -154,11 +154,17 @@ five-minute access lifetime + 30 seconds of skew before retiring it. Tests valid
 old/new verification. Never publish private material. The current implementation
 loads keys at startup; rotation is a controlled restart.
 
-Mail encryption uses one current AES-GCM key; no online multi-key re-encryption
-workflow is claimed. Pause new proof/provider issuance at the deployment edge,
-drain workers and allow every old 30-minute proof/ten-minute OAuth flow to expire
-before swapping the encryption key. Keep old key backups as required by restore
-policy. Coordinate limiter-key rotation with edge limits so issuance budgets
+Platform encryption uses one current AES-GCM key; key IDs are labels, not an
+implemented multi-key decryption selector. No online rotation/re-encryption workflow
+is claimed. The same key now protects report evidence/action detail and cursors,
+not just mail/OAuth proofs. **Do not swap it merely after short proofs expire.**
+Retain the active key until every referenced ciphertext is legitimately redacted
+(including unresolved/held cases), or a separately reviewed compatible re-encryption/
+multi-key procedure is implemented. Pause proof/provider issuance, drain encrypted
+mail/OAuth state and allow active cursors to expire as additional requirements,
+not sufficient permission to retire a retained evidence key. Keep compatible key
+backups under restore policy; see [moderation recovery](moderation.md).
+Coordinate limiter-key rotation with edge limits so issuance budgets
 cannot be reset to bypass rate limits. Never rotate by deleting local key files.
 
 Before public launch: production SMTP/domain delivery, TLS/proxy redaction,
