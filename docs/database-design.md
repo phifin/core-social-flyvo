@@ -20,6 +20,13 @@ Rows without a public resource identity (follows, membership key, reaction assoc
 
 ## Account, identity, profile
 
+Phase8's lifecycle prerequisite adds V0029: nonnegative authentication_epoch on
+account.user_account and identity.auth_session. Sessions capture the account
+epoch at issuance; suspension increments it, reinstatement never resets it.
+Existing ACTIVE account/session rows start at0; already SUSPENDED accounts start
+at1 so their old epoch0 sessions cannot revive. No account→identity callback,
+cross-module SQL or edit to V0001–V0028. Epoch is not a role or permission cache.
+
 | Table | Important columns | Constraints / indexes |
 |---|---|---|
 | `account.user_account` | id, status, platform_role (`USER`,`ADMIN`), created_at, deletion_requested_at?, suspended_until?, **V** | status/role CHECK; index `(status,deletion_requested_at)` for cleanup. Soft tombstone retains ID |

@@ -36,7 +36,8 @@ public interface IdentityRepository {
 
   Session session(UUID id, boolean lock);
 
-  void createSession(UUID id, UUID user, Instant now, boolean reauthenticationRequired);
+  void createSession(
+      UUID id, UUID user, Instant now, boolean reauthenticationRequired, long authenticationEpoch);
 
   void rotateSession(UUID id, Instant idle, Instant now);
 

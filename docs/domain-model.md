@@ -16,6 +16,13 @@ This is the source of truth for lifecycle semantics. Database details are in [da
 
 `AuthSession` is one login/device family, not one access token. Its refresh-token generations are single-use secrets with retained hash history. Verification, reset and OAuth transactions expire and are consumed once. They never grant community roles. See [identity scenarios](security.md#identity-collision-and-linking-policy).
 
+Phase8's account lifecycle prerequisite gives each session an issuance epoch from
+its account. Suspension increments the account epoch; reinstatement preserves it.
+A stale-epoch session is invalid regardless of unexpired JWT/refresh/freshness,
+without rewriting the original session proof or restoring community/content state.
+Versioned suspend/reinstate are account-owner commands for current platform ADMIN,
+with self/peer ADMIN denied. This is not an erasure workflow or a role editor.
+
 `Profile` (`profile`) has the same user ID, globally unique normalized handle, display name, bio, avatar media reference and version. Profile visibility defaults to `AUTHENTICATED`; supported scopes are `PUBLIC`, `AUTHENTICATED`, `FRIENDS`, `PRIVATE`. Handle/name lookup follows profile visibility. A visible post may show an author's minimal attribution (ID/display name), even if the full profile is private; no bio, graph, email or avatar URL is implied. UUID-backed handles such as `user_<random>` avoid unsafe guesses and collisions at registration. Changes to profile privacy take effect at authoritative reads. Block wins over profile visibility for signed-in viewers.
 
 `ProfilePreferences` contains locale, timezone identifier and default post audience; `NotificationPreference` belongs to notification. Store social preference fields explicitly, not an unbounded settings JSON bag. Account status and credentials do not belong in Profile. Avatars use the same media validation pipeline as posts.

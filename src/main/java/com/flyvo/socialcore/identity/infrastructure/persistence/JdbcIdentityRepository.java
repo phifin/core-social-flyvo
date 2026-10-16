@@ -153,6 +153,7 @@ public class JdbcIdentityRepository implements IdentityRepository {
               instant(rs, "absolute_expires_at"),
               instant(rs, "revoked_at"),
               rs.getBoolean("reauthentication_required"),
+              rs.getLong("authentication_epoch"),
               rs.getLong("version"));
 
   public Session session(UUID id, boolean lock) {
@@ -162,9 +163,10 @@ public class JdbcIdentityRepository implements IdentityRepository {
         id);
   }
 
-  public void createSession(UUID id, UUID user, Instant now, boolean reauthenticationRequired) {
+  public void createSession(
+      UUID id, UUID user, Instant now, boolean reauthenticationRequired, long authenticationEpoch) {
     jdbc.update(
-        "INSERT INTO identity.auth_session(id,user_id,created_at,last_seen_at,authenticated_at,idle_expires_at,absolute_expires_at,updated_at,reauthentication_required) VALUES (?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO identity.auth_session(id,user_id,created_at,last_seen_at,authenticated_at,idle_expires_at,absolute_expires_at,updated_at,reauthentication_required,authentication_epoch) VALUES (?,?,?,?,?,?,?,?,?,?)",
         id,
         user,
         t(now),
@@ -173,7 +175,8 @@ public class JdbcIdentityRepository implements IdentityRepository {
         t(now.plusSeconds(7 * 86400L)),
         t(now.plusSeconds(30 * 86400L)),
         t(now),
-        reauthenticationRequired);
+        reauthenticationRequired,
+        authenticationEpoch);
   }
 
   public void rotateSession(UUID id, Instant idle, Instant now) {

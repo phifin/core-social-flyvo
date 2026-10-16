@@ -46,6 +46,7 @@ class IdentityPolicyTest {
             now.plusSeconds(86400),
             null,
             false,
+            0,
             0);
     assertThat(session.active(now)).isFalse();
     assertThat(session.recent(now)).isFalse();

@@ -317,6 +317,23 @@ class NotificationStreamsIT {
   }
 
   @Test
+  void immediateReinstatementCannotHideSuspensionFromStreamHeartbeat() throws Exception {
+    var actor = user();
+    var admin = user();
+    jdbc.update("UPDATE account.user_account SET platform_role='ADMIN' WHERE id=?", admin.userId());
+    var token = tokens.issue(actor);
+    var response = open(token);
+    firstFrame(response);
+    long started = System.nanoTime();
+    var suspended = accounts.changeStatus(admin, actor.userId(), 0, true, "TEST_SUSPENSION");
+    accounts.changeStatus(admin, actor.userId(), suspended.version(), false, "REVIEW_COMPLETE");
+    long elapsed = closedWithin(response, started);
+    assertThat(streams.active()).isZero();
+    assertThat(open(token).statusCode()).isEqualTo(401);
+    System.out.println("SSE suspend-reinstate closure-ms=" + elapsed + "; old-session=denied");
+  }
+
+  @Test
   void databaseOutageFailsClosedAndOrdinaryRestRecovers() throws Exception {
     var actor = user();
     String token = tokens.issue(actor);

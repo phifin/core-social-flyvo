@@ -3,7 +3,8 @@ package com.flyvo.socialcore.account.api;
 import java.util.UUID;
 
 public interface AccountQueries {
-  record Account(UUID id, String status, String platformRole, long version) {
+  record Account(
+      UUID id, String status, String platformRole, long version, long authenticationEpoch) {
     public boolean active() {
       return "ACTIVE".equals(status);
     }

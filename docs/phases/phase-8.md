@@ -1,6 +1,7 @@
 # Phase 8 — search and scoped moderation operations
 
-Status: slice C implemented/verified, D and final package checks remain. Not
+Status: slice C and the D account-lifecycle prerequisite implemented/verified;
+the remainder of D and final package checks remain. Not
 accepted or READY_FOR_REVIEW. Phase7 internal gate passed before C, B code
 `af0742750cd1f1b00a02a1afcd6aa3d80d13db74`; see [Phase7 evidence](phase-7.md).
 Real C/D hashes are recorded in the fixed mailbox after their code commits.
@@ -71,3 +72,48 @@ checksum test asserts translated denial and repairs the payload. Intermediate
 compile/query/parser/harness failures remain in ignored evidence, not relabeled
 passes. Heavy pool10/50 all-success feed benchmark, final Compose/scanners and D
 are still package gates; no phase acceptance, push, deployment or Phase9 work.
+
+## D account-lifecycle prerequisite — not complete moderation operations
+
+V0029 adds account-owned authentication epochs and identity-owned session issuance
+epochs, without changing V0001–V0028. Suspension increments the epoch; guarded
+versioned reinstatement never resets it. Existing ACTIVE sessions keep epoch0;
+already SUSPENDED accounts begin at1 so upgrade cannot revive their old sessions.
+Current Bearer/refresh/recent-auth checks compare epochs synchronously. No reverse
+account→identity dependency, credential copy or asynchronous authorization cache.
+Complete sorted actor/target exclusive account guards, current ADMIN, expected
+source version, self/peer ADMIN denial and valid state precede mutation. Status,
+epoch, audit and AccountStatusChanged v1 commit or roll back together.
+
+This is an owner API prerequisite only: no new platform moderation HTTP endpoint,
+assignment/filter/history/hold/retention operation or key-rotation service is
+claimed. Roles, ownership, community state and deleted content are not modified.
+
+### Verification2026-10-16
+
+- Targeted verify:14 fast +67 integration =81 PASS, zero failures/errors/skips,
+  `.local/evidence/p78/d-lifecycle-targeted.log`. This precedes the extra upgrade
+  fixture for accounts already suspended before V0029.
+- Final `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./mvnw -B -ntp spotless:apply verify`:
+  **55 fast +268 integration =323 PASS**, zero failures/errors/skips, no forced
+  fork exit,5:02 finishing18:32:55+07. Log `.local/evidence/p78/d-lifecycle-full.log`.
+  Includes fresh29/upgrade28 with all old checksums and ACTIVE/SUSPENDED session
+  data preserved, nonnegative epoch constraints, all22 report immutability/scope/
+  atomicity regressions,19 feed tests and all prior Phases1–7/media/worker tests.
+- New cases: old Bearer/refresh/recent proof denied after immediate reinstatement,
+  fresh login/refresh accepted with new epoch; self/peer ADMIN, stale version,
+  invalid state and revoked authority denied; independent audit/outbox failures
+  roll status/version/epoch/effects back; password-verified login loses to suspension
+  before its lifecycle guard; real native SSE cannot miss suspend→reinstate.
+- Full-suite SSE suspend/reinstate closure5098ms (target<15s), replayed stream
+  token401. Ordinary logout5086/session5077/logout-all5091/suspend5093ms;
+  expiry2932ms, DB outage8004ms, slow readers250/201/220ms with queue≤2 and native
+  resources0; open-stream graceful shutdown19ms. No resource assertion weakened.
+- Existing actual search scheduler fixture reruns:10 posts/one owner/poll1000ms,
+  completion20,244ms/max lag20.151612654s;50 hydrated results/6 SQL statements
+  under10,000 ballast fixture. Not a capacity/SLA claim. Hardware/software and
+  pool/timeout limits unchanged from C.
+
+Neither phase is accepted. Full package app/media Compose startup, heavy pool10/50
+all3200-success feed benchmark and post-D completion evidence remain required;
+the integration suite is not a substitute for those operational gates.

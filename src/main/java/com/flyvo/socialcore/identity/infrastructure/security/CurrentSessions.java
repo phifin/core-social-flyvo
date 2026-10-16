@@ -30,6 +30,7 @@ class CurrentSessions implements SessionQueries {
         || !account.active()
         || session == null
         || !session.userId().equals(actor.userId())
+        || session.authenticationEpoch() != account.authenticationEpoch()
         || !session.active(clock.instant())) throw Failure.unauthorized();
   }
 }

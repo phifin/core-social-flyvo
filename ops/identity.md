@@ -84,6 +84,17 @@ and email, permits missing email and uses no assumed Facebook OIDC/PKCE support.
 
 ## Browser and account recovery
 
+Phase8's account-owner lifecycle prerequisite adds an authentication epoch. A
+suspended account that is reinstated needs a **fresh login**: old Bearer/refresh
+families and recent-authentication proofs remain invalid even when their expiry
+has not elapsed. Do not reset epochs, copy a new epoch into an old session, or
+manually clear revocation to "repair" this denial. Current checks compare account
+and session epochs in PostgreSQL without waiting for a worker/cache. Existing
+ACTIVE accounts retain epoch0 sessions on V0029 upgrade; already SUSPENDED accounts
+start at epoch1 to invalidate their old epoch0 sessions. The guarded/versioned
+owner command denies self/peer ADMIN and preserves community ownership/content;
+the separate moderation HTTP operations remain pending, not an operator SQL bypass.
+
 Access JWTs live only in browser memory. Refresh cookie is host-only, Secure,
 HttpOnly, Strict, auth-path scoped. CSRF cookie is host-only/readable/Strict.
 OAuth's ten-minute Lax binding is not a session credential. All unsafe API calls

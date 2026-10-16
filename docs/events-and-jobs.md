@@ -166,9 +166,10 @@ enabled; jobs do not require outbox delivery rows. Cleanup expiry itself is not 
 new social activity event and authorization cannot rely on delayed consumers.
 
 Phase 1 appends `UserRegistered`, `AccountStatusChanged`,
-`AccountDeletionRequested` and `ProfileUpdated` to the outbox. There are no
-production projection consumers yet: delivery rows are created only for
-code-registered consumers. Integration tests register a real DB-effect consumer
+`AccountDeletionRequested` and `ProfileUpdated` to the outbox. At Phase1 there
+were no production projection consumers; Phases7/8 now register notification and
+search consumers. Delivery rows are created only for code-registered consumers.
+Integration tests register a real DB-effect consumer
 to exercise receipts, duplicate delivery and rollback. Mail is a direct job;
 its general JSON contains only payload ID/template, not email/token.
 
@@ -183,6 +184,13 @@ old link. See [worker recovery](../ops/identity.md). Completed jobs/events are
 pruned after 30 days only when deliveries are completed; unresolved DEAD state
 is retained. Security audit retention needs a controlled owner-role process,
 not an application trigger bypass.
+
+Phase8's account lifecycle prerequisite keeps AccountStatusChanged v1 unchanged:
+suspend emits SUSPENDED, guarded reinstatement emits ACTIVE, with current account
+aggregate version. Status, suspension epoch increment, attributable audit and
+outbox append are one transaction. Reinstatement emits a new lifecycle fact, not
+a content restoration or session reactivation. Current session authorization
+compares the account/session epoch synchronously, never waits for this event.
 
 Persist recipient inbox independently of realtime transport. Notification kinds include FRIEND_REQUEST, FRIENDSHIP_ACCEPTED, COMMUNITY_INVITATION, COMMENT_ON_POST, REPLY_TO_COMMENT, MENTION and REACTION_ON_CONTENT. Targets reference post/comment/request/community IDs, with template kind and typed data; render/localize on the client from authorized current summaries. Drop self-notification. Coalesce a single event that targets the same recipient via mention/comment paths using precedence MENTION > REPLY > COMMENT. Preferences suppress optional social events, never mandatory security emails.
 

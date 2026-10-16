@@ -26,6 +26,8 @@ has a locally implemented [semantic inbox and authenticated SSE](docs/notificati
 the [Phase 7 internal gate](docs/phases/phase-7.md) passed298 tests, pending main
 review. Phase8's [source-authorized search](docs/search-and-caching.md) is locally
 implemented; scoped moderation operations and full package verification remain.
+Its account lifecycle prerequisite prevents old sessions from reviving after
+suspend/reinstate; no new moderation HTTP surface is claimed by that prerequisite.
 Main has activated the [Phases 7–8 package](docs/work-packages/phase-7-8.md)
 for sequential development; activation does not accept either phase.
 

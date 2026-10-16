@@ -148,8 +148,29 @@ live events lock documents only. No owner business locks or network calls.
 
 ## D — scoped moderation operations and package gate
 
-V0029 extends existing reports with assignment, terminal timestamp, bounded
-evidence hold/redaction markers and append-only versioned resolution history;
+### D lifecycle refinement before implementation
+
+V0029 adds an account-owned monotonically increasing authentication epoch and
+an identity-owned captured epoch on sessions (existing ACTIVE accounts/sessions
+start at zero; already SUSPENDED accounts start at1 to invalidate old sessions).
+Suspension increments the account epoch under the exclusive lifecycle guard;
+reinstatement never resets it. Issuance captures it under the existing account
+guard, and access/current-session/refresh checks compare it synchronously. This
+prevents suspension followed by reinstatement from reviving old Bearer or refresh
+credentials without a reverse account-to-identity dependency or eventual consumer.
+ADMIN suspend/reinstate require a source version, deny self and peer ADMIN, and
+take the complete sorted actor/target account set in exclusive final mode before
+any case/community locks. No platform-role, ownership or content restoration.
+
+The retention storage design must also preserve the existing unconditional
+moderation-action and platform-audit mutation rejection. Do not add a runtime
+trigger bypass. Inspect the immutable private reason/snapshot columns against the
+365-day requirement before selecting the later moderation migration; V0029 does
+not change those guarantees.
+
+The subsequent moderation migration extends existing reports with assignment,
+terminal timestamp, bounded evidence hold/redaction markers and append-only
+versioned resolution history;
 index scope/status/assignee/retention. Current eligible assignee proof uses account
 and community APIs, not the narrow ADR-014 profile proof. Assignment is no grant.
 Separate global ADMIN and community staff routes for filtering, assignment/history,

@@ -29,6 +29,9 @@ public class UserAccount {
 
   @Version private long version;
 
+  @Column(name = "authentication_epoch", nullable = false)
+  private long authenticationEpoch;
+
   protected UserAccount() {}
 
   public UserAccount(UUID id, Instant now) {
@@ -55,6 +58,10 @@ public class UserAccount {
     return version;
   }
 
+  public long authenticationEpoch() {
+    return authenticationEpoch;
+  }
+
   public void requestDeletion(Instant now) {
     if (!"ACTIVE".equals(status)) throw new IllegalStateException("Account is not active");
     status = "DELETION_PENDING";
@@ -65,6 +72,14 @@ public class UserAccount {
   public void suspend(Instant now) {
     if (!"ACTIVE".equals(status)) throw new IllegalStateException("Account is not active");
     status = "SUSPENDED";
+    authenticationEpoch = Math.incrementExact(authenticationEpoch);
+    updatedAt = now;
+  }
+
+  public void reinstate(Instant now) {
+    if (!"SUSPENDED".equals(status)) throw new IllegalStateException("Account is not suspended");
+    status = "ACTIVE";
+    suspendedUntil = null;
     updatedAt = now;
   }
 }

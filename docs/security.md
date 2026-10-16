@@ -37,6 +37,20 @@ Use signed JWT access tokens, 5-minute lifetime, asymmetric RS256 initially, lib
 
 Every authenticated request validates JWT **and current session/account state in PostgreSQL**. The deliberate indexed lookup provides immediate revocation and suspension. A JWT is not authorization and is not treated as irrevocable until expiry. No Redis positive-status cache initially. DB failure fails protected requests closed with 503, not a misleading 401. Public requests with an invalid Authorization header return 401 rather than silently becoming anonymous.
 
+Phase8 lifecycle prerequisite: account suspension also increments an account-owned
+authentication epoch under its exclusive lifecycle guard. Sessions capture that
+epoch at issuance under the existing account guard; current-session, refresh and
+recent-authentication checks require equality. Reinstatement keeps the epoch, so
+old access/refresh/provider freshness cannot revive even if suspension and
+reinstatement occur between two SSE heartbeats. Fresh login is required. The
+versioned account-owner command checks current ADMIN, source version and valid
+ACTIVE↔SUSPENDED state, denies self/peer ADMIN, and locks the complete sorted
+actor/target account set exclusively before any later locks. It never changes
+roles, communities or content. Existing unversioned suspension is retained only
+as the prior internal API, with the same privilege denials; no new HTTP route is
+claimed by this prerequisite. V0029 preserves ACTIVE sessions at epoch0 and
+invalidates pre-migration SUSPENDED sessions by starting those accounts at epoch1.
+
 Refresh tokens contain 256 bits of cryptographic randomness; store only SHA-256 hashes (appropriate for random high-entropy secrets). One session is a token family, idle expiry 7 days, absolute expiry 30 days. Rotation locks the session row, verifies the supplied generation, consumes it and issues exactly one successor with an expiry bounded by the family's absolute expiry. Retain hashes of old generations. Reuse of a consumed token revokes the **entire family**, writes audit, commits, then returns 401. This follows the replay-detection approach in [OAuth Security BCP, RFC 9700](https://www.rfc-editor.org/rfc/rfc9700.html).
 
 There is no replay grace window initially. Two concurrent refreshes or a lost successful refresh response may force login again; clients must serialize refreshes across tabs (e.g. browser coordination). Security wins over retry convenience here. Do not put refresh requests under generic response-caching idempotency; that would retain refresh secrets. Logout revokes current family and clears cookies; logout-all revokes all families. Revocation of sessions and account state must commit even when returning an authentication failure.

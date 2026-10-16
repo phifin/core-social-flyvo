@@ -95,8 +95,20 @@ public class Accounts implements AccountCommands, AccountQueries {
 
   @Transactional
   public void suspend(ActorContext actor, UUID id, String reason) {
-    if (!actor.authenticated() || reason == null || !reason.matches("[A-Z_]{1,64}"))
-      throw Failure.invalid();
+    change(actor, id, null, true, reason);
+  }
+
+  @Transactional
+  public Change changeStatus(
+      ActorContext actor, UUID id, long expected, boolean suspend, String reason) {
+    if (expected < 0) throw Failure.invalid();
+    return change(actor, id, expected, suspend, reason);
+  }
+
+  private Change change(
+      ActorContext actor, UUID id, Long expected, boolean suspend, String reason) {
+    if (actor == null || !actor.authenticated()) throw Failure.unauthorized();
+    if (id == null || reason == null || !reason.matches("[A-Z_]{1,64}")) throw Failure.invalid();
     var ids =
         java.util.stream.Stream.of(actor.userId(), id)
             .distinct()
@@ -107,10 +119,21 @@ public class Accounts implements AccountCommands, AccountQueries {
     if (!admin.active() || !"ADMIN".equals(admin.platformRole()))
       throw new Failure(403, "ACCESS_DENIED");
     var value = entities.find(id);
-    if (!"ACTIVE".equals(value.status())) throw Failure.conflict();
-    value.suspend(clock.instant());
+    if (actor.userId().equals(id) || "ADMIN".equals(value.platformRole()))
+      throw new Failure(403, "ACCESS_DENIED");
+    if (expected != null && value.version() != expected) throw new Failure(412, "STALE_VERSION");
+    var before = value.status();
+    if (!(suspend ? "ACTIVE" : "SUSPENDED").equals(before)) throw Failure.conflict();
+    if (suspend) value.suspend(clock.instant());
+    else value.reinstate(clock.instant());
     entities.flush();
-    work.audit(actor.userId(), "ACCOUNT_SUSPENDED", "account", id, "SUCCESS", reason);
+    work.audit(
+        actor.userId(),
+        suspend ? "ACCOUNT_SUSPENDED" : "ACCOUNT_REINSTATED",
+        "account",
+        id,
+        "SUCCESS",
+        reason);
     work.event(
         "AccountStatusChanged",
         "account",
@@ -118,10 +141,16 @@ public class Accounts implements AccountCommands, AccountQueries {
         value.version(),
         0,
         json.writeValueAsString(
-            new com.flyvo.socialcore.account.api.event.AccountStatusChanged("SUSPENDED")));
+            new com.flyvo.socialcore.account.api.event.AccountStatusChanged(value.status())));
+    return new Change(id, before, value.status(), value.version());
   }
 
   private Account facts(UserAccount value) {
-    return new Account(value.id(), value.status(), value.platformRole(), value.version());
+    return new Account(
+        value.id(),
+        value.status(),
+        value.platformRole(),
+        value.version(),
+        value.authenticationEpoch());
   }
 }

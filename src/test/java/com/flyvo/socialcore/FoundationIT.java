@@ -28,7 +28,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @Testcontainers
 @org.springframework.test.context.ActiveProfiles("test")
 class FoundationIT {
-  private static final int LATEST_MIGRATIONS = 28;
+  private static final int LATEST_MIGRATIONS = 29;
 
   @Container
   static final PostgreSQLContainer POSTGRES =
@@ -67,6 +67,89 @@ class FoundationIT {
         .containsEntry("hibernate.hbm2ddl.auto", "validate");
     assertThat(environment.getProperty("spring.jpa.open-in-view", Boolean.class)).isFalse();
     assertThat(jdbc.queryForObject("show timezone", String.class)).isEqualTo("UTC");
+  }
+
+  @Test
+  void authenticationEpochUpgradePreservesTwentyEightChecksumsAndSessions() {
+    var name = "epoch_upgrade_" + java.util.UUID.randomUUID().toString().replace("-", "");
+    new JdbcTemplate(dataSource).execute("CREATE DATABASE " + name);
+    String url = POSTGRES.getJdbcUrl().replace("/test?", "/" + name + "?");
+    var prior =
+        Flyway.configure()
+            .dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword())
+            .target("0028")
+            .load();
+    assertThat(prior.migrate().migrationsExecuted).isEqualTo(28);
+    var checksums =
+        java.util.Arrays.stream(prior.info().applied())
+            .map(org.flywaydb.core.api.MigrationInfo::getChecksum)
+            .toList();
+    var sql =
+        new JdbcTemplate(
+            new org.springframework.jdbc.datasource.DriverManagerDataSource(
+                url, POSTGRES.getUsername(), POSTGRES.getPassword()));
+    var user = java.util.UUID.randomUUID();
+    var session = java.util.UUID.randomUUID();
+    var suspended = java.util.UUID.randomUUID();
+    var oldSession = java.util.UUID.randomUUID();
+    sql.update(
+        "INSERT INTO account.user_account(id,status,created_at,updated_at) VALUES (?,'ACTIVE',now(),now())",
+        user);
+    sql.update(
+        "INSERT INTO account.user_account(id,status,created_at,updated_at) VALUES (?,'SUSPENDED',now(),now())",
+        suspended);
+    sql.update(
+        "INSERT INTO identity.auth_session(id,user_id,created_at,last_seen_at,authenticated_at,idle_expires_at,absolute_expires_at,updated_at) VALUES (?,?,now(),now(),now(),now()+interval '7 days',now()+interval '30 days',now())",
+        session,
+        user);
+    sql.update(
+        "INSERT INTO identity.auth_session(id,user_id,created_at,last_seen_at,authenticated_at,idle_expires_at,absolute_expires_at,updated_at) VALUES (?,?,now(),now(),now(),now()+interval '7 days',now()+interval '30 days',now())",
+        oldSession,
+        suspended);
+    var upgrade =
+        Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(LATEST_MIGRATIONS - 28);
+    upgrade.validate();
+    assertThat(
+            java.util.Arrays.stream(upgrade.info().applied())
+                .limit(28)
+                .map(org.flywaydb.core.api.MigrationInfo::getChecksum)
+                .toList())
+        .isEqualTo(checksums);
+    assertThat(
+            sql.queryForObject(
+                "SELECT authentication_epoch FROM account.user_account WHERE id=?",
+                Long.class,
+                user))
+        .isZero();
+    assertThat(
+            sql.queryForObject(
+                "SELECT authentication_epoch FROM account.user_account WHERE id=?",
+                Long.class,
+                suspended))
+        .isEqualTo(1);
+    assertThat(
+            sql.queryForObject(
+                "SELECT authentication_epoch FROM identity.auth_session WHERE id=?",
+                Long.class,
+                oldSession))
+        .isZero();
+    assertThat(
+            sql.queryForObject(
+                "SELECT authentication_epoch FROM identity.auth_session WHERE id=? AND revoked_at IS NULL",
+                Long.class,
+                session))
+        .isZero();
+    assertThatThrownBy(
+            () ->
+                sql.update(
+                    "UPDATE account.user_account SET authentication_epoch=-1 WHERE id=?", user))
+        .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    assertThatThrownBy(
+            () ->
+                sql.update(
+                    "UPDATE identity.auth_session SET authentication_epoch=-1 WHERE id=?", session))
+        .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
   }
 
   @Test

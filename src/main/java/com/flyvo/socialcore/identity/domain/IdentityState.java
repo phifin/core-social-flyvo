@@ -22,6 +22,7 @@ public final class IdentityState {
       Instant absoluteExpiresAt,
       Instant revokedAt,
       boolean reauthenticationRequired,
+      long authenticationEpoch,
       long version) {
     public boolean active(Instant now) {
       return revokedAt == null && now.isBefore(idleExpiresAt) && now.isBefore(absoluteExpiresAt);

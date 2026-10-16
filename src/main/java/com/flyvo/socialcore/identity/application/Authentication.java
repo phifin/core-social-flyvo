@@ -217,7 +217,8 @@ public class Authentication {
     var now = clock.instant();
     var session = UUID.randomUUID();
     var secret = secrets.randomToken();
-    store.createSession(session, user, now, reauthenticationRequired);
+    store.createSession(
+        session, user, now, reauthenticationRequired, accounts.find(user).authenticationEpoch());
     store.refresh(
         UUID.randomUUID(), session, 0, secrets.hash(secret), now.plusSeconds(7 * 86400L), now);
     return new Grant(tokens.issue(new ActorContext(user, session)), secret, session);
@@ -248,8 +249,10 @@ public class Authentication {
                     "CONSUMED_TOKEN");
                 return null;
               }
-              if (!account.active() || !family.active(now) || !now.isBefore(token.expiresAt()))
-                return null;
+              if (!account.active()
+                  || account.authenticationEpoch() != family.authenticationEpoch()
+                  || !family.active(now)
+                  || !now.isBefore(token.expiresAt())) return null;
               var successor = UUID.randomUUID();
               var next = secrets.randomToken();
               var expiry = now.plusSeconds(7 * 86400L);
@@ -275,6 +278,7 @@ public class Authentication {
     var session = store.session(actor.sessionId(), true);
     if (session == null
         || !session.userId().equals(actor.userId())
+        || session.authenticationEpoch() != accounts.find(actor.userId()).authenticationEpoch()
         || !session.active(clock.instant())) throw Failure.unauthorized();
     if (recent && !session.recent(clock.instant()))
       throw new Failure(403, "REAUTHENTICATION_REQUIRED");

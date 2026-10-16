@@ -801,6 +801,157 @@ class AuthenticationIT {
   }
 
   @Test
+  void reinstatementNeverRevivesOldAccessRefreshOrRecentProof() throws Exception {
+    var admin = user(address());
+    var email = address();
+    var target = user(email);
+    var a = actor(admin);
+    var t = actor(target);
+    jdbc.update("UPDATE account.user_account SET platform_role='ADMIN' WHERE id=?", a.userId());
+    var old = accountQueries.find(t.userId());
+    var suspended = accounts.changeStatus(a, t.userId(), old.version(), true, "SECURITY_REVIEW");
+    assertThat(suspended.before()).isEqualTo("ACTIVE");
+    assertThat(suspended.after()).isEqualTo("SUSPENDED");
+    assertThatThrownBy(() -> auth.login(email, PASSWORD)).isInstanceOf(Failure.class);
+    var restored =
+        accounts.changeStatus(a, t.userId(), suspended.version(), false, "REVIEW_COMPLETE");
+    assertThat(restored.after()).isEqualTo("ACTIVE");
+    assertThat(accountQueries.find(t.userId()).authenticationEpoch()).isEqualTo(1);
+    assertThatThrownBy(() -> auth.requireCurrent(t)).isInstanceOf(Failure.class);
+    assertThatThrownBy(() -> auth.refresh(target.refreshSecret())).isInstanceOf(Failure.class);
+    assertThatThrownBy(() -> auth.reauthenticate(t, PASSWORD)).isInstanceOf(Failure.class);
+    mvc.perform(get("/api/v1/me/account").header("Authorization", "Bearer " + target.accessToken()))
+        .andExpect(status().isUnauthorized());
+    var fresh = auth.login(email, PASSWORD);
+    auth.requireCurrent(actor(fresh));
+    assertThat(identities.session(fresh.sessionId(), false).authenticationEpoch()).isEqualTo(1);
+    assertThat(auth.refresh(fresh.refreshSecret())).isNotNull();
+    assertThat(
+            count(
+                "SELECT count(*) FROM platform.audit_entry WHERE target_id=? AND action IN ('ACCOUNT_SUSPENDED','ACCOUNT_REINSTATED')",
+                t.userId()))
+        .isEqualTo(2);
+    assertThat(
+            count(
+                "SELECT count(*) FROM platform.outbox_event WHERE aggregate_id=? AND event_type='AccountStatusChanged'",
+                t.userId()))
+        .isEqualTo(2);
+  }
+
+  @Test
+  void versionedLifecycleDeniesSelfPeerAdminRevokedStaffAndInvalidTransitions() {
+    var a = actor(user(address()));
+    var peer = actor(user(address()));
+    var target = actor(user(address()));
+    jdbc.update(
+        "UPDATE account.user_account SET platform_role='ADMIN' WHERE id IN (?,?)",
+        a.userId(),
+        peer.userId());
+    assertThatThrownBy(() -> accounts.changeStatus(a, a.userId(), 0, true, "SECURITY_REVIEW"))
+        .isInstanceOfSatisfying(Failure.class, f -> assertThat(f.status()).isEqualTo(403));
+    assertThatThrownBy(() -> accounts.changeStatus(a, peer.userId(), 0, true, "SECURITY_REVIEW"))
+        .isInstanceOfSatisfying(Failure.class, f -> assertThat(f.status()).isEqualTo(403));
+    assertThatThrownBy(() -> accounts.suspend(a, peer.userId(), "SECURITY_REVIEW"))
+        .isInstanceOfSatisfying(Failure.class, f -> assertThat(f.status()).isEqualTo(403));
+    assertThatThrownBy(() -> accounts.changeStatus(a, target.userId(), 1, true, "SECURITY_REVIEW"))
+        .isInstanceOfSatisfying(Failure.class, f -> assertThat(f.status()).isEqualTo(412));
+    assertThatThrownBy(() -> accounts.changeStatus(a, target.userId(), 0, false, "REVIEW_COMPLETE"))
+        .isInstanceOfSatisfying(Failure.class, f -> assertThat(f.status()).isEqualTo(409));
+    assertThatThrownBy(
+            () -> accounts.changeStatus(a, target.userId(), 0, true, "private free text"))
+        .isInstanceOf(Failure.class);
+    jdbc.update("UPDATE account.user_account SET platform_role='USER' WHERE id=?", a.userId());
+    assertThatThrownBy(() -> accounts.changeStatus(a, target.userId(), 0, true, "SECURITY_REVIEW"))
+        .isInstanceOfSatisfying(Failure.class, f -> assertThat(f.status()).isEqualTo(403));
+    assertThat(accountQueries.find(target.userId()).authenticationEpoch()).isZero();
+  }
+
+  @Test
+  void lifecycleAuditAndOutboxFailuresRollBackStatusAndEpoch() {
+    var a = actor(user(address()));
+    var target = actor(user(address()));
+    jdbc.update("UPDATE account.user_account SET platform_role='ADMIN' WHERE id=?", a.userId());
+    for (String table : List.of("audit_entry", "outbox_event")) {
+      String constraint = "lifecycle_failure_" + UUID.randomUUID().toString().replace("-", "");
+      String column = table.equals("audit_entry") ? "target_id" : "aggregate_id";
+      jdbc.execute(
+          "ALTER TABLE platform."
+              + table
+              + " ADD CONSTRAINT "
+              + constraint
+              + " CHECK ("
+              + column
+              + " IS DISTINCT FROM '"
+              + target.userId()
+              + "'::uuid) NOT VALID");
+      try {
+        assertThatThrownBy(
+                () -> accounts.changeStatus(a, target.userId(), 0, true, "SECURITY_REVIEW"))
+            .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+        var account = accountQueries.find(target.userId());
+        assertThat(account.active()).isTrue();
+        assertThat(account.version()).isZero();
+        assertThat(account.authenticationEpoch()).isZero();
+        auth.requireCurrent(target);
+        assertThat(
+                count(
+                    "SELECT count(*) FROM platform.audit_entry WHERE target_id=? AND action='ACCOUNT_SUSPENDED'",
+                    target.userId()))
+            .isZero();
+        assertThat(
+                count(
+                    "SELECT count(*) FROM platform.outbox_event WHERE aggregate_id=? AND event_type='AccountStatusChanged'",
+                    target.userId()))
+            .isZero();
+      } finally {
+        jdbc.execute("ALTER TABLE platform." + table + " DROP CONSTRAINT " + constraint);
+      }
+    }
+  }
+
+  @Test
+  void suspensionWinsAgainstPasswordVerifiedBeforeLifecycleGuard() throws Exception {
+    var a = actor(user(address()));
+    String email = address();
+    var target = actor(user(email));
+    jdbc.update("UPDATE account.user_account SET platform_role='ADMIN' WHERE id=?", a.userId());
+    long sessions =
+        count("SELECT count(*) FROM identity.auth_session WHERE user_id=?", target.userId());
+    blockingPasswords.entered = new CountDownLatch(1);
+    blockingPasswords.resume = new CountDownLatch(1);
+    try (var executor =
+        Executors.newSingleThreadExecutor(r -> new Thread(r, "obsolete-password-suspension"))) {
+      var login =
+          executor.submit(
+              () -> {
+                try {
+                  return (Object) auth.login(email, PASSWORD);
+                } catch (Failure failure) {
+                  return failure;
+                }
+              });
+      try {
+        assertThat(blockingPasswords.entered.await(10, TimeUnit.SECONDS)).isTrue();
+        accounts.changeStatus(a, target.userId(), 0, true, "SECURITY_REVIEW");
+        blockingPasswords.resume.countDown();
+        assertThat(login.get(10, TimeUnit.SECONDS)).isInstanceOf(Failure.class);
+        assertThat(
+                count(
+                    "SELECT count(*) FROM identity.auth_session WHERE user_id=?", target.userId()))
+            .isEqualTo(sessions);
+      } finally {
+        // Release the deliberately blocked login even when the command/assertion fails,
+        // before ExecutorService.close waits for that thread.
+        blockingPasswords.resume.countDown();
+      }
+    } finally {
+      blockingPasswords.resume.countDown();
+      blockingPasswords.entered = null;
+      blockingPasswords.resume = null;
+    }
+  }
+
+  @Test
   void suspensionAndDeletionDenyUnexpiredJwtWithoutCache() throws Exception {
     var admin = user(address());
     var target = user(address());
