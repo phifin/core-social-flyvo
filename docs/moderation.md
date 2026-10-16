@@ -71,9 +71,12 @@ new indefinite source-media hold or production readiness is claimed.
 
 The account owner now supplies guarded/versioned suspend/reinstate and durable
 session-epoch invalidation; no new moderation HTTP operation is claimed yet.
-Remaining assignment/filter/history/hold/retention work is BLOCKED on main's
-[proposed ADR-016](adr/016-moderation-private-payload-retention.md) decision (P78-D1).
+Remaining assignment/filter/history/hold/retention work is ready to resume after
+main accepted [ADR-016](adr/016-moderation-private-payload-retention.md) on 2026-10-16
+(P78-D1 design resolved).
 Private action fields and report evidence still have their accepted immutable
 storage/trigger protections. The proposed payload split/engineering hold policy
-is not implemented or self-approved. See [Phase8 evidence](phases/phase-8.md) and
+is accepted for implementation, not yet implemented. The decision retains
+immutable metadata/audit, lossless migration, one-way private payload transitions,
+explicit scoped holds and bounded atomic cleanup. See [Phase8 evidence](phases/phase-8.md) and
 the [mailbox](agent-handoff.md) for actual hashes/checks and the exact next action.

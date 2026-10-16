@@ -209,6 +209,15 @@ have null scope, MEMBER/POST/COMMENT actions remain community scoped. No assignm
 account suspension or foreign SQL/view is added. V0001–V0022 remain unchanged.
 Guard/retry/evidence contracts: [moderation](moderation.md).
 
+Planned Phase 8 refinement, not implemented at V0029: main accepted
+[ADR-016](adr/016-moderation-private-payload-retention.md) on 2026-10-16. A new
+migration must losslessly separate private action detail/report evidence from
+immutable metadata. Payloads permit only guarded one-way legacy encryption or
+eligible redaction; metadata/audit remain immutable. Explicit engineering holds,
+terminal-age eligibility and bounded cleanup share a serialized retention root.
+The ADR defines the exact exception and verification; no runtime trigger bypass
+or edit to applied V0010/V0023 is allowed.
+
 ## Media
 
 | Table | Important columns | Constraints / indexes |

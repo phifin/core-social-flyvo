@@ -141,7 +141,11 @@ Suspension must immediately fail current auth/search/notification/SSE checks.
 Reinstatement cannot restore author-deleted content, revive revoked sessions or
 silently transfer/archive an owned community. Preserve owner handling boundaries.
 
-Use documented 365-day engineering retention defaults, 90-day notification windows
+Use [ADR-016](../adr/016-moderation-private-payload-retention.md), accepted by main
+on 2026-10-16 to resolve P78-D1: owned redactable private payloads, immutable
+metadata/audit and explicit scoped expiring holds. Implement its full conditions
+and tests; this decision does not accept implementation or waive any package gate.
+Retain documented 365-day engineering defaults, 90-day notification windows
 and explicit replay horizons; no legal-compliance claim. Specify start timestamp,
 terminal/unresolved eligibility, evidence holds, key lifetime and redacted audit
 tombstones before cleanup. Do not silently delete unresolved/held evidence or

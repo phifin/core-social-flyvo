@@ -1,8 +1,8 @@
 # ADR-016 — Retained moderation metadata and redactable private payloads
 
-Status: Proposed by development, 2026-10-16. **Not accepted or implemented.**
-Main decision required for package blocker P78-D1 before the D retention migration.
-This proposal does not accept either phase or authorize Phase9/legal erasure.
+Status: **Accepted for implementation by main, 2026-10-16**, resolving the
+architecture decision P78-D1. Proposed by development on the same date.
+Not implemented or phase-accepted; no Phase9/legal erasure authorization.
 
 ## Context and evidenced conflict
 
@@ -32,7 +32,7 @@ accepted append-only action may mutate, would decide a security/persistence
 contract in development. [Implementation handoff](../implementation-handoff.md)
 requires an accepted/superseding ADR for that change. No such change is made here.
 
-## Proposed decision — recommended for main approval
+## Accepted decision — private-payload split with bounded engineering holds
 
 Keep immutable action/case identity and attributable metadata separately from
 retained private payloads, inside the existing moderation module/case system.
@@ -72,8 +72,8 @@ No new module/dependency, SQL consumer, broker or alternate job framework.
    platform ADMIN), versioned audited create/release, bounded reason code, explicit
    expiresAt in (now,now+365 days]. Renewal is another current explicit audited
    decision, never automatic. A hold cannot restore already redacted payload.
-   This maximum/scope/renewal rule is a requested main decision, not an inferred
-   legal policy. If a different hold policy is required, main must specify it.
+   Main accepts this maximum/scope/renewal rule as an engineering default, not
+   a legal policy. Any later change requires an explicit decision.
 6. Retention takes case/action root then payload locks, rechecks eligibility/hold
    under those locks, and commits redaction+tombstone+minimal audit+next bounded
    job/fenced ack atomically. Assignment/resolution/hold mutations use the same
@@ -86,14 +86,54 @@ No new module/dependency, SQL consumer, broker or alternate job framework.
    separate operator/public-launch gates; do not mutate platform audit to pretend
    those gates are delivered.
 
-## Alternatives for main
+## Main implementation conditions
 
-- Approve the proposed split and explicit engineering hold rules, then resume D
-  in this development chat. This is the recommended narrow resolution.
-- Require a separately privileged owner-role retention process instead. Main must
+- Supersedes only the physical co-location/absolute private-payload immutability
+  of V0010/V0023 for the transitions above. It does not weaken immutable action
+  metadata, report identity or platform audit. Keep ordinary payload replacement,
+  parent reassignment, DELETE/reinsert and post-redaction restoration denied.
+  Preserve a one-to-one payload/tombstone for each parent; no absent-row loophole.
+- The SQL migration must prove lossless copies before dropping old columns and
+  abort atomically on mismatch. Document a controlled migration/write-stop window;
+  do not claim old and new application binaries can safely write both schemas.
+  New writes must never create legacy plaintext. Backfill must converge to zero
+  legacy rows; expose bounded progress/failure metrics and a resumable runbook.
+- Verified encryption means the application decrypts the new purpose-bound
+  ciphertext and compares the complete legacy value before atomically removing
+  plaintext. On crypto/key/verification failure retain the old data and retry
+  under the existing bounded worker policy. DB guards enforce identity and the
+  one-way state/shape transitions, not cryptographic equality with external keys.
+  Do not claim the database independently proves ciphertext semantics or protects
+  against a database owner/superuser. No external key-service calls under locks.
+- Eligibility uses authoritative database time. A hold is active while
+  expiresAt > now; at expiry it ceases to block cleanup. Hold creation, renewal,
+  release and cleanup serialize on the same case/standalone-action root before
+  payload locks. For case-linked actions, the case is the retention root; do not
+  introduce a competing independent action hold. Recheck current staff authority
+  under the existing account/community guard order before the root lock.
+  Reject hold creation/renewal once applicable payload redaction has begun; never
+  imply that a hold restores removed bytes. Test both winning race orders.
+- Large cases may require several <=100-row passes. Mark the case's retention
+  state under its root lock when redaction starts, then redact bounded batches
+  with resumable progress. Do not hold an unbounded action list/transaction or
+  mark completion while any eligible private payload remains. Later hold requests
+  must clearly fail rather than claim preservation of an already partly redacted
+  case. No automatic renewal and no early release caused by assignment changes.
+- Update existing raw-SQL regressions to attack the new payload storage as well
+  as immutable metadata. A test failing merely because an old column no longer
+  exists is not evidence of retained mutation protection. Include eligible versus
+  premature redaction, unresolved/held state, already-encrypted ciphertext
+  substitution, FK/root reassignment, missing payload, repeat cleanup and
+  rollback/fencing failures.
+
+## Alternatives considered
+
+- **Selected:** the split and explicit engineering hold rules; resume remaining D
+  in the existing development chat under the conditions above.
+- Not selected: a separately privileged owner-role retention process. Main would
   specify the role/entrypoint/credentials and ordinary-worker boundary, plus how
   private immutable action fields become eligible without an application bypass.
-  Do not implement the split or invent that authority until the choice is made.
+  No such privileged role/process is authorized by the selected decision.
 
 Merely postponing retention cannot satisfy D's acceptance gate. Turning off
 triggers, editing applied migrations, silently deleting unresolved/held state,
@@ -115,5 +155,6 @@ tests and complete the full package/benchmark/Compose/scanner gates.
 V0029 only implements account/session epochs and guarded versioned lifecycle owner
 commands. It changes no moderation/audit trigger, payload, hold or retention rule.
 No assignment/history/retention or new platform moderation HTTP endpoint is claimed.
-The actual verified code hashes and checks belong in the fixed mailbox; this ADR
-remains Proposed until main records its decision.
+The actual verified code hashes and checks belong in the fixed mailbox. Acceptance
+of this design unblocks development; implementation and security evidence still
+require main review with the complete Phases 7–8 package.

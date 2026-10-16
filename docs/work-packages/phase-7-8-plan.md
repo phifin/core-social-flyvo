@@ -150,9 +150,11 @@ live events lock documents only. No owner business locks or network calls.
 
 Execution checkpoint2026-10-16: account lifecycle prerequisite is verified/committed
 at `cd51ecae3d92a402fa8c70b1102501cafb857ffa` (full323 PASS). Remaining D is
-BLOCKED for main's [ADR-016 decision](../adr/016-moderation-private-payload-retention.md),
-P78-D1; its storage/engineering-hold proposal is not accepted or implemented.
-Resume this backlog only after main records the decision in the mailbox.
+READY_TO_RESUME after main's [ADR-016 acceptance](../adr/016-moderation-private-payload-retention.md),
+2026-10-16. P78-D1 design is resolved; storage/engineering holds are not yet
+implemented. Follow the accepted split, migration, encryption, common-root
+locking and bounded multi-pass redaction conditions before the next migration.
+Update this concrete implementation plan, then finish remaining D/package gates.
 
 ### D lifecycle refinement before implementation
 

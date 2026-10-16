@@ -4,9 +4,9 @@
 
 - Task: phase-7-8-notifications-search-moderation-ops
 - Round: 1
-- State: BLOCKED
-- Last writer: development, 2026-10-16 — verified prerequisite plus P78-D1 decision request
-- Next owner: main — decide proposed ADR-016, then return the remaining D/package gate to development
+- State: READY_FOR_IMPLEMENTATION — resume remaining D and final package gates
+- Last writer: main, 2026-10-16 — accepted ADR-016 with implementation conditions
+- Next owner: development — same existing chat; set IN_PROGRESS and continue
 - New chat: `Develop Phases 7–8 — Notifications, Search & Moderation Ops`
 - Accepted baseline code: `32c1b1eb8609eeb8c61278e29efbedba14008db9`.
 - Main acceptance commit: `6dc06d6`.
@@ -129,7 +129,41 @@ Latest implemented-code verification:
   (`.local/evidence/p78/d-blocker-docs-staged-scan.log`). No executable change
   follows the successful323-test run; no redundant suite is claimed for these docs.
 
-## Development blocker P78-D1 — retention contract needs main decision
+## Main decision P78-D1 — RESOLVED (design only), 2026-10-16
+
+Inspected actual HEAD `e3a20a1`, code `cd51ecae3d92a402fa8c70b1102501cafb857ffa`,
+V0010/V0023 triggers, raw-SQL regression expectations and the D retention contract.
+The conflict is real: current immutable private columns cannot support the assigned
+redaction without a deliberate storage boundary. Main **accepts ADR-016's owned
+payload split and explicit engineering holds**, with its added implementation
+conditions. No runtime trigger exemption, privileged worker-role invention or
+platform audit mutation is approved. No executable change was made by main.
+
+Cases: 365 days after terminal resolved_at, excluding unresolved/currently held.
+Standalone actions: created_at +365 days, scoped hold. Holds require current scoped
+staff/global ADMIN, optimistic version, mandatory audit and explicit expiry at most
+365 days per decision; renewal is explicit. This is not a legal-hold product.
+Action metadata/report identity remain immutable. Lossless migration, one-way
+payload transitions, verified encryption of legacy data, no resurrection, common
+root locking and bounded multi-pass redaction are mandatory. Read ADR-016 in full.
+
+Resume **all remaining D** in `Develop Phases 7–8 — Notifications, Search & Moderation Ops`:
+assignment/filtering, attributable history/queue reads, payload migration/encryption,
+holds/retention, separate account moderation HTTP operations, dashboards/runbooks.
+Update the concrete plan, allocate after actual max V0029 (currently V0030), then
+implement coherent verified slices without another small-slice handoff. Preserve
+prior checksums and A/B/C/current lifecycle regressions. Run complete final package
+checks, including real app/media Compose startup, full verify, pool10/50 benchmark
+with all 3,200 requests successful, OpenAPI/architecture, migration and pinned
+history/positive-control scans. Retain failures and latency limitations honestly.
+
+This is blocker adjudication, **not a full code review or Phase 7/8 acceptance**.
+The developer's 323-test report remains developer evidence; main did not rerun the
+suite for this docs-only decision. Main checks documentation links/diff/secret scan.
+No push while the package remains incomplete/unreviewed. Commit verified code,
+then a separate real-hash mailbox READY_FOR_REVIEW. No agents or Phase9.
+
+### Historical development request P78-D1 — resolved by the decision above
 
 This is not a handoff after a small task or a phase completion claim. D cannot
 finish under the current immutable-private-payload contract without selecting a
