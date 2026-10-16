@@ -7,6 +7,10 @@ at152a7c9 resolved P78-D1's design only. Phase7 internal gate passed before C, B
 `af0742750cd1f1b00a02a1afcd6aa3d80d13db74`; see [Phase7 evidence](phase-7.md).
 Real C/D hashes are recorded in the fixed mailbox after their code commits.
 
+Main round1, 2026-10-17: combined package **CHANGES_REQUESTED** for notification
+finding P78-R1; see [mailbox](../agent-handoff.md). D's design decision stays
+resolved, but this does not separately accept Phase8 or authorize Phase9.
+
 ## C — source-authorized PostgreSQL search
 
 V0028 introduces source/account version vectors, immutable source identity,

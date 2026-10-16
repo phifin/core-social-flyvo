@@ -4,9 +4,9 @@
 
 - Task: phase-7-8-notifications-search-moderation-ops
 - Round: 1
-- State: READY_FOR_REVIEW — full A → B → C → D and final package gates complete locally
-- Last writer: development, 2026-10-16 — D code bbb85004454ca77be2af2df43bc4133490ab8bea
-- Next owner: main orchestrator/reviewer; independent review and phase acceptance only
+- State: CHANGES_REQUESTED — main round 1, P78-R1 open
+- Last writer: main, 2026-10-17 — review of code bbb8500 and handoff 46dec7d
+- Next owner: development — same existing chat; round 2 stabilization
 - New chat: `Develop Phases 7–8 — Notifications, Search & Moderation Ops`
 - Accepted baseline code: `32c1b1eb8609eeb8c61278e29efbedba14008db9`.
 - Main acceptance commit: `6dc06d6`.
@@ -300,4 +300,93 @@ BLOCKED, **not READY_FOR_REVIEW**; neither phase accepted. No push, agents or Ph
 
 ## Review findings
 
-No findings yet for this package. Only main may resolve findings or accept phases.
+### Main round 1 — CHANGES_REQUESTED
+
+Reviewed actual code `bbb85004454ca77be2af2df43bc4133490ab8bea`, handoff `46dec7d`,
+against accepted Phases 5–6 baseline. Working tree/index initially clean. Inspected
+event delivery envelope/receipt transaction, notification projection/read paths,
+SSE auth/lifecycle, search source authorization/versioned rebuild, account epoch
+changes and moderation migration/holds/crypto/cleanup boundaries with their tests.
+P78-D1 remains design-resolved under ADR-016; no new architecture decision is
+needed for the finding below. Neither phase is accepted and Phase9 stays inactive.
+
+Independent main checks on the delivered executable baseline:
+
+- Java21 `./mvnw -B -ntp verify`: PASS, 340 tests (57 fast + 283 integration),
+  zero failures/errors/skips, exit0, 7m50s, finished 2026-10-17 01:06:30 +07.
+  Log: `/tmp/social-p78-main-verify.log`; no forced-exit warning found. This
+  passing suite does not cover the initial-activity ordering gap below.
+- Final-source manifest: all 302 files match. Existing migrations unchanged;
+  delivered schema additions are V0027–V0031.
+- Compose app/media profile config validation: PASS. Main did not repeat actual
+  Compose startup or the heavy pool10/50 benchmark this review round; those
+  remain developer evidence, not independent main measurements.
+- Pinned redacted Gitleaks history through `46dec7d`: 57 commits, no leaks;
+  external synthetic positive control PASS. Historical allowlist unchanged.
+- Review-only edits are mailbox and Phase7/8 records; no executable changes,
+  acceptance, push, deployment or new phase activation.
+
+#### P78-R1 — P2 OPEN: source updates can permanently consume initial notification activity
+
+Anchors: `NotificationProjector.java:139–142` (reaction source-version equality
+and newActivity), `:125–126` (comment/post update activity), `JdbcInbox.java:47–53`
+(version rejection and activity), `:64` (requires old group or new activity),
+`:117–127` (persists latest source version even without a group).
+
+This is a **code-inspection finding**, not a claimed independent runtime
+reproduction. Concrete normal-delay path, with active/eligible distinct actor and
+recipient, enabled preferences and no initial notification/source_state:
+
+1. Actor creates LIKE v0 then replaces it with LOVE v1 before the worker runs.
+2. Deliver v0 first. Current source is v1, so projector sets active=false at
+   line140; JdbcInbox stores source_state v0 with notification_id=null.
+3. Deliver v1. It is active but previousType=LIKE, so newActivity=false. With no
+   old group, line64 skips group/contribution creation, yet latest_source_version
+   becomes1 and active=true. Both real delivery receipts can commit successfully.
+4. No later event is required. REST inbox/unread stay empty; replay of v0 or v1 is
+   rejected by latest_source_version. This loses initial social activity even
+   with in-order delivery, merely because the worker lagged behind a type change.
+
+Delivering v1 before v0 loses it as well. A related path exists for comments:
+deliver CommentUpdated v1 before CommentCreated v0 for an otherwise eligible
+visible comment. The update has newActivity=false and no old group, advances
+source_state, then the create is rejected. Existing tests materialize the initial
+reaction before type changes, or cover delete/reactivation orders; they do not
+cover these missing-initial-activity paths. Source-version dedup must prevent
+resurrection/inflation, not silently acknowledge away the original activity.
+
+Required outcome: preserve exactly one initial eligible activity/contribution
+through delayed/reordered updates while retaining current source authority,
+stable source versions, no new unread for a type-only update to an already
+materialized group, and no resurrection after deletion or retention. Do not fix
+this by treating every update as a new notification, disabling version checks,
+requiring globally ordered delivery, or creating activity from a denied source.
+Distinguish ordering state from whether initial activity has been materialized;
+record the concrete algorithm/schema rationale before implementation. Preserve
+preference/self/block/mute and source-expiry semantics rather than guessing from
+notification_id=null alone (it can also mean suppressed or pruned state).
+
+Required real-PG worker regressions: LIKE→LOVE before any dispatch with v0→v1
+and v1→v0; CommentUpdated-before-CommentCreated; retry/duplicate delivery and
+source-state/receipt rollback; delete-before-create still invisible; existing
+read group + type update still read; cross-hour reactivation still one new
+activity. Test privacy/preference suppression and retention against any new
+reconciliation logic. Use real producer events and receipt/effect/fenced worker,
+not only direct repository Change construction or mocked successful delivery.
+
+### Next development assignment
+
+Reuse `Develop Phases 7–8 — Notifications, Search & Moderation Ops`. Set
+IN_PROGRESS, round2, retain this finding and actual code baseline. Deliver one
+coherent stabilization pass: regression-first P78-R1 correction, the related
+lifecycle/order matrix, and complete package regression/evidence refresh. Preserve
+V0001–V0031; allocate V0032+ only if needed after checking actual maximum. Do not
+implement fixes in main or start a new phase. No push/agents/self-acceptance.
+
+Run targeted notification/worker/SSE and full verify with Java21, formatting,
+OpenAPI/architecture, migration checks, Compose config, pinned history scan and
+positive control. Re-run actual Compose startup for changed runtime wiring/schema;
+re-run the committed pool10/50 benchmark if changed shared owners/worker/resource
+paths affect feeds. Retain the package's earlier successful heavy evidence but
+never present old runs as new final-source measurements. Commit verified fixes,
+then separate real-hash READY_FOR_REVIEW mailbox responding to P78-R1.

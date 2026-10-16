@@ -1,6 +1,10 @@
 # Phase 7 — semantic notifications and authenticated SSE
 
-Status: implemented; internal gate passed2026-10-15, not accepted. This is slice B
+Status: **CHANGES_REQUESTED by main, 2026-10-17**, P78-R1 open: initial notification
+activity can be lost under delayed/reordered updates. See the [mailbox](../agent-handoff.md)
+for exact code paths and regression assignment. No phase acceptance.
+
+Historical delivery: implemented; internal gate passed2026-10-15. This is slice B
 evidence within the activated [Phases 7–8 package](../work-packages/phase-7-8.md),
 not a handoff or authorization for Phase9. A commits: `beebb0a` (envelope) and
 `ecb11f6` (inbox). Verified B hash will be recorded in the fixed mailbox after
