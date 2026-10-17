@@ -3,10 +3,10 @@
 ## Routing
 
 - Task: phase-7-8-notifications-search-moderation-ops
-- Round: 1
-- State: CHANGES_REQUESTED — main round 1, P78-R1 open
-- Last writer: main, 2026-10-17 — review of code bbb8500 and handoff 46dec7d
-- Next owner: development — same existing chat; round 2 stabilization
+- Round: 2
+- State: READY_FOR_REVIEW — round2 stabilization verified; P78-R1 awaits main disposition
+- Last writer: development, 2026-10-17 — fix d2a8e3c2b5942f1019ba2a48157da6ce3a5ed662
+- Next owner: main orchestrator/reviewer — independently review P78-R1 and package
 - New chat: `Develop Phases 7–8 — Notifications, Search & Moderation Ops`
 - Accepted baseline code: `32c1b1eb8609eeb8c61278e29efbedba14008db9`.
 - Main acceptance commit: `6dc06d6`.
@@ -22,8 +22,8 @@
 
 Read the complete linked package and required contracts before implementation.
 Inspect status, actual baseline and existing APIs. The initial activation allocated
-from V0027 after V0026; actual code now has V0027–V0031. Preserve all applied
-V0001–V0031; next migration is V0032, verify actual HEAD before any later change.
+from V0027 after V0026; actual code now has V0027–V0032. Preserve all applied
+V0001–V0032; next migration is V0033, verify actual HEAD before any later change.
 
 Implement sequentially in this single new chat: durable envelope + semantic inbox,
 authenticated SSE + full Phase 7 internal gate, then PostgreSQL search and scoped
@@ -390,3 +390,118 @@ re-run the committed pool10/50 benchmark if changed shared owners/worker/resourc
 paths affect feeds. Retain the package's earlier successful heavy evidence but
 never present old runs as new final-source measurements. Commit verified fixes,
 then separate real-hash READY_FOR_REVIEW mailbox responding to P78-R1.
+
+## Development round2 response — P78-R1, READY_FOR_REVIEW
+
+Fix code: **`d2a8e3c2b5942f1019ba2a48157da6ce3a5ed662`**, based on main5012a83 /
+prior executablebbb8500. P78-R1 remains **OPEN for main**; this is a proposed
+correction with evidence, not developer resolution/phase acceptance. Main's
+original finding, review evidence and P78-D1 design adjudication remain unchanged.
+
+### Regression-first reproduction and selected correction
+
+Before production changes,3 real-PG producer/worker regressions fail exactly as
+reported: delayed LIKE→LOVE v0→v1, reordered v1→v0, CommentUpdated-before-Created.
+Both actual notification receipts commit, yet inbox is empty (size1 expected),
+no test errors/skips. Log `.local/evidence/p78/r2-initial-activity-before.log`.
+
+The [written plan](work-packages/phase-7-8-plan.md) selected the algorithm before
+implementation: new V0032 adds activity_decided_version independently of current
+source ordering. An eligible ordinary update can advance ordering while leaving
+the real origin pending; it never synthesizes activity. Only unexpired Created/
+reaction null→type evidence may settle a new/undecided activity, even behind newer
+ordering, with unchanged current source/route/account/preferences/block/mute proof.
+Decision-through current snapshot coalesces superseded activity, denial/deletion
+closes old origins, and a newer genuine reactivation still creates one new-hour
+activity. Pruning preserves decisions; NULL group FK is not eligibility.
+
+One bounded content snapshot refresh follows sorted recipient guards, preventing
+an old pre-lock snapshot from losing an origin after another worker's update.
+Group/contribution/decision/watermark/receipt/fenced ack remain atomic. No owner
+API/SQL, producer envelope/payload, shared worker framework, pool/timeout, public
+REST shape or dependency change. V0001–V0031 untouched; only new V0032. Subsystem/
+schema/domain/security/OpenAPI descriptions/runbook/phase records are updated.
+
+Legacy limitation: old NULL-FK states cannot distinguish suppression/pruning from
+already-acknowledged initial loss. Migration conservatively decides all old rows
+through their stored version; no automatic historical repair/receipt reset or
+mixed old/new writer rollout is claimed. This preserves the required denial/
+deletion/retention boundary rather than guessing from missing groups.
+
+### Completed lifecycle/order regression matrix
+
+All use real PostgreSQL producers/registered receipt-effect-fenced worker, not
+mocked successful delivery or direct repository Change fixtures. Spies inject
+faults/barriers and call real methods. Named cases live in NotificationsIT.
+
+| Required path | Actual coverage/outcome |
+|---|---|
+| LIKE→LOVE before any dispatch | `initialReactionSurvivesTypeChangeBeforeFirstDispatchInEitherOrder`,both orders;2 receipts,1 activity/group/actor/unread,current LOVE; read and receipt-free replay stay read |
+| Comment update before create | `commentUpdateBeforeCreatePreservesExactlyOneInitialActivity`; explicit pending decision, canonical create-event group once; later edit/replay no unread |
+| Full unmaterialized lifecycle order | `currentReactionBurstCoalescesOneActivityInAllTwentyFourOrders`;all24 create/delete/reactivate/type permutations, current SUPPORT/version3, one activity; receipt-free replay cannot inflate |
+| Existing read group/cross-hour reactivation | `readGroupGetsExactlyOneCrossHourReactivationDespiteNewerTypeUpdate`;all6 delete/reactivate/type orders, one new-hour activity, old contribution inactive, late delete/replay harmless; prior type-only-read test retained |
+| Preference/block/mute/inactive actor | `deniedUpdateClosesPendingOriginAndLaterTypeOnlyUpdateCannotCatchUp`,4 denial modes; re-enable/update/old-origin replay stays empty, genuine new activation works |
+| Inactive recipient | `inactiveRecipientReceiptsDoNotTurnLaterTypeUpdatesIntoActivity`; receipts consumed while inactive, later type-only update cannot catch up |
+| Private source/reply routes/self | `privateReplyUpdateCannotCreateCatchUpAfterParentBecomesPublicAgain`; no old catch-up after restored audience. `replyUpdateBeforeCreatePreservesScopedRecipientsAndPrecedence`,2 route variants preserve COMMENT/REPLY precedence and self suppression |
+| Delete/removal/restoration | Existing delete-before-create retained; `deletedCommentUpdateAndCreateNeverMaterializeActivity`; real report-driven `removalBeforeInitialCreateClosesOriginEvenWhenRestorationIsAlreadyCurrent` keeps origin closed despite current restore |
+| Retry/duplicate/source state rollback | `lateOriginFailureRollsBackPendingDecisionReceiptAndEffectsThenRetrySucceeds`,exception/expired lease; pending state, watermark, receipt/group/contribution roll back, attempt2/generation2 succeeds once; source-level and receipt-level replay covered |
+| Concurrent worker ordering | `delayedOriginRefreshesCurrentSnapshotAfterConcurrentUpdateWinsRecipientGuard`; newer producer+worker wins pre-guard race, old origin then uses current LOVE/version1 and creates exactly1 |
+| Group retention/replay expiry | `retentionKeepsOrderingAndRejectsDeadReplayPastHorizon`; exact1 bounded prune, decision survives NULL FK, recent type/old replay cannot resurrect, genuine activation works. `expiredPendingOriginCannotBorrowRecentTypeUpdateToCreateActivity` rejects >30-day origin |
+| Prior matrix preserved | All seven kinds, current actor counts/attribution, invite/request expiry/replacement, read/bulk races, HTTP/IDOR/cursors/scan ceilings and batched source proof unchanged; full prior Phase1–8 suites pass |
+
+FoundationIT fresh32/upgrade31 preserves all31 checksums and exact old source/group
+read+activity state, conservatively closes materialized/NULL-active/NULL-inactive
+legacy rows, rejects negative/above-order decisions and repeats migrate idempotently.
+
+### Final round2 verification and evidence
+
+- Targeted notification/worker/native SSE/Foundation/API/architecture:
+  **116 PASS =14 fast+102 PG**,0 failures/errors/skips,3:00, finishing11:00:09+07.
+  Log `r2-lifecycle-targeted-final.log`; NotificationsIT63/Foundation22/envelope3/
+  native streams13/open-stream shutdown1. Exact command in [Phase7](phases/phase-7.md).
+- Java21 `./mvnw -B -ntp spotless:apply verify`: **388 PASS =57 fast+331 PG**,
+  0 failures/errors/skips/forced JVM exit,5:27, finishing2026-10-17 11:05:42+07.
+  Log `r2-full-verify.log`. Spotless/Enforcer/OpenAPI/7 architecture/3 persistence
+  tests pass; reports23/moderation operations13/feeds19/auth34 and all prior
+  media/Silo/current privacy/source coherence/worker regressions retained.
+- Actual default1s scheduler,10-post/one-owner notification+search burst:
+  completion20,312ms/max lag20.190289427s (<30s);50-result/10k-ballast fixture6 SQL.
+  Full SSE suspend→reinstate5089ms; other revocations5084–5095ms; expiry2019ms,
+  outage8087ms, slow readers270/228/195ms/queue≤2/native resources0; shutdown22ms.
+- Compose config and real app/media startup/build/bootstrap/probes PASS. Retained
+  isolated `social-p78-gate` volume upgrades31→32 (actual runtime log), column
+  query succeeds, readiness/liveness UP. Anonymous notifications/admin metrics/
+  actuator Prometheus401, bucket listing403. App/Silo UID1000/read-only/1GiB/2CPU,
+  media enabled and correct isolated data mount. Logs `r2-compose-*.log` include
+  probe outputs. Task app stopped before dependencies; volumes/data/keys preserved,
+  no task service running before benchmark. No old/new writer mixture.
+- Fresh unchanged FeedBenchmarkTool pool10/50,1million posts/50 readers:
+  **3200 attempts/3200 successes/0 failures**,all16 outcome lines summed; each
+  pool500 first+500 steady+6×100 sparse.15 prerequisite tests+1 tool PASS,5:34,
+  ending11:13:36+07. Log `r2-feed-benchmark.log`. Dense p95 pool10 first2505.688/
+  steady2995.735ms; pool50 first2703.720/steady2016.948ms. Full p50/p95/p99,
+  sparse/SQL/plan/resource/hardware evidence in Phase7. **500ms remains unmet**;
+  local latencies are higher than round1, no controlled causal/capacity/SLA claim.
+  Pre-benchmark shared desktop:5962MiB used/1702 available,3822MiB swap used;
+  Java21.0.12.1/Boot4.1.1/Tomcat11.0.27/pinned PG18.6/Docker29.8.2,
+  i7-1165G7/8 logical CPUs/7.5GiB RAM/4GiB swap. No pool/timeout relaxation.
+- 303-file `r2-final-source-sha256.txt` matches after full/Compose/benchmark and
+  precommit. Only Markdown evidence/status follows final executable verification.
+  Pinned redacted gitleaks full history **59 commits including d2a8e3c**, no leaks
+  (`r2-history-code.log`); staged code scan clean (`r2-code-staged-scan.log`).
+  Synthetic external positive control detects1 expected generic-api-key and passes
+  (`r2-secret-positive-control.log`); both exact historical fingerprints unchanged.
+  Mailbox-only diff/link/staged checks are separate; final post-mailbox history
+  scan is retained in `r2-history-final.log`, without inventing this docs hash.
+
+All logs under ignored `.local/evidence/p78` (mode700). Initial after-fix55 PASS and
+failed red/expanded attempts remain. The expanded suite's one failed retention
+fixture aged >20 shared recipients beyond one bounded cleanup page; it now starts
+91days earlier, ages only itself and asserts exactly1 removal. No cleanup bound,
+retention duration, denial/assertion, replay policy or scanner weakened.
+
+No new blocker. Next owner main: independently review real fix hash and complete
+package, retain/update P78-R1 disposition and decide phase acceptance. No developer
+resolution/self-acceptance, push, agent, deployment, remote CI claim or Phase9 work.
+Dense latency, ambiguous historical loss, external provider/storage/decoder/key/
+backup/audit retention/admin gateway/public-launch limitations remain explicit.
