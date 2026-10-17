@@ -1,16 +1,19 @@
 # Phase 9A — erasure, recovery and release-readiness design gate
 
-ACTIVATED by main on2026-10-17 after Phases7–8 acceptance `96700ec`.
-This package authorizes
+COMPLETED and accepted by main at `eab4da6`, local synthetic scope with ADR-017
+C01–C05. The current mailbox separately activates9A-I; this historical design
+assignment itself authorized
 **repository inspection and design documentation only**, not executable changes,
 erasure, deployment or Phase9 acceptance. User opens a new chat manually:
 `Plan Phase 9A — Erasure, Recovery & Release Gates`.
 
-Design delivery proposed on2026-10-17 (awaiting main review):
+Design delivered/reviewed on2026-10-17:
 [A — owner/data inventory](phase-9a-data-inventory.md),
-[B — proposed ADR-017](../adr/017-account-erasure-and-recovery.md), and
+[B — accepted local ADR-017](../adr/017-account-erasure-and-recovery.md), and
 [C — implementation/release evidence plan](phase-9a-plan.md).
-Their presence activates no executable work or policy acceptance.
+See the [accepted review archive](../handoffs/phase-9a-erasure-recovery-design.md)
+for decisions. Only the subsequent mailbox assignment authorizes implementation;
+production policy, actual erasure/restore and public launch are not approved.
 
 ## Why a design gate now
 

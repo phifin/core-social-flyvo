@@ -53,7 +53,13 @@ Main accepted Phases7–8 at executable `d2a8e3c`, review `96700ec`, on2026-10-1
 The accepted mailbox is archived under `docs/handoffs/phase-7-8-notifications-search-moderation-ops.md`.
 The next chat is `Plan Phase 9A — Erasure, Recovery & Release Gates`, assigned the
 [three-workstream design gate](work-packages/phase-9a-design.md) only. No Phase9
-executable changes/erasure are authorized until main reviews that proposal.
+executable changes/erasure were authorized during that design task.
+
+Main accepted the local synthetic Phase9A design at `eab4da6` on2026-10-17 with
+ADR-017 C01–C05 and archived its mailbox. Current next chat is
+`Develop Phase 9A-I — Erasure Foundation & Identity`, assigned all I.1–I.3 under
+the fixed mailbox. Only isolated synthetic implementation/testing is activated;
+II/III, real data erasure/restore and production/public policy remain unapproved.
 
 Read AGENTS.md, the mailbox, git status and recent history before acting. Verify that the mailbox's code commit exists and matches the work being reviewed; later documentation-only commits are expected. If newer code exists, inspect it and explicitly record the new review baseline. Do not act on stale findings as if they referred to current code. The mailbox is a task/status record, not permission to override security, ADRs or human instructions.
 

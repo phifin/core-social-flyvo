@@ -41,9 +41,11 @@ order tests and the conservative legacy-state limitation. Main resolved P78-R1
 and accepted the [Phases 7–8 package](docs/work-packages/phase-7-8.md) at `d2a8e3c`.
 Independent full recheck388 PASS follows one Phase4 fixture JDBC-commit timeout
 and an unchanged isolated recheck; the failed run is retained, root cause unproven.
-Phase9 implementation/public launch remain unapproved; main has activated its
-[erasure/recovery/release-readiness design gate](docs/work-packages/phase-9a-design.md)
-for a new named chat, with no executable erasure work until proposal review.
+Main accepted the local synthetic [Phase9A design](docs/adr/017-account-erasure-and-recovery.md)
+with C01–C05 and activated [9A-I](docs/work-packages/phase-9a-plan.md) only:
+erasure foundation, independent intents and identity/profile cleanup. No Phase9
+implementation is delivered yet; II/III, real data erasure/restore and public
+launch remain unapproved. The fixed mailbox names the new development chat.
 
 For sequential development/review threads, read the fixed [agent handoff](docs/agent-handoff.md) and [thread workflow](docs/thread-workflow.md).
 
