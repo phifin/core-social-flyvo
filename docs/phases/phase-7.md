@@ -1,9 +1,11 @@
 # Phase 7 — semantic notifications and authenticated SSE
 
-Status: round2 stabilization implemented/locally verified, **READY_FOR_REVIEW**.
-Main's round1 CHANGES_REQUESTED/P78-R1 remains open for independent review; the
-developer does not resolve the finding or accept either phase. See the
-[mailbox](../agent-handoff.md) and round2 evidence below.
+Status: **ACCEPTED by main, 2026-10-17**, executable `d2a8e3c`.
+P78-R1 resolved after algorithm/migration review and independent worker regressions.
+Main full recheck388 PASS (57 fast+331 integration); an initial unchanged Phase4
+fixture commit timeout, isolated58-test pass and full recheck are recorded in the
+[review mailbox](../agent-handoff.md). No historical loss repair or public-launch
+claim. Operational/heavy measurements below remain developer evidence.
 
 Historical delivery: implemented; internal gate passed2026-10-15. This is slice B
 evidence within the activated [Phases 7–8 package](../work-packages/phase-7-8.md),

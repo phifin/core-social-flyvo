@@ -4,9 +4,9 @@
 
 - Task: phase-7-8-notifications-search-moderation-ops
 - Round: 2
-- State: READY_FOR_REVIEW — round2 stabilization verified; P78-R1 awaits main disposition
-- Last writer: development, 2026-10-17 — fix d2a8e3c2b5942f1019ba2a48157da6ce3a5ed662
-- Next owner: main orchestrator/reviewer — independently review P78-R1 and package
+- State: ACCEPTED — main round2, Phases 7–8 at d2a8e3c; P78-R1 resolved
+- Last writer: main, 2026-10-17 — reviewed fix d2a8e3c2b5942f1019ba2a48157da6ce3a5ed662
+- Next owner: main orchestrator — archive acceptance and activate Phase9A design only
 - New chat: `Develop Phases 7–8 — Notifications, Search & Moderation Ops`
 - Accepted baseline code: `32c1b1eb8609eeb8c61278e29efbedba14008db9`.
 - Main acceptance commit: `6dc06d6`.
@@ -326,7 +326,14 @@ Independent main checks on the delivered executable baseline:
 - Review-only edits are mailbox and Phase7/8 records; no executable changes,
   acceptance, push, deployment or new phase activation.
 
-#### P78-R1 — P2 OPEN: source updates can permanently consume initial notification activity
+#### P78-R1 — P2 RESOLVED by main, 2026-10-17: initial notification activity ordering
+
+Round2 disposition: resolved at `d2a8e3c`; the independent decision watermark,
+current owner proof and post-recipient-guard source refresh address the original
+loss without promoting ordinary updates to activity. Main inspected the actual
+algorithm/migration and real worker regression matrix; all63 NotificationsIT
+executions passed independently. Legacy ambiguous rows are deliberately closed,
+not repaired or replayed speculatively. Original round1 finding follows unchanged.
 
 Anchors: `NotificationProjector.java:139–142` (reaction source-version equality
 and newActivity), `:125–126` (comment/post update activity), `JdbcInbox.java:47–53`
@@ -505,3 +512,50 @@ package, retain/update P78-R1 disposition and decide phase acceptance. No develo
 resolution/self-acceptance, push, agent, deployment, remote CI claim or Phase9 work.
 Dense latency, ambiguous historical loss, external provider/storage/decoder/key/
 backup/audit retention/admin gateway/public-launch limitations remain explicit.
+
+## Main round2 review — ACCEPTED, 2026-10-17
+
+Code `d2a8e3c2b5942f1019ba2a48157da6ce3a5ed662`, developer handoff `15dab1f`.
+Initial working tree/index clean. Reviewed all executable round2 changes, migration
+V0032 and both changed test classes, against round1 and the accepted contracts.
+No additional code finding identified in this review; P78-R1 resolved above.
+
+- Independent first full verify: 57 fast +331 integration, one ERROR in unchanged
+  Phase4IT.candidateQueryUsesActualAuthorIndexOnSkewedDataAndHydrationRemainsBatched.
+  The stack reports JDBC commit I/O failure / SocketTimeoutException at line1793,
+  after the12000-row fixture. Full run failed, not waived. Other387 tests passed,
+  including63 inbox,13 native streams and moderation/search/worker suites.
+  Log `/tmp/social-p78-r2-main-verify.log`.
+- Isolated unchanged failing method recheck: PASS (57 fast+1 integration), exit0,
+  32.436s. Log `/tmp/social-p78-r2-main-phase4-recheck.log`. No code/configuration,
+  timeout/pool, exclusion or assertion changes. Root cause of the transient commit
+  timeout is not established; do not attribute it to the notification fix or
+  conclusively to host pressure. The second full verify below passes unchanged.
+- Independent second full Java21 `./mvnw -B -ntp verify`: **388 PASS** (57 fast+
+  331 integration), zero failures/errors/skips, exit0,5m11s, completed2026-10-17
+  11:31:10+07; no forced-exit warning. Log
+  `/tmp/social-p78-r2-main-verify-recheck.log`. Includes all33 Phase4 and63 inbox
+  tests,13 native streams, shutdown, source authorization, migration, architecture,
+  OpenAPI and prior phase regressions. Post-run303-file manifest still matches.
+- Manifest matches all303 executable files; only V0032 was added since round1,
+  all old migrations preserved. Compose app/media config PASS. Reviewed developer
+  real31→32 Compose startup/probe logs and benchmark3200/3200 with zero failures;
+  main did not independently rerun actual Compose startup or heavy benchmark.
+- Pinned redacted full-history scan through15dab1f:60 commits, no leaks. External
+  synthetic positive control PASS; two historical ignores unchanged. Logs
+  `/tmp/social-p78-r2-main-secrets.log` and `...-positive.log`.
+
+Main accepts Phase7 semantic notifications/SSE and Phase8 search/moderation
+operations at `d2a8e3c`, including prior A/B/C/D commits and ADR-016 implementation.
+P78-R1 is resolved; no open package code findings remain. Acceptance is engineering
+scope only, not public launch, latency SLA, legal compliance or historical lost-
+notification repair. Retain the first failed run and unexplained transient timeout
+as a Phase9A operability follow-up, plus dense feed latency and all external gates.
+Main independently reran tests/config/scans; heavy startup/benchmark evidence is
+developer evidence inspected against the matching source manifest, not main reruns.
+
+Next: archive this mailbox and activate the prepared documentation-only Phase9A
+design package. No erasure implementation/production action is authorized until
+its policy/architecture proposal is reviewed. Main may push the reviewed checkpoint
+under standing authorization after final docs/secret/ref checks; record the actual
+remote hash separately. No feature/fix implementation or deployment by main.

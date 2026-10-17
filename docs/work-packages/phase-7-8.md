@@ -1,7 +1,9 @@
 # Phases 7–8 — notifications, search and moderation operations
 
-Status: ACTIVATED by main on 2026-10-14 under the user's review/continue request,
-after Phases 5–6 acceptance `6dc06d6`, code `32c1b1e`. No implementation claimed.
+Status: **ACCEPTED by main on 2026-10-17**, executable `d2a8e3c`, P78-R1 resolved.
+See Phase7/8 records and the review mailbox for evidence and retained limitations.
+Originally activated2026-10-14 after Phases5–6 acceptance `6dc06d6`, code `32c1b1e`.
+The assignment below is preserved as the historical implementation scope.
 
 New development chat: `Develop Phases 7–8 — Notifications, Search & Moderation Ops`.
 The user opens it manually. One writer, no agents, no push. Main reviews the whole

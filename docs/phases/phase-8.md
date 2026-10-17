@@ -1,13 +1,18 @@
 # Phase 8 — search and scoped moderation operations
 
-Status: C and all D implemented locally; first-delivery full340-test, app/media Compose,
-pool10/50 all3200-request and secret-scan gates pass on2026-10-16. Pending main
-review, **neither phase accepted**. Main's [ADR-016 acceptance](../adr/016-moderation-private-payload-retention.md)
+Status: **ACCEPTED by main, 2026-10-17**, combined executable `d2a8e3c`.
+Main independently rechecked388 tests; P78-R1 resolved. See the
+[review mailbox](../agent-handoff.md) for failed initial run/rechecks and limitations.
+No public-launch/production-capacity claim.
+
+Historical delivery: C and all D implemented locally; first-delivery full340-test,
+app/media Compose, pool10/50 all3200-request and secret-scan gates passed2026-10-16.
+Main's [ADR-016 acceptance](../adr/016-moderation-private-payload-retention.md)
 at152a7c9 resolved P78-D1's design only. Phase7 internal gate passed before C, B code
 `af0742750cd1f1b00a02a1afcd6aa3d80d13db74`; see [Phase7 evidence](phase-7.md).
 Real C/D hashes are recorded in the fixed mailbox after their code commits.
 
-Main round1, 2026-10-17: combined package **CHANGES_REQUESTED** for notification
+Historical main round1, 2026-10-17: combined package **CHANGES_REQUESTED** for notification
 finding P78-R1; see [mailbox](../agent-handoff.md). D's design decision stays
 resolved, but this does not separately accept Phase8 or authorize Phase9.
 
@@ -18,7 +23,8 @@ app/media Compose upgrades the isolated prior31 volume to32 and readiness/securi
 resource probes pass. Refreshed operational/heavy evidence and P78-R1 response are
 in [Phase7 round2](phase-7.md) and the fixed mailbox. Older evidence below remains
 historical, never substituted for new-source measurements. Main alone resolves
-the finding/accepts either phase; Phase9 stays inactive.
+the finding/accepts either phase, now recorded above. Phase9 implementation remains
+inactive; the separate design assignment is not release approval.
 
 ## C — source-authorized PostgreSQL search
 

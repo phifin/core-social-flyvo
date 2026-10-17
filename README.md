@@ -2,7 +2,7 @@
 
 A reusable Java backend core for social networks and communities. The core has no family, university, alumni, employer, or other application-specific domain concepts.
 
-**Current status: Phases 1–6 accepted after independent main review (2026-10-14).** Production readiness remains separately gated. The application is `social-core`, root package `com.flyvo.socialcore`; the checkout may remain `fly-social`. See separate [Phase 5 evidence](docs/phases/phase-5.md)/[Phase 6 evidence](docs/phases/phase-6.md), [Phase 4 evidence](docs/phases/phase-4.md), [content](docs/content.md), [moderation](docs/moderation.md), [community](docs/community.md), [graph](docs/graph.md) and [media](docs/media.md). Architecture documents describe the target; phase records describe delivery and exact verification/review state.
+**Current status: Phases 1–8 accepted after independent main review (2026-10-17), executable `d2a8e3c`.** Production readiness remains separately gated. The application is `social-core`, root package `com.flyvo.socialcore`; the checkout may remain `fly-social`. See separate [Phase 5 evidence](docs/phases/phase-5.md)/[Phase 6 evidence](docs/phases/phase-6.md), [Phase 4 evidence](docs/phases/phase-4.md), [content](docs/content.md), [moderation](docs/moderation.md), [community](docs/community.md), [graph](docs/graph.md) and [media](docs/media.md). Architecture documents describe the target; phase records describe delivery and exact verification/review state.
 
 ## Start here
 
@@ -23,8 +23,8 @@ current-state privacy/weak consistency; [benchmark evidence](docs/phases/phase-6
 records representative load and limitations, including the unmet initial p95
 <500ms goal on local hardware, not production capacity. Phase 7
 has a locally implemented [semantic inbox and authenticated SSE](docs/notifications.md);
-the [Phase 7 internal gate](docs/phases/phase-7.md) passed298 tests, pending main
-review. Phase8's [source-authorized search](docs/search-and-caching.md) is locally
+the historical [Phase 7 internal gate](docs/phases/phase-7.md) passed298 tests;
+main accepted the completed package after round2 review. Phase8's [source-authorized search](docs/search-and-caching.md) is locally
 implemented alongside [scoped moderation operations](docs/moderation.md) under
 accepted ADR-016: lossless payload split, verified encryption, explicit engineering
 holds, bounded retention, staff assignment/history and platform account actions.
@@ -37,10 +37,11 @@ ordering stabilization adds V0032 without changing applied migrations or promoti
 updates into new activity. Full388, real app/media upgrade/startup and a fresh
 3200/3200 pool10/50 benchmark pass (dense p95 still2.02–3.00s, not500ms);
 [Phase7 round2 evidence](docs/phases/phase-7.md) records refreshed gates, lifecycle/
-order tests and the conservative legacy-state limitation. P78-R1 remains open for
-main review; neither phase is self-accepted.
-Main has activated the [Phases 7–8 package](docs/work-packages/phase-7-8.md)
-for sequential development; activation does not accept either phase.
+order tests and the conservative legacy-state limitation. Main resolved P78-R1
+and accepted the [Phases 7–8 package](docs/work-packages/phase-7-8.md) at `d2a8e3c`.
+Independent full recheck388 PASS follows one Phase4 fixture JDBC-commit timeout
+and an unchanged isolated recheck; the failed run is retained, root cause unproven.
+Phase9 implementation/public launch remain unapproved; next is its design gate.
 
 For sequential development/review threads, read the fixed [agent handoff](docs/agent-handoff.md) and [thread workflow](docs/thread-workflow.md).
 

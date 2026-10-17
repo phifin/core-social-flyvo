@@ -2,8 +2,9 @@
 
 Status: **Accepted for implementation by main, 2026-10-16**, resolving the
 architecture decision P78-D1. Proposed by development on the same date.
-Implementation/verification status is recorded in [Phase8](../phases/phase-8.md);
-not phase-accepted, no Phase9/legal erasure authorization.
+Implementation was accepted with Phase8 by main on2026-10-17 at `d2a8e3c`;
+verification is recorded in [Phase8](../phases/phase-8.md).
+No Phase9/legal erasure authorization follows from this ADR.
 
 ## Context and evidenced conflict
 
