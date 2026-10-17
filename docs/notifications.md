@@ -22,6 +22,32 @@ without social activity; operator replay cannot revive them. Notification delive
 does not promise replay of events before registration or indefinite backlog recovery.
 No social email/push channel or new worker framework is introduced.
 
+Round2/V0032 separates **ordering** (`latest_source_version`, current observed
+owner version) from **activity decisions** (`activity_decided_version`). An eligible
+update can arrive before its origin and advance ordering without creating activity.
+Only the real Created event or reaction null→type event can settle that pending
+origin; its exact event version is compared independently of ordering, so a late
+origin is not acknowledged away. Current source/route/preferences/account/graph
+authorization remains mandatory. No update is promoted into a synthetic origin.
+
+NULL decision means no origin or closing decision observed, not permission from a
+NULL notification FK. Materialization consumes activity through the current source
+snapshot; this coalesces historical transitions already superseded by that current
+state. Current denial/inactivity consumes through the same snapshot. Deletion/
+removal also closes through its own event version, without blocking a later genuine
+reactivation. A type update to a materialized group does not move the activity
+decision or unread version; a late reactivation above that decision still creates
+exactly one current-hour activity even if a newer type update arrived first.
+
+Recipient guards are acquired in UUID order, then the content source is refreshed
+once after serialization, avoiding pre-lock snapshot regression between workers.
+The decision, group/contribution, receipt and fenced ack commit/roll back together.
+Pruning a group does not erase its decision. V0032 conservatively closes all legacy
+source rows through their stored version, including suppressed/pruned NULL-FK rows;
+old storage cannot distinguish those from already-acknowledged lost initial activity.
+No automatic historical repair, receipt reset or retention resurrection is claimed.
+See [round2 plan](work-packages/phase-7-8-plan.md) and [evidence](phases/phase-7.md).
+
 Reaction grouping uses recipient/kind/target/current processing UTC hour. Stable
 source ID/version serializes type/delete/reactivate across groups. A type update
 changes the contribution without activity/read increments. Deletion deactivates;

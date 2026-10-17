@@ -28,7 +28,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @Testcontainers
 @org.springframework.test.context.ActiveProfiles("test")
 class FoundationIT {
-  private static final int LATEST_MIGRATIONS = 31;
+  private static final int LATEST_MIGRATIONS = 32;
 
   @Container
   static final PostgreSQLContainer POSTGRES =
@@ -67,6 +67,85 @@ class FoundationIT {
         .containsEntry("hibernate.hbm2ddl.auto", "validate");
     assertThat(environment.getProperty("spring.jpa.open-in-view", Boolean.class)).isFalse();
     assertThat(jdbc.queryForObject("show timezone", String.class)).isEqualTo("UTC");
+  }
+
+  @Test
+  void activityDecisionUpgradePreservesThirtyOneChecksumsAndClosesAmbiguousOldState() {
+    var name = "activity_upgrade_" + java.util.UUID.randomUUID().toString().replace("-", "");
+    new JdbcTemplate(dataSource).execute("CREATE DATABASE " + name);
+    var url = POSTGRES.getJdbcUrl().replace("/test?", "/" + name + "?");
+    var prior =
+        Flyway.configure()
+            .dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword())
+            .target("0031")
+            .load();
+    assertThat(prior.migrate().migrationsExecuted).isEqualTo(31);
+    var checksums =
+        java.util.Arrays.stream(prior.info().applied())
+            .map(org.flywaydb.core.api.MigrationInfo::getChecksum)
+            .toList();
+    var sql =
+        new JdbcTemplate(
+            new org.springframework.jdbc.datasource.DriverManagerDataSource(
+                url, POSTGRES.getUsername(), POSTGRES.getPassword()));
+    var recipient = java.util.UUID.randomUUID();
+    var actor = java.util.UUID.randomUUID();
+    for (var user : java.util.List.of(recipient, actor))
+      sql.update(
+          "INSERT INTO account.user_account(id,status,created_at,updated_at) VALUES (?,'ACTIVE',now(),now())",
+          user);
+    var group = java.util.UUID.randomUUID();
+    sql.update(
+        "INSERT INTO notification.notification(id,recipient_id,kind,target_type,target_id,grouping_key,group_window_start,activity_version,read_version,last_activity_at,created_at) VALUES (?,?,'REACTION_ON_CONTENT','POST',?,'synthetic-retained',date_trunc('hour',now()),3,3,now(),now())",
+        group,
+        recipient,
+        java.util.UUID.randomUUID());
+    for (int i = 0; i < 3; i++)
+      sql.update(
+          "INSERT INTO notification.source_state(recipient_id,kind,source_type,source_id,actor_id,latest_source_version,active,notification_id,updated_at) VALUES (?,'REACTION_ON_CONTENT','REACTION',?,?,?, ?,?,now())",
+          recipient,
+          java.util.UUID.randomUUID(),
+          actor,
+          (long) (5 + i),
+          i != 2,
+          i == 0 ? group : null);
+    var original =
+        sql.queryForList(
+            "SELECT to_jsonb(s)::text state FROM notification.source_state s ORDER BY source_id");
+    var upgrade =
+        Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(1);
+    upgrade.validate();
+    assertThat(upgrade.info().applied()).hasSize(32);
+    assertThat(
+            java.util.Arrays.stream(upgrade.info().applied())
+                .limit(31)
+                .map(org.flywaydb.core.api.MigrationInfo::getChecksum)
+                .toList())
+        .isEqualTo(checksums);
+    assertThat(
+            sql.queryForList(
+                "SELECT (to_jsonb(s)-'activity_decided_version')::text state FROM notification.source_state s ORDER BY source_id"))
+        .isEqualTo(original);
+    assertThat(
+            sql.queryForObject(
+                "SELECT count(*) FROM notification.source_state WHERE activity_decided_version=latest_source_version",
+                Integer.class))
+        .isEqualTo(3);
+    assertThat(
+            sql.queryForObject(
+                "SELECT count(*) FROM notification.notification WHERE activity_version=3 AND read_version=3",
+                Integer.class))
+        .isEqualTo(1);
+    assertThatThrownBy(
+            () -> sql.update("UPDATE notification.source_state SET activity_decided_version=-1"))
+        .hasMessageContaining("source_activity_decision_bound");
+    assertThatThrownBy(
+            () ->
+                sql.update(
+                    "UPDATE notification.source_state SET activity_decided_version=latest_source_version+1"))
+        .hasMessageContaining("source_activity_decision_bound");
+    assertThat(upgrade.migrate().migrationsExecuted).isZero();
   }
 
   @Test
@@ -121,7 +200,7 @@ class FoundationIT {
             "SELECT pg_get_functiondef('moderation.reject_action_mutation()'::regprocedure) AS action_guard,pg_get_functiondef('platform.reject_audit_mutation()'::regprocedure) AS audit_guard");
     var upgrade =
         Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
-    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(2);
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(LATEST_MIGRATIONS - 29);
     upgrade.validate();
     assertThat(
             sql.queryForList(

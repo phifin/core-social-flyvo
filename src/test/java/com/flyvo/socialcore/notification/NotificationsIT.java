@@ -20,6 +20,9 @@ import java.time.*;
 import java.util.*;
 import java.util.concurrent.*;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.*;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -85,6 +88,8 @@ class NotificationsIT {
   @Autowired GraphCommands graph;
   @Autowired CommunityCommands communities;
   @Autowired AdmissionCommands admissions;
+  @Autowired MembershipCommands members;
+  @Autowired com.flyvo.socialcore.moderation.api.Reports reports;
   @Autowired NotificationQueries queries;
   @Autowired NotificationCommands commands;
   @Autowired DurableWorkStore worker;
@@ -162,8 +167,511 @@ class NotificationsIT {
         .isEqualTo("COMPLETED");
   }
 
+  void replayWithoutReceipt(UUID event) {
+    jdbc.update(
+        "DELETE FROM platform.consumer_receipt WHERE event_id=? AND consumer_name='notification-inbox-v1'",
+        event);
+    dispatch(event);
+  }
+
+  Map<String, Object> state(ActorContext recipient, UUID source) {
+    return jdbc.queryForMap(
+        "SELECT latest_source_version,activity_decided_version,notification_id FROM notification.source_state WHERE recipient_id=? AND source_id=?",
+        recipient.userId(),
+        source);
+  }
+
   NotificationQueries.Item item(ActorContext recipient) {
     return queries.inbox(recipient, 100, null).items().getFirst();
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void initialReactionSurvivesTypeChangeBeforeFirstDispatchInEitherOrder(boolean reordered) {
+    var owner = user();
+    var actor = user();
+    var p = post(owner, "PUBLIC", List.of());
+    var reaction = interactions.react(actor, p.id(), null, Interactions.ReactionType.LIKE);
+    var created = event(reaction.id(), "ReactionChanged", 0);
+    interactions.react(actor, p.id(), null, Interactions.ReactionType.LOVE);
+    var updated = event(reaction.id(), "ReactionChanged", 1);
+    for (var e : reordered ? List.of(updated, created) : List.of(created, updated)) dispatch(e);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM platform.consumer_receipt WHERE consumer_name='notification-inbox-v1' AND event_id IN (?,?)",
+                Integer.class,
+                created,
+                updated))
+        .isEqualTo(2);
+    assertThat(queries.inbox(owner, 100, null).items()).hasSize(1);
+    var i = item(owner);
+    assertThat(i.activityVersion()).isEqualTo(1);
+    assertThat(i.actorCount()).isEqualTo(1);
+    assertThat(i.actors())
+        .extracting(NotificationQueries.Actor::userId)
+        .containsExactly(actor.userId());
+    assertThat(queries.unread(owner)).isEqualTo(1);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT reaction_type FROM notification.contribution WHERE notification_id=? AND active",
+                String.class,
+                i.id()))
+        .isEqualTo("LOVE");
+    dispatch(created);
+    dispatch(updated);
+    assertThat(item(owner).activityVersion()).isEqualTo(1);
+    assertThat(queries.unread(owner)).isEqualTo(1);
+    commands.read(owner, i.id(), i.activityVersion());
+    replayWithoutReceipt(updated);
+    replayWithoutReceipt(created);
+    assertThat(item(owner).activityVersion()).isEqualTo(1);
+    assertThat(queries.unread(owner)).isZero();
+    assertThat(state(owner, reaction.id()))
+        .containsEntry("latest_source_version", 1L)
+        .containsEntry("activity_decided_version", 1L);
+  }
+
+  @Test
+  void commentUpdateBeforeCreatePreservesExactlyOneInitialActivity() {
+    var owner = user();
+    var actor = user();
+    var p = post(owner, "PUBLIC", List.of());
+    var comment = interactions.create(actor, p.id(), null, "Synthetic initial", null);
+    var created = event(comment.id(), "CommentCreated", 0);
+    interactions.edit(actor, comment.id(), 0, "Synthetic updated");
+    var updated = event(comment.id(), "CommentUpdated", 1);
+    dispatch(updated);
+    assertThat(state(owner, comment.id()))
+        .containsEntry("latest_source_version", 1L)
+        .containsEntry("notification_id", null)
+        .containsEntry("activity_decided_version", null);
+    dispatch(created);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM platform.consumer_receipt WHERE consumer_name='notification-inbox-v1' AND event_id IN (?,?)",
+                Integer.class,
+                created,
+                updated))
+        .isEqualTo(2);
+    assertThat(queries.inbox(owner, 100, null).items()).hasSize(1);
+    assertThat(item(owner).activityVersion()).isEqualTo(1);
+    assertThat(item(owner).actorCount()).isEqualTo(1);
+    assertThat(queries.unread(owner)).isEqualTo(1);
+    dispatch(created);
+    dispatch(updated);
+    assertThat(item(owner).activityVersion()).isEqualTo(1);
+    commands.read(owner, item(owner).id(), 1);
+    interactions.edit(actor, comment.id(), 1, "Synthetic third body");
+    dispatch(event(comment.id(), "CommentUpdated", 2));
+    replayWithoutReceipt(created);
+    assertThat(item(owner).activityVersion()).isEqualTo(1);
+    assertThat(queries.unread(owner)).isZero();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT grouping_key FROM notification.notification WHERE id=?",
+                String.class,
+                item(owner).id()))
+        .isEqualTo("COMMENT_ON_POST:" + created);
+  }
+
+  static List<List<Integer>> permutations(List<Integer> versions) {
+    if (versions.isEmpty()) return List.of(List.of());
+    var result = new ArrayList<List<Integer>>();
+    for (var version : versions) {
+      var remaining = new ArrayList<>(versions);
+      remaining.remove(version);
+      for (var rest : permutations(remaining)) {
+        var order = new ArrayList<Integer>();
+        order.add(version);
+        order.addAll(rest);
+        result.add(List.copyOf(order));
+      }
+    }
+    return result;
+  }
+
+  static java.util.stream.Stream<List<Integer>> initialBurstOrders() {
+    return permutations(List.of(0, 1, 2, 3)).stream();
+  }
+
+  static java.util.stream.Stream<List<Integer>> reactivationOrders() {
+    return permutations(List.of(1, 2, 3)).stream();
+  }
+
+  @ParameterizedTest(name = "unmaterialized reaction burst {0}")
+  @MethodSource("initialBurstOrders")
+  void currentReactionBurstCoalescesOneActivityInAllTwentyFourOrders(List<Integer> order) {
+    var owner = user();
+    var actor = user();
+    var p = post(owner, "PUBLIC", List.of());
+    var r = interactions.react(actor, p.id(), null, Interactions.ReactionType.LIKE);
+    interactions.unreact(actor, p.id(), null);
+    clock.now = clock.now.plusSeconds(7201);
+    interactions.react(actor, p.id(), null, Interactions.ReactionType.LOVE);
+    interactions.react(actor, p.id(), null, Interactions.ReactionType.SUPPORT);
+    for (int version : order) dispatch(event(r.id(), "ReactionChanged", version));
+    assertThat(queries.inbox(owner, 100, null).items()).hasSize(1);
+    var i = item(owner);
+    assertThat(i.activityVersion()).isEqualTo(1);
+    assertThat(i.actorCount()).isEqualTo(1);
+    assertThat(queries.unread(owner)).isEqualTo(1);
+    assertThat(state(owner, r.id()))
+        .containsEntry("latest_source_version", 3L)
+        .containsEntry("activity_decided_version", 3L);
+    for (int version : order) replayWithoutReceipt(event(r.id(), "ReactionChanged", version));
+    assertThat(item(owner).id()).isEqualTo(i.id());
+    assertThat(item(owner).activityVersion()).isEqualTo(1);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM notification.contribution WHERE notification_id=? AND active AND reaction_type='SUPPORT' AND source_version=3",
+                Integer.class,
+                i.id()))
+        .isEqualTo(1);
+  }
+
+  @ParameterizedTest(name = "materialized reaction reactivation {0}")
+  @MethodSource("reactivationOrders")
+  void readGroupGetsExactlyOneCrossHourReactivationDespiteNewerTypeUpdate(List<Integer> order) {
+    var owner = user();
+    var actor = user();
+    var p = post(owner, "PUBLIC", List.of());
+    var r = interactions.react(actor, p.id(), null, Interactions.ReactionType.LIKE);
+    dispatch(event(r.id(), "ReactionChanged", 0));
+    var first = item(owner);
+    commands.read(owner, first.id(), 1);
+    interactions.unreact(actor, p.id(), null);
+    clock.now = clock.now.plusSeconds(7201);
+    interactions.react(actor, p.id(), null, Interactions.ReactionType.LOVE);
+    interactions.react(actor, p.id(), null, Interactions.ReactionType.SUPPORT);
+    for (int version : order) dispatch(event(r.id(), "ReactionChanged", version));
+    var current = item(owner);
+    assertThat(current.id()).isNotEqualTo(first.id());
+    assertThat(current.activityVersion()).isEqualTo(1);
+    assertThat(current.actorCount()).isEqualTo(1);
+    assertThat(queries.unread(owner)).isEqualTo(1);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM notification.contribution WHERE notification_id=? AND active",
+                Integer.class,
+                first.id()))
+        .isZero();
+    for (int version : order) replayWithoutReceipt(event(r.id(), "ReactionChanged", version));
+    assertThat(item(owner).id()).isEqualTo(current.id());
+    assertThat(item(owner).activityVersion()).isEqualTo(1);
+    assertThat(queries.unread(owner)).isEqualTo(1);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"PREFERENCE", "MUTE", "BLOCK", "ACTOR_INACTIVE"})
+  void deniedUpdateClosesPendingOriginAndLaterTypeOnlyUpdateCannotCatchUp(String mode) {
+    var owner = user();
+    var actor = user();
+    var p = post(owner, "PUBLIC", List.of());
+    var r = interactions.react(actor, p.id(), null, Interactions.ReactionType.LIKE);
+    interactions.react(actor, p.id(), null, Interactions.ReactionType.LOVE);
+    switch (mode) {
+      case "PREFERENCE" ->
+          commands.preferences(owner, Map.of(NotificationQueries.Kind.REACTION_ON_CONTENT, false));
+      case "MUTE" -> graph.mute(owner, actor.userId(), true);
+      case "BLOCK" -> graph.block(owner, actor.userId(), true);
+      case "ACTOR_INACTIVE" ->
+          jdbc.update(
+              "UPDATE account.user_account SET status='SUSPENDED' WHERE id=?", actor.userId());
+      default -> throw new AssertionError();
+    }
+    dispatch(event(r.id(), "ReactionChanged", 1));
+    assertThat(queries.unread(owner)).isZero();
+    assertThat(state(owner, r.id()))
+        .containsEntry("activity_decided_version", 1L)
+        .containsEntry("notification_id", null);
+    switch (mode) {
+      case "PREFERENCE" ->
+          commands.preferences(owner, Map.of(NotificationQueries.Kind.REACTION_ON_CONTENT, true));
+      case "MUTE" -> graph.mute(owner, actor.userId(), false);
+      case "BLOCK" -> graph.block(owner, actor.userId(), false);
+      case "ACTOR_INACTIVE" ->
+          jdbc.update("UPDATE account.user_account SET status='ACTIVE' WHERE id=?", actor.userId());
+      default -> throw new AssertionError();
+    }
+    dispatch(event(r.id(), "ReactionChanged", 0));
+    interactions.react(actor, p.id(), null, Interactions.ReactionType.SUPPORT);
+    dispatch(event(r.id(), "ReactionChanged", 2));
+    replayWithoutReceipt(event(r.id(), "ReactionChanged", 0));
+    assertThat(queries.inbox(owner, 100, null).items()).isEmpty();
+    assertThat(queries.unread(owner)).isZero();
+    // A genuinely new activation still works; suppression is not a permanent ban.
+    interactions.unreact(actor, p.id(), null);
+    interactions.react(actor, p.id(), null, Interactions.ReactionType.LIKE);
+    dispatch(event(r.id(), "ReactionChanged", 4));
+    assertThat(item(owner).activityVersion()).isEqualTo(1);
+    assertThat(queries.unread(owner)).isEqualTo(1);
+  }
+
+  @Test
+  void inactiveRecipientReceiptsDoNotTurnLaterTypeUpdatesIntoActivity() {
+    var owner = user();
+    var actor = user();
+    var p = post(owner, "PUBLIC", List.of());
+    var r = interactions.react(actor, p.id(), null, Interactions.ReactionType.LIKE);
+    interactions.react(actor, p.id(), null, Interactions.ReactionType.LOVE);
+    jdbc.update("UPDATE account.user_account SET status='SUSPENDED' WHERE id=?", owner.userId());
+    dispatch(event(r.id(), "ReactionChanged", 1));
+    dispatch(event(r.id(), "ReactionChanged", 0));
+    jdbc.update("UPDATE account.user_account SET status='ACTIVE' WHERE id=?", owner.userId());
+    interactions.react(actor, p.id(), null, Interactions.ReactionType.SUPPORT);
+    dispatch(event(r.id(), "ReactionChanged", 2));
+    dispatch(event(r.id(), "ReactionChanged", 0));
+    assertThat(queries.inbox(owner, 100, null).items()).isEmpty();
+    assertThat(queries.unread(owner)).isZero();
+  }
+
+  @Test
+  void privateReplyUpdateCannotCreateCatchUpAfterParentBecomesPublicAgain() {
+    var author = user();
+    var recipient = user();
+    var actor = user();
+    var p = post(author, "PUBLIC", List.of());
+    var root = interactions.create(recipient, p.id(), null, "Synthetic root", null);
+    var reply = interactions.create(actor, p.id(), root.id(), "Synthetic reply", null);
+    interactions.edit(actor, reply.id(), 0, "Synthetic newer reply");
+    posts.audience(author, p.id(), 0, new ContentCommands.Audience("ONLY_ME", List.of()));
+    dispatch(event(reply.id(), "CommentUpdated", 1));
+    assertThat(state(recipient, reply.id()))
+        .containsEntry("activity_decided_version", 1L)
+        .containsEntry("notification_id", null);
+    posts.audience(author, p.id(), 1, new ContentCommands.Audience("PUBLIC", List.of()));
+    dispatch(event(reply.id(), "CommentCreated", 0));
+    interactions.edit(actor, reply.id(), 1, "Synthetic visible update");
+    dispatch(event(reply.id(), "CommentUpdated", 2));
+    assertThat(queries.inbox(recipient, 100, null).items()).isEmpty();
+    assertThat(queries.unread(recipient)).isZero();
+    var fresh = interactions.create(actor, p.id(), root.id(), "Synthetic fresh reply", null);
+    dispatch(event(fresh.id(), "CommentCreated", 0));
+    assertThat(item(recipient).kind()).isEqualTo(NotificationQueries.Kind.REPLY_TO_COMMENT);
+    assertThat(item(recipient).activityVersion()).isEqualTo(1);
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void replyUpdateBeforeCreatePreservesScopedRecipientsAndPrecedence(boolean sameAuthor) {
+    var owner = user();
+    var rootAuthor = sameAuthor ? owner : user();
+    var actor = user();
+    var p = post(owner, "PUBLIC", List.of());
+    var root = interactions.create(rootAuthor, p.id(), null, "Synthetic root", null);
+    var reply = interactions.create(actor, p.id(), root.id(), "Synthetic reply", null);
+    interactions.edit(actor, reply.id(), 0, "Synthetic updated reply");
+    dispatch(event(reply.id(), "CommentUpdated", 1));
+    dispatch(event(reply.id(), "CommentCreated", 0));
+    assertThat(queries.inbox(owner, 100, null).items()).hasSize(1);
+    assertThat(item(owner).kind())
+        .isEqualTo(
+            sameAuthor
+                ? NotificationQueries.Kind.REPLY_TO_COMMENT
+                : NotificationQueries.Kind.COMMENT_ON_POST);
+    assertThat(item(owner).activityVersion()).isEqualTo(1);
+    assertThat(item(rootAuthor).kind()).isEqualTo(NotificationQueries.Kind.REPLY_TO_COMMENT);
+    assertThat(item(rootAuthor).activityVersion()).isEqualTo(1);
+    assertThat(queries.unread(rootAuthor)).isEqualTo(1);
+    assertThat(queries.inbox(actor, 100, null).items()).isEmpty();
+  }
+
+  @Test
+  void removalBeforeInitialCreateClosesOriginEvenWhenRestorationIsAlreadyCurrent() {
+    var owner = user();
+    var actor = user();
+    var reporter = user();
+    var scope =
+        communities.create(
+            owner,
+            "ordering-" + UUID.randomUUID(),
+            "Synthetic community",
+            "",
+            "PUBLIC",
+            "OPEN",
+            null);
+    members.join(actor, scope.id());
+    members.join(reporter, scope.id());
+    var p =
+        posts.publish(
+            owner,
+            new ContentCommands.Publish(
+                "Synthetic community post",
+                null,
+                scope.id(),
+                new ContentCommands.Audience("COMMUNITY", List.of()),
+                List.of(),
+                List.of()),
+            null);
+    var c = interactions.create(actor, p.id(), null, "Synthetic moderated comment", null);
+    var submission =
+        new com.flyvo.socialcore.moderation.api.Reports.Submit(
+            com.flyvo.socialcore.moderation.api.Reports.Target.COMMENT,
+            c.id(),
+            com.flyvo.socialcore.moderation.api.Reports.Category.OTHER,
+            "Synthetic case");
+    var removal = reports.submit(owner, submission, null);
+    var restoration = reports.submit(reporter, submission, null);
+    reports.resolve(
+        owner,
+        scope.id(),
+        0,
+        new com.flyvo.socialcore.moderation.api.Reports.Resolution(
+            removal.id(),
+            com.flyvo.socialcore.moderation.api.Reports.Action.REMOVE_CONTENT,
+            "SYNTHETIC_REMOVE",
+            0L,
+            null));
+    reports.resolve(
+        owner,
+        scope.id(),
+        0,
+        new com.flyvo.socialcore.moderation.api.Reports.Resolution(
+            restoration.id(),
+            com.flyvo.socialcore.moderation.api.Reports.Action.RESTORE_CONTENT,
+            "SYNTHETIC_RESTORE",
+            1L,
+            null));
+    dispatch(event(c.id(), "CommentRemoved", 1));
+    assertThat(state(owner, c.id()))
+        .containsEntry("latest_source_version", 2L)
+        .containsEntry("activity_decided_version", 1L);
+    dispatch(event(c.id(), "CommentCreated", 0));
+    dispatch(event(c.id(), "CommentRestored", 2));
+    assertThat(queries.inbox(owner, 100, null).items()).isEmpty();
+    assertThat(queries.unread(owner)).isZero();
+    assertThat(interactions.readComment(owner, c.id()).body())
+        .isEqualTo("Synthetic moderated comment");
+  }
+
+  @Test
+  void deletedCommentUpdateAndCreateNeverMaterializeActivity() {
+    var owner = user();
+    var actor = user();
+    var p = post(owner, "PUBLIC", List.of());
+    var c = interactions.create(actor, p.id(), null, "Synthetic comment", null);
+    interactions.edit(actor, c.id(), 0, "Synthetic update");
+    interactions.delete(actor, c.id(), 1);
+    dispatch(event(c.id(), "CommentDeleted", 2));
+    dispatch(event(c.id(), "CommentUpdated", 1));
+    dispatch(event(c.id(), "CommentCreated", 0));
+    assertThat(queries.inbox(owner, 100, null).items()).isEmpty();
+    assertThat(queries.unread(owner)).isZero();
+    assertThat(state(owner, c.id()))
+        .containsEntry("activity_decided_version", 2L)
+        .containsEntry("notification_id", null);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"FAILURE", "LEASE"})
+  void lateOriginFailureRollsBackPendingDecisionReceiptAndEffectsThenRetrySucceeds(String mode) {
+    var owner = user();
+    var actor = user();
+    var p = post(owner, "PUBLIC", List.of());
+    var r = interactions.react(actor, p.id(), null, Interactions.ReactionType.LIKE);
+    interactions.react(actor, p.id(), null, Interactions.ReactionType.LOVE);
+    dispatch(event(r.id(), "ReactionChanged", 1));
+    long watermark = store.watermark(owner.userId());
+    var created = event(r.id(), "ReactionChanged", 0);
+    doAnswer(
+            inv -> {
+              Object result = inv.callRealMethod();
+              if (mode.equals("FAILURE")) throw new IllegalStateException("TEST_ORIGIN_ROLLBACK");
+              jdbc.update(
+                  "UPDATE platform.outbox_delivery SET lease_until=? WHERE event_id=? AND consumer_name='notification-inbox-v1'",
+                  clock.instant().minusSeconds(1).atOffset(ZoneOffset.UTC),
+                  created);
+              return result;
+            })
+        .when(store)
+        .apply(any(), any());
+    try {
+      jdbc.update(
+          "UPDATE platform.outbox_delivery SET available_at=? WHERE event_id=? AND consumer_name='notification-inbox-v1'",
+          clock.instant().minusSeconds(50L * 365 * 86400).atOffset(ZoneOffset.UTC),
+          created);
+      worker.consumeOne(UUID.randomUUID());
+      assertThat(state(owner, r.id()))
+          .containsEntry("latest_source_version", 1L)
+          .containsEntry("activity_decided_version", null)
+          .containsEntry("notification_id", null);
+      assertThat(queries.inbox(owner, 100, null).items()).isEmpty();
+      assertThat(store.watermark(owner.userId())).isEqualTo(watermark);
+      assertThat(
+              jdbc.queryForObject(
+                  "SELECT count(*) FROM platform.consumer_receipt WHERE event_id=? AND consumer_name='notification-inbox-v1'",
+                  Integer.class,
+                  created))
+          .isZero();
+      assertThat(
+              jdbc.queryForObject(
+                  "SELECT count(*) FROM notification.contribution WHERE source_id=?",
+                  Integer.class,
+                  r.id()))
+          .isZero();
+    } finally {
+      reset(store);
+    }
+    dispatch(created);
+    assertThat(item(owner).activityVersion()).isEqualTo(1);
+    assertThat(queries.unread(owner)).isEqualTo(1);
+    assertThat(state(owner, r.id())).containsEntry("activity_decided_version", 1L);
+    assertThat(
+            jdbc.queryForMap(
+                "SELECT attempts,lease_generation FROM platform.outbox_delivery WHERE event_id=? AND consumer_name='notification-inbox-v1'",
+                created))
+        .containsEntry("attempts", 2)
+        .containsEntry("lease_generation", 2L);
+    replayWithoutReceipt(created);
+    assertThat(item(owner).activityVersion()).isEqualTo(1);
+  }
+
+  @Test
+  void delayedOriginRefreshesCurrentSnapshotAfterConcurrentUpdateWinsRecipientGuard()
+      throws Exception {
+    var owner = user();
+    var actor = user();
+    var p = post(owner, "PUBLIC", List.of());
+    var r = interactions.react(actor, p.id(), null, Interactions.ReactionType.LIKE);
+    var entered = new CountDownLatch(1);
+    var resume = new CountDownLatch(1);
+    doAnswer(
+            inv -> {
+              if (Thread.currentThread().getName().equals("notice-origin")) {
+                entered.countDown();
+                if (!resume.await(10, TimeUnit.SECONDS))
+                  throw new IllegalStateException("TEST_TIMEOUT");
+              }
+              return inv.callRealMethod();
+            })
+        .when(store)
+        .guard(eq(owner.userId()), any());
+    try (var pool = Executors.newSingleThreadExecutor()) {
+      var first =
+          pool.submit(
+              () -> {
+                Thread.currentThread().setName("notice-origin");
+                dispatch(event(r.id(), "ReactionChanged", 0));
+              });
+      assertThat(entered.await(10, TimeUnit.SECONDS)).isTrue();
+      interactions.react(actor, p.id(), null, Interactions.ReactionType.LOVE);
+      dispatch(event(r.id(), "ReactionChanged", 1));
+      resume.countDown();
+      first.get(10, TimeUnit.SECONDS);
+    } finally {
+      resume.countDown();
+      reset(store);
+    }
+    assertThat(state(owner, r.id()))
+        .containsEntry("latest_source_version", 1L)
+        .containsEntry("activity_decided_version", 1L);
+    assertThat(item(owner).activityVersion()).isEqualTo(1);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT reaction_type FROM notification.contribution WHERE notification_id=? AND active",
+                String.class,
+                item(owner).id()))
+        .isEqualTo("LOVE");
   }
 
   @Test
@@ -501,6 +1009,9 @@ class NotificationsIT {
 
   @Test
   void retentionKeepsOrderingAndRejectsDeadReplayPastHorizon() {
+    // Age this fixture, not every shared test recipient past the bounded20
+    // recipient cleanup page. One real bounded pass must reach this sole old group.
+    clock.now = clock.now.minusSeconds(91L * 86400);
     var owner = user();
     var actor = user();
     var p = post(owner, "PUBLIC", List.of());
@@ -508,7 +1019,8 @@ class NotificationsIT {
     var created = event(r.id(), "ReactionChanged", 0);
     dispatch(created);
     clock.now = clock.now.plusSeconds(91L * 86400);
-    tx.executeWithoutResult(s -> store.prune(clock.instant()));
+    int pruned = tx.execute(s -> store.prune(clock.instant()));
+    assertThat(pruned).isEqualTo(1);
     assertThat(
             jdbc.queryForObject(
                 "SELECT count(*) FROM notification.notification WHERE recipient_id=?",
@@ -521,9 +1033,45 @@ class NotificationsIT {
                 Integer.class,
                 owner.userId()))
         .isEqualTo(1);
+    assertThat(state(owner, r.id()))
+        .containsEntry("notification_id", null)
+        .containsEntry("activity_decided_version", 0L);
+    interactions.react(actor, p.id(), null, Interactions.ReactionType.LOVE);
+    dispatch(event(r.id(), "ReactionChanged", 1));
+    assertThat(queries.inbox(owner, 100, null).items()).isEmpty();
     jdbc.update("DELETE FROM platform.consumer_receipt WHERE event_id=?", created);
     dispatch(created);
     assertThat(queries.inbox(owner, 100, null).items()).isEmpty();
+    assertThat(queries.unread(owner)).isZero();
+    assertThat(state(owner, r.id()))
+        .containsEntry("notification_id", null)
+        .containsEntry("latest_source_version", 1L)
+        .containsEntry("activity_decided_version", 0L);
+    interactions.unreact(actor, p.id(), null);
+    interactions.react(actor, p.id(), null, Interactions.ReactionType.SUPPORT);
+    dispatch(event(r.id(), "ReactionChanged", 3));
+    assertThat(item(owner).activityVersion()).isEqualTo(1);
+    assertThat(queries.unread(owner)).isEqualTo(1);
+  }
+
+  @Test
+  void expiredPendingOriginCannotBorrowRecentTypeUpdateToCreateActivity() {
+    var owner = user();
+    var actor = user();
+    var p = post(owner, "PUBLIC", List.of());
+    var r = interactions.react(actor, p.id(), null, Interactions.ReactionType.LIKE);
+    interactions.react(actor, p.id(), null, Interactions.ReactionType.LOVE);
+    dispatch(event(r.id(), "ReactionChanged", 1));
+    assertThat(state(owner, r.id())).containsEntry("activity_decided_version", null);
+    clock.now = clock.now.plusSeconds(31L * 86400);
+    dispatch(event(r.id(), "ReactionChanged", 0));
+    interactions.react(actor, p.id(), null, Interactions.ReactionType.SUPPORT);
+    dispatch(event(r.id(), "ReactionChanged", 2));
+    assertThat(queries.inbox(owner, 100, null).items()).isEmpty();
+    assertThat(queries.unread(owner)).isZero();
+    assertThat(state(owner, r.id()))
+        .containsEntry("latest_source_version", 2L)
+        .containsEntry("activity_decided_version", null);
   }
 
   @Test

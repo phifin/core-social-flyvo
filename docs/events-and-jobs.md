@@ -100,6 +100,15 @@ not the full Phase 7 gate. Authenticated SSE now implements ADR-015's current
 identity proof/session boundary, bounded transport and early shutdown; final
 phase/package verification and independent acceptance remain separate.
 
+Round2/V0032 keeps ordering separate from activity decisions. Producer envelopes/
+payloads and receipt/fenced-worker semantics are unchanged. Only real Created or
+reaction null→type evidence settles new activity; an early update does not consume
+the initial origin, and a late origin is checked against the decision watermark
+even behind newer ordering. Owner snapshot versions are not substituted into the
+original envelope; they describe current contribution state and decision-through
+progress inside notification only. Current policy/suppression/deletion and the
+30-day replay horizon remain required. See the concrete [algorithm](work-packages/phase-7-8-plan.md).
+
 ### Phase 4 implemented worker extension
 
 `ExternalJobHandler` publishes prepare/effect/ack, not business callbacks into

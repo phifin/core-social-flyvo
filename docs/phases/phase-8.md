@@ -1,6 +1,6 @@
 # Phase 8 — search and scoped moderation operations
 
-Status: C and all D implemented locally; final full340-test, app/media Compose,
+Status: C and all D implemented locally; first-delivery full340-test, app/media Compose,
 pool10/50 all3200-request and secret-scan gates pass on2026-10-16. Pending main
 review, **neither phase accepted**. Main's [ADR-016 acceptance](../adr/016-moderation-private-payload-retention.md)
 at152a7c9 resolved P78-D1's design only. Phase7 internal gate passed before C, B code
@@ -10,6 +10,15 @@ Real C/D hashes are recorded in the fixed mailbox after their code commits.
 Main round1, 2026-10-17: combined package **CHANGES_REQUESTED** for notification
 finding P78-R1; see [mailbox](../agent-handoff.md). D's design decision stays
 resolved, but this does not separately accept Phase8 or authorize Phase9.
+
+Round2 stabilization2026-10-17 changes notification only, including new V0032;
+no C/D executable changes. Full388 PASS (57 fast+331 PG) reruns all Phase8/source/
+privacy/feed/moderation regressions, fresh32 and old migration checksums. Real
+app/media Compose upgrades the isolated prior31 volume to32 and readiness/security/
+resource probes pass. Refreshed operational/heavy evidence and P78-R1 response are
+in [Phase7 round2](phase-7.md) and the fixed mailbox. Older evidence below remains
+historical, never substituted for new-source measurements. Main alone resolves
+the finding/accepts either phase; Phase9 stays inactive.
 
 ## C — source-authorized PostgreSQL search
 

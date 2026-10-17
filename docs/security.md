@@ -155,7 +155,11 @@ Staff cannot sanction self, owner, or equal/higher effective role. Only owner ca
 Phase 7 slice A adds recipient-only semantic REST inbox/read/preferences/badge.
 Current owner proofs, ACTIVE accounts, bilateral blocks and recipient mutes/preferences
 filter every actor/target before names or counts. Notifications return no stored
-body or message fallback. Mentions cannot widen source audience. Read versions are
+body or message fallback. Mentions cannot widen source audience. Round2's
+independent activity-decision watermark cannot authorize a
+source or turn an update into activity. Current denial consumes pending old origins,
+and deletion/retention decisions survive missing group FKs. Only real unexpired
+origin evidence plus current owner eligibility may materialize activity. Read versions are
 observed, bulk read uses observed server versions, and scan-budget exhaustion is
 an explicit 503 rather than a hidden/truncated count. SSE now uses ADR-015's
 verified actual-expiry proof plus current session/account checks, bounded

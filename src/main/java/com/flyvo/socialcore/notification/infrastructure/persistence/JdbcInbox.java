@@ -42,20 +42,32 @@ public class JdbcInbox implements InboxRepository {
         new Object[] {c.recipient(), c.kind().name(), c.sourceType(), c.sourceId(), c.actor()};
     var previous =
         jdbc.queryForList(
-            "SELECT latest_source_version,active,notification_id FROM notification.source_state WHERE recipient_id=? AND kind=? AND source_type=? AND source_id=? AND actor_id=? FOR UPDATE",
+            "SELECT latest_source_version,activity_decided_version,notification_id FROM notification.source_state WHERE recipient_id=? AND kind=? AND source_type=? AND source_id=? AND actor_id=? FOR UPDATE",
             keyArgs);
-    if (!previous.isEmpty()
-        && ((Number) previous.getFirst().get("latest_source_version")).longValue()
-            >= c.sourceVersion()) return false;
+    long ordered =
+        previous.isEmpty()
+            ? -1
+            : ((Number) previous.getFirst().get("latest_source_version")).longValue();
+    long decided =
+        previous.isEmpty() || previous.getFirst().get("activity_decided_version") == null
+            ? -1
+            : ((Number) previous.getFirst().get("activity_decided_version")).longValue();
+    boolean origin = c.newActivity() && c.sourceVersion() > decided;
+    boolean closure = c.closesActivity() && c.sourceVersion() > decided;
+    if (ordered >= c.currentSourceVersion() && !origin && !closure) return false;
+    long observed = Math.max(ordered, c.currentSourceVersion());
+    // An early update may advance ordering without deciding initial activity.
+    // Only a real origin can materialize it; denial consumes the current snapshot.
+    // Deletion closes its own epoch, not a newer activation already observed.
+    if (!c.active() || origin) decided = observed;
+    else if (closure) decided = Math.max(decided, c.sourceVersion());
     UUID old = previous.isEmpty() ? null : (UUID) previous.getFirst().get("notification_id");
-    // Reactivation is new activity even when its deletion was not delivered.
-    // The producer before-state identifies it; source version rejects retries.
-    boolean activity = c.active() && c.newActivity();
+    boolean activity = c.active() && origin;
     UUID current = old;
     if (!c.active() && old != null)
       jdbc.update(
           "UPDATE notification.contribution SET active=false,source_version=?,source_event_id=? WHERE notification_id=? AND source_type=? AND source_id=? AND actor_id=?",
-          c.sourceVersion(),
+          observed,
           c.eventId(),
           old,
           c.sourceType(),
@@ -96,7 +108,7 @@ public class JdbcInbox implements InboxRepository {
         if (old != null && !old.equals(current))
           jdbc.update(
               "UPDATE notification.contribution SET active=false,source_version=? WHERE notification_id=? AND source_type=? AND source_id=? AND actor_id=?",
-              c.sourceVersion(),
+              observed,
               old,
               c.sourceType(),
               c.sourceId(),
@@ -110,18 +122,19 @@ public class JdbcInbox implements InboxRepository {
           c.actor(),
           c.sourceType(),
           c.sourceId(),
-          c.sourceVersion(),
+          observed,
           at(c.occurredAt()),
           c.reactionType());
     }
     jdbc.update(
-        "INSERT INTO notification.source_state(recipient_id,kind,source_type,source_id,actor_id,latest_source_version,active,notification_id,updated_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(recipient_id,kind,source_type,source_id,actor_id) DO UPDATE SET latest_source_version=EXCLUDED.latest_source_version,active=EXCLUDED.active,notification_id=EXCLUDED.notification_id,updated_at=EXCLUDED.updated_at",
+        "INSERT INTO notification.source_state(recipient_id,kind,source_type,source_id,actor_id,latest_source_version,activity_decided_version,active,notification_id,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(recipient_id,kind,source_type,source_id,actor_id) DO UPDATE SET latest_source_version=EXCLUDED.latest_source_version,activity_decided_version=EXCLUDED.activity_decided_version,active=EXCLUDED.active,notification_id=EXCLUDED.notification_id,updated_at=EXCLUDED.updated_at",
         c.recipient(),
         c.kind().name(),
         c.sourceType(),
         c.sourceId(),
         c.actor(),
-        c.sourceVersion(),
+        observed,
+        decided < 0 ? null : decided,
         c.active(),
         current,
         at(now));

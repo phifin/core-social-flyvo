@@ -30,10 +30,15 @@ accepted ADR-016: lossless payload split, verified encryption, explicit engineer
 holds, bounded retention, staff assignment/history and platform account actions.
 Suspend/reinstate never revives old sessions or deleted content. Protected
 [operations/metrics/dashboard](ops/moderation.md) reuse existing infrastructure.
-Final full340-test, app/media Compose, all3200 pool10/50 benchmark requests and
-secret scans pass; [Phase8 evidence](docs/phases/phase-8.md) records exact results
-and the unmet500ms feed p95 target. Main review/acceptance remains pending in the
-mailbox; no phase self-acceptance.
+Round1 full340-test, app/media Compose, all3200 pool10/50 benchmark requests and
+secret scans passed on2026-10-16; [Phase8 evidence](docs/phases/phase-8.md) preserves
+those historical results and the unmet500ms feed p95 target. Round2 notification
+ordering stabilization adds V0032 without changing applied migrations or promoting
+updates into new activity. Full388, real app/media upgrade/startup and a fresh
+3200/3200 pool10/50 benchmark pass (dense p95 still2.02–3.00s, not500ms);
+[Phase7 round2 evidence](docs/phases/phase-7.md) records refreshed gates, lifecycle/
+order tests and the conservative legacy-state limitation. P78-R1 remains open for
+main review; neither phase is self-accepted.
 Main has activated the [Phases 7–8 package](docs/work-packages/phase-7-8.md)
 for sequential development; activation does not accept either phase.
 

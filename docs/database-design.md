@@ -249,13 +249,18 @@ recipient row serializes before source/group/contribution writes and is retained
 independently of groups. Active source ordering outlives 90-day inbox cleanup;
 inactive ordering persists at least 120 days, with a 30-day event replay horizon.
 No notification foreign SQL consumer is added. See [implemented inbox](notifications.md)
-for scan/read/cleanup limits. Search and Phase 8 case extensions remain pending.
+for scan/read/cleanup limits. V0032 adds activity_decided_version independently of
+ordering: a late real origin may settle pending activity behind a newer update,
+but suppression/deletion decisions and pruning never reopen an old origin.
+Existing rows conservatively start decided through their latest version; no FK-null
+heuristic/historical repair. Previous migrations remain unchanged. Full package
+verification and main review/acceptance are separate.
 
 | Table | Important columns | Constraints / indexes |
 |---|---|---|
 | `notification.notification` | id, recipient_id FK account, kind, target_type, target_id uuid, grouping_key text, group_window_start?, activity_version bigint, read_version bigint default 0, last_activity_at, suppressed_at?, created_at, **V** | U(recipient_id,grouping_key); reaction key includes kind/target/hour, other keys include event ID; read_version <= activity_version; `(recipient_id,last_activity_at DESC,id DESC)`; partial unread index WHERE read_version < activity_version |
 | `notification.contribution` | id, notification_id FK, source_event_id uuid, actor_id FK account, source_type, source_id uuid, source_version bigint, active boolean, occurred_at | U(notification_id,source_event_id); U(notification_id,source_type,source_id,actor_id); update only for newer source version |
-| `notification.source_state` | recipient_id FK account, kind, source_type, source_id uuid, actor_id FK account, latest_source_version bigint, active boolean, notification_id? FK notification | PK(recipient_id,kind,source_type,source_id,actor_id); serializes updates across grouping windows, rejects old create after newer delete; retain through replay horizon even if notification purged |
+| `notification.source_state` | recipient_id FK account, kind, source_type, source_id uuid, actor_id FK account, latest_source_version bigint, activity_decided_version? bigint, active boolean, notification_id? FK notification | PK(recipient_id,kind,source_type,source_id,actor_id); decision NULL or0≤decision≤ordering; current owner ordering and independent origin/denial/deletion decision serialize across windows; retain both through replay horizon even if notification purged |
 | `notification.preference` | user_id FK account, kind, in_app_enabled boolean | PK(user_id,kind); defaults enabled except self-events |
 | `search.document` | target_type, target_id uuid, source_version bigint, title text, body text, search_vector tsvector, updated_at, deleted boolean | PK(target_type,target_id); GIN(search_vector); optional pg_trgm GIN on normalized name only after explain/benchmark |
 | `moderation.report` | id, reporter_id FK account, immutable target/scope/source actor IDs, category, status, assigned_to? FK account, resolved_at?, hold_until/reason?, retention_state, created_at, **V** | unique unresolved reporter/typed target; bounded scope/assignee/due/partial indexes; immutable identity/terminal state |

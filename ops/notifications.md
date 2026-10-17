@@ -78,6 +78,17 @@ access. Groups expire after 90 days; inactive ordering survives at least120 days
 and active ordering survives group deletion. NOTIFICATION_RETENTION is a bounded
 minute-keyed DB job. Unresolved DEAD work remains visible and retained.
 
+V0032 rollout: stop old HTTP/worker writers, migrate/validate32, then start the new
+artifact; preserve existing keys/volumes. No mixed-version rolling writer guarantee.
+Activity decisions now survive independently of source ordering and group pruning.
+An early update may leave decision NULL until its real origin arrives within the
+existing replay horizon; that is not permission to synthesize activity from updates.
+Legacy rows conservatively start decided through their stored source version,
+including NULL-FK suppressed/pruned rows. Already-acknowledged pre-fix losses cannot
+be safely inferred/repaired from old rows and are not automatically replayed.
+Do not clear decisions/receipts, reset ordering or infer pending work from a missing
+group. Any separately requested historical repair needs explicit scope and review.
+
 `503 NOTIFICATION_SCAN_LIMIT` is explicit bounded-work exhaustion (10,000 groups/
 contributions), never a partial unread badge. Inspect the recipient workload under
 restricted operational access and define a reviewed capacity change. Do not bypass

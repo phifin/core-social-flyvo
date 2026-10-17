@@ -2731,7 +2731,7 @@ paths:
       operationId: listNotifications
       summary: Current recipient inbox with filtered actor counts
       security: [{BearerAuth: []}]
-      description: Semantic items only, no stored message or body. Continue empty pages until nextCursor is null. New activity can reorder groups; refresh to recover moved items. Cursor expires after 30 minutes and binds viewer and size. A resource ceiling fails explicitly with 503 rather than returning partial counts.
+      description: Semantic items only, no stored message or body. Initial activity survives delayed or reordered source updates through its real origin event and current authorization; ordinary updates do not create activity or catch up suppressed/pruned origins. Continue empty pages until nextCursor is null. New activity can reorder groups; refresh to recover moved items. Cursor expires after 30 minutes and binds viewer and size. A resource ceiling fails explicitly with 503 rather than returning partial counts.
       parameters:
         - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
         - {name: after, in: query, schema: {type: string, maxLength: 2048}}
@@ -3085,7 +3085,11 @@ components:
         kind: {$ref: '#/components/schemas/NotificationKind'}
         targetType: {type: string, enum: [POST, COMMENT, FRIEND_REQUEST, COMMUNITY_INVITATION]}
         targetId: {type: string, format: uuid}
-        activityVersion: {type: integer, format: int64, minimum: 1}
+        activityVersion:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Advances only for effective real origin activity, including a genuine reaction reactivation. Type-only updates preserve existing read state. An early update cannot consume an otherwise eligible late initial origin.
         readVersion: {type: integer, format: int64, minimum: 0}
         lastActivityAt: {type: string, format: date-time}
         actorCount: {type: integer, format: int64, minimum: 1}

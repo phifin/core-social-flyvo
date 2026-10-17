@@ -26,6 +26,10 @@ public interface InboxRepository {
       UUID sourceId,
       long sourceVersion) {}
 
+  /**
+   * Original event version is origin/closure evidence, independently of the current owner snapshot.
+   * active already includes current source, recipient, preference and actor authorization.
+   */
   record Change(
       UUID eventId,
       UUID recipient,
@@ -34,11 +38,13 @@ public interface InboxRepository {
       UUID sourceId,
       UUID actor,
       long sourceVersion,
+      long currentSourceVersion,
       String targetType,
       UUID targetId,
       boolean active,
       String reactionType,
       boolean newActivity,
+      boolean closesActivity,
       Instant occurredAt) {}
 
   record Key(Instant time, UUID id) {}

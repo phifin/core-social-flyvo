@@ -3,6 +3,92 @@
 Baseline: clean master `14c983b`, executable baseline `32c1b1e`, V0001–V0026.
 Owner: development. This records implementation choices, not phase acceptance.
 
+## Round 2 stabilization — P78-R1, baseline5012a83
+
+1. Reproduce initial reaction loss through real producers and the receipt/effect/
+   fenced worker on PostgreSQL: LIKE→LOVE before dispatch, both v0→v1 and v1→v0;
+   also CommentUpdated before CommentCreated. Preserve failing evidence first.
+2. Separate ordering progress from the decision to materialize initial activity.
+   Inspect suppression/deletion/retention and reaction reactivation epochs before
+   selecting the exact persisted state/API refinement; document the concrete
+   algorithm here before implementation. Do not infer eligibility from a null
+   notification FK or turn every source update into new activity.
+3. Complete real-worker lifecycle/order matrix: duplicates/retry/fenced rollback,
+   delete-before-create, existing read group/type update, cross-hour reactivation,
+   current privacy/preferences/self/block/mute/account and retention/replay.
+4. Targeted notification/worker/native SSE, formatting/full Java21 verify,
+   OpenAPI/architecture/fresh+upgrade migrations, Compose config, pinned history/
+   staged/positive-control scans. Actual Compose startup if runtime wiring/schema
+   changes; heavy pool10/50 benchmark if shared owner/worker/resource paths change.
+   Keep older runs explicitly historical. Verified code commit, then separate
+   real-hash mailbox READY_FOR_REVIEW with P78-R1 response; main alone resolves it.
+
+Applied baseline migrations end atV0031; next isV0032 only if justified. No push,
+agents, phase acceptance or Phase9. Initial checkout/index clean.
+
+### Concrete algorithm selected after the red worker regressions
+
+`r2-initial-activity-before.log`:3/3 real-PG cases fail (empty inbox despite two
+committed notification receipts), no errors/skips. This experimentally reproduces
+main's code-inspection finding. No production fix existed during that run.
+
+V0032 adds one nullable `activity_decided_version` to notification.source_state,
+separate from latest_source_version. NULL means no origin activity or suppression/
+deletion decision has been observed yet, **not** that a missing notification FK
+is eligible. A nonnull value is a decision-through watermark, not a fabricated
+activation event version: all activity at/below it is materialized or consumed.
+Existing ambiguous rows are conservatively backfilled to their latest version,
+including suppressed/pruned NULL-FK rows; no automatic resurrection or historical
+repair of already-acknowledged pre-fix losses is claimed.
+
+Keep exact original event version and add the already-published current owner
+snapshot version to the private Change port. Content routing is inspected first,
+active recipients are batched, recipient guards acquired in UUID order, then one
+bounded source snapshot is refreshed **after** those guards. This prevents an old
+pre-lock snapshot from losing an origin behind a concurrent newer update. Current
+owner eligibility/preferences/account/graph proof stays required for every route.
+No source/business lock, owner API change, foreign SQL or worker framework change.
+
+An ordinary eligible update advances ordering/current contribution only, leaving
+an undecided origin pending and never creating a group. A real Created event or
+ReactionChanged(null→type) is the only positive activity evidence. It can settle
+an undecided/newer activity even when its event version is older than ordering,
+but only through current source authority and the independent decision watermark.
+After materialization the decision covers the current observed snapshot version,
+coalescing already-observed historical activations rather than counting a burst
+of old transitions twice. Existing type updates remain read and keep their group.
+
+A denied/inactive current source consumes activity through its current version;
+a real deletion/removal event also closes decisions through its own event version,
+even when a later restoration/reactivation is already current. An older delete
+cannot close a newer activation. No non-origin update can reopen a consumed
+decision. A new reaction activation above the decision watermark can create one
+current-hour activity, including activation arriving after a newer type update.
+All source/contribution/group/decision/receipt/fenced ack changes remain atomic.
+90/120-day cleanup and30-day replay limits are unchanged; decision watermark
+survives group FK SET NULL. No FK-null heuristic or globally ordered delivery.
+
+Refresh actual Compose startup forV0032 and rerun the heavy benchmark as conservative
+contention evidence for the additional bounded projection snapshot. Keep unchanged
+owner SQL/worker/pool/timeouts and all-success gate; old evidence stays historical.
+
+The first expanded targeted run retained one failed retention fixture:30 additional
+permutation cases made more than20 shared recipients old when the test advanced
+the global clock91days, so its single bounded cleanup page need not contain the
+test recipient. The fixture now starts91days earlier and ages only its own group,
+asserting exactly one removal in one unchanged bounded pass. No production cleanup
+limit, retention duration, source decision or denial assertion is weakened.
+
+Final round2 checkpoint: targeted116 PASS, full388 PASS (57 fast+331 PG), no
+failures/errors/skips/forced JVM exit. Fresh32/upgrade31/checksums/OpenAPI/
+architecture pass. Actual app/media Compose upgrades retained isolated31→32;
+readiness/security/resource probes pass, then task services stop with data/keys
+preserved. Fresh heavy pool10/50 tool passes3200/3200 requests; dense p95 remains
+2016.948–2995.735ms (500ms unmet), no capacity or causal attribution claim.
+303-file source manifest is unchanged across full/Compose/benchmark. History58/
+positive-control scans pass before commit; final staged/post-commit scans and
+actual fix/mailbox hashes follow the mandated code-then-handoff sequence.
+
 ## A — durable envelope and semantic inbox
 
 First preserve the worker transaction and expose the existing outbox envelope as

@@ -118,6 +118,11 @@ observed read/bulk-read versions, current actor/target filtering and bounded
 90-day group cleanup with retained source ordering. Source-authorized attribution
 contains at most three names; no content body is stored in inbox rows. The route
 planner and producer before-state handle precedence and reordered reactivation.
+V0032 separates current source ordering from a decided-activity watermark, so an
+early update cannot consume an otherwise eligible late origin. Only real origin
+events create activity; source denial/deletion/pruning decisions prevent catch-up
+or resurrection, and type updates keep existing read state. This is derived
+notification lifecycle state, not a grant or an invented owner activation version.
 Authenticated SSE is now implemented through ADR-015; the complete phase gate
 and independent review are recorded separately. See
 [notifications](notifications.md) for exact implementation limits.

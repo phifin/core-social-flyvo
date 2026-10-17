@@ -82,6 +82,9 @@ public class NotificationProjector implements EventConsumer {
     String sourceType, targetType;
     UUID target;
     boolean active, newActivity;
+    boolean closesActivity = event.type().endsWith("Deleted") || event.type().endsWith("Removed");
+    long currentVersion = event.aggregateVersion();
+    ContentNotificationSources.Type contentType = null;
     String reactionType = null;
     var routes = new ArrayList<NotificationRoutes.Route>();
     if (event.type().startsWith("Friend")) {
@@ -116,6 +119,7 @@ public class NotificationProjector implements EventConsumer {
     } else {
       sourceType = event.aggregateType().toUpperCase(Locale.ROOT);
       var type = ContentNotificationSources.Type.valueOf(sourceType);
+      contentType = type;
       var sources = content.inspect(type, List.of(source));
       if (sources.isEmpty()) return;
       var s = sources.getFirst();
@@ -136,18 +140,32 @@ public class NotificationProjector implements EventConsumer {
         }
         case REACTION -> {
           routes.add(new NotificationRoutes.Route(s.targetAuthorId(), Kind.REACTION_ON_CONTENT));
-          active =
-              active && s.version() == event.aggregateVersion() && !payload.path("type").isNull();
           reactionType = active ? s.reactionType() : null;
-          newActivity = active && payload.path("previousType").isNull();
+          newActivity = !payload.path("type").isNull() && payload.path("previousType").isNull();
+          closesActivity = payload.path("type").isNull();
         }
       }
     }
     var dedup = NotificationRoutes.deduplicate(actor, routes);
+    var activeRecipients =
+        accounts.activeIds(dedup.stream().map(NotificationRoutes.Route::recipient).toList());
     for (var route : dedup) {
-      var recipient = accounts.find(route.recipient());
-      if (recipient == null || !recipient.active()) continue;
-      store.guard(route.recipient(), now);
+      if (activeRecipients.contains(route.recipient())) store.guard(route.recipient(), now);
+    }
+    // Refresh once after the recipient serialization boundary: a concurrent
+    // projection must not let a pre-lock source snapshot consume a late origin.
+    if (contentType != null && !activeRecipients.isEmpty()) {
+      var sources = content.inspect(contentType, List.of(source));
+      if (sources.isEmpty()) return;
+      var current = sources.getFirst();
+      currentVersion = current.version();
+      if (currentVersion < event.aggregateVersion())
+        throw new IllegalStateException("UNAVAILABLE_SOURCE_VERSION");
+      active = current.active();
+      reactionType = active ? current.reactionType() : null;
+    }
+    for (var route : dedup) {
+      if (!activeRecipients.contains(route.recipient())) continue;
       var contribution =
           new InboxRepository.Contribution(
               UUID.randomUUID(), null, actor, sourceType, source, event.aggregateVersion());
@@ -166,11 +184,13 @@ public class NotificationProjector implements EventConsumer {
               source,
               actor,
               event.aggregateVersion(),
+              currentVersion,
               targetType,
               target,
               eligible,
               reactionType,
               newActivity,
+              closesActivity,
               event.occurredAt()),
           now);
     }
