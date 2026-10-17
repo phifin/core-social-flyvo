@@ -20,6 +20,7 @@ Records 001–012 are **Accepted for implementation** as of 2026-10-08; ADR-013 
 | [014](014-report-user-target-proof.md) | Accepted 2026-10-11: narrow moderation-to-profile API proof for USER reports; implemented/accepted with Phase 5 |
 | [015](015-notification-stream-authentication.md) | Accepted 2026-10-14: narrow notification-to-identity stream proof/current-session API; B implemented/verified, pending main phase review |
 | [016](016-moderation-private-payload-retention.md) | Accepted by main 2026-10-16: immutable moderation metadata/private payload split and bounded engineering holds; P78-D1 design resolved, implementation pending |
+| [017](017-account-erasure-and-recovery.md) | **Proposed**, 2026-10-17: account-owned owner erasure checkpoints, strict completion and independent recovery/exposure barrier; Phase 9A design only, D01–D10 awaiting main review |
 
 Future ADRs are required before approved-follow workflows, SaaS tenancy, native-client credential transport, account merging, rich HTML/documents/video, nonchronological ranking, broker introduction, service extraction, stricter media revocation, or changes to retention/privacy guarantees. Not every new endpoint needs an ADR.
 

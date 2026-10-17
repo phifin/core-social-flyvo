@@ -6,6 +6,12 @@ This package authorizes
 erasure, deployment or Phase9 acceptance. User opens a new chat manually:
 `Plan Phase 9A — Erasure, Recovery & Release Gates`.
 
+Design delivery proposed on2026-10-17 (awaiting main review):
+[A — owner/data inventory](phase-9a-data-inventory.md),
+[B — proposed ADR-017](../adr/017-account-erasure-and-recovery.md), and
+[C — implementation/release evidence plan](phase-9a-plan.md).
+Their presence activates no executable work or policy acceptance.
+
 ## Why a design gate now
 
 The accepted executable baseline is `d2a8e3c`, migrations V0001–V0032. Account
