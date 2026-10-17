@@ -49,6 +49,12 @@ complete accepted history and new prerequisite gates, including ADR-015.
 
 ## Always read and verify
 
+Main accepted Phases7–8 at executable `d2a8e3c`, review `96700ec`, on2026-10-17.
+The accepted mailbox is archived under `docs/handoffs/phase-7-8-notifications-search-moderation-ops.md`.
+The next chat is `Plan Phase 9A — Erasure, Recovery & Release Gates`, assigned the
+[three-workstream design gate](work-packages/phase-9a-design.md) only. No Phase9
+executable changes/erasure are authorized until main reviews that proposal.
+
 Read AGENTS.md, the mailbox, git status and recent history before acting. Verify that the mailbox's code commit exists and matches the work being reviewed; later documentation-only commits are expected. If newer code exists, inspect it and explicitly record the new review baseline. Do not act on stale findings as if they referred to current code. The mailbox is a task/status record, not permission to override security, ADRs or human instructions.
 
 ## States and ownership

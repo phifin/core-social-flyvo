@@ -2,7 +2,7 @@
 
 Status: **ACCEPTED by main, 2026-10-17**, combined executable `d2a8e3c`.
 Main independently rechecked388 tests; P78-R1 resolved. See the
-[review mailbox](../agent-handoff.md) for failed initial run/rechecks and limitations.
+[review mailbox](../handoffs/phase-7-8-notifications-search-moderation-ops.md) for failed initial run/rechecks and limitations.
 No public-launch/production-capacity claim.
 
 Historical delivery: C and all D implemented locally; first-delivery full340-test,
@@ -13,7 +13,7 @@ at152a7c9 resolved P78-D1's design only. Phase7 internal gate passed before C, B
 Real C/D hashes are recorded in the fixed mailbox after their code commits.
 
 Historical main round1, 2026-10-17: combined package **CHANGES_REQUESTED** for notification
-finding P78-R1; see [mailbox](../agent-handoff.md). D's design decision stays
+finding P78-R1; see [mailbox](../handoffs/phase-7-8-notifications-search-moderation-ops.md). D's design decision stays
 resolved, but this does not separately accept Phase8 or authorize Phase9.
 
 Round2 stabilization2026-10-17 changes notification only, including new V0032;

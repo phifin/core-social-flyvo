@@ -4,7 +4,7 @@ Status: **ACCEPTED by main, 2026-10-17**, executable `d2a8e3c`.
 P78-R1 resolved after algorithm/migration review and independent worker regressions.
 Main full recheck388 PASS (57 fast+331 integration); an initial unchanged Phase4
 fixture commit timeout, isolated58-test pass and full recheck are recorded in the
-[review mailbox](../agent-handoff.md). No historical loss repair or public-launch
+[review mailbox](../handoffs/phase-7-8-notifications-search-moderation-ops.md). No historical loss repair or public-launch
 claim. Operational/heavy measurements below remain developer evidence.
 
 Historical delivery: implemented; internal gate passed2026-10-15. This is slice B
