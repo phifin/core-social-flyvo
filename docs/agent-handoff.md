@@ -4,12 +4,14 @@
 
 - Task: phase-9a-erasure-recovery-design
 - Round: 1
-- State: READY_FOR_IMPLEMENTATION — documentation/design only
-- Last writer: main orchestrator, 2026-10-17
-- Next owner: development/design — user opens the named new chat manually
+- State: READY_FOR_REVIEW — A+B+C documentation/design delivered
+- Last writer: Phase 9A design thread, 2026-10-17
+- Next owner: main orchestrator/reviewer — review D01–D10; no implementation activated
 - New chat: `Plan Phase 9A — Erasure, Recovery & Release Gates`
 - Accepted executable baseline: `d2a8e3c2b5942f1019ba2a48157da6ce3a5ed662`
 - Phases7–8 main acceptance: `96700ecd81472534e535c65ee62bcbabdfdf9749`
+- Phase9A design commit: `ac82f4fb90d956266dcf842109fb5cb9d79c2757`
+- No new executable/code commit; accepted executable baseline remains unchanged.
 - Full prior review/findings/evidence: [accepted Phases7–8](handoffs/phase-7-8-notifications-search-moderation-ops.md).
 - P78-R1 resolved by main; P78-D1 design and implementation accepted.
 - Main remains orchestrator/reviewer only and exclusively performs origin pushes.
@@ -73,3 +75,92 @@ This audit note is subsequent documentation, not a self-referential push hash.
 
 No findings for this new design task yet. Prior phase findings remain preserved
 in the accepted archive; only main may resolve future findings/accept decisions.
+
+## Design delivery — A+B+C, 2026-10-17
+
+Completed the assigned design package in this thread; no intermediate inventory-only
+handoff. All content in design commit `ac82f4fb90d956266dcf842109fb5cb9d79c2757`:
+
+- **A** [owner/data inventory](work-packages/phase-9a-data-inventory.md): all56 actual
+  tables at V0001–V0032, storage versions/markers, projections, encrypted payloads,
+  history/holds/audit, durability and backup/operational copies. Each category has
+  current behavior, proposed action/clock/horizon/order/proof and decision IDs.
+  E1–E12 link inspected migration paths/code symbols. Feed owns no persistence.
+- **B** [ADR-017](adr/017-account-erasure-and-recovery.md), **Proposed** and indexed:
+  exact account-owned fixed roster/API/lifecycle/ack/checkpoint/fencing/retry/DEAD/
+  recovery semantics; DAG unchanged; conservative independent erasure/preservation
+  intents and restore exposure barrier. Alternatives and conflicts are explicit.
+  Preserve ADR-016, immutable metadata and others' text; held/unresolved private
+  payload does not become “complete” merely because access was revoked.
+- **C** [implementation/release plan](work-packages/phase-9a-plan.md): three large
+  sequential packages9A-I/II/III with internal gates, tentative migrations starting
+  V0033, all-owner scope, T01–T20 security/concurrency/replay/restore matrix, explicit
+  synthetic source/target layout, compatible rollback/forward-fix gates, local vs
+  public evidence and carried operability risks. None is activated by this delivery.
+
+### Decisions requested from main — all OPEN / Proposed
+
+| ID | Recommended choice requiring review |
+|---|---|
+| P9A-D01 | Fixed account progress roster; owners execute/ack through account.api; technical platform only, no reverse DAG edge |
+| P9A-D02 | Strict DELETED after every private-payload/object/manifest proof; WAITING_CASE/HOLD/RETENTION/EXTERNAL remains pending |
+| P9A-D03 | Delete subject authorship, preserve other users' content and immutable pseudonymous refs; last CUSTOM recipient→ONLY_ME; archived-owner FK retained; terminal reaction shape |
+| P9A-D04 | Bounded100-item passes plus explicit fixed root/aggregate work, existing ten-attempt worker, job-first technical cancellation and proven writer quiescence |
+| P9A-D05 | Preserve close204/request-only meaning; current audited ADMIN progress/resume, no revoked-session or new user status credential |
+| P9A-D06 | Fresh-proof new UUID on re-registration; release email/provider only after stale-proof drain; unique handle reservation30d then release |
+| P9A-D07 | Permanent terminal-account projection fences, guarded stale-snapshot replay/rebuild and historical pending/deleted reconciliation |
+| P9A-D08 | Independent conservative intent before close/hold commit, minimal resource/preservation ledger and verified current restore cut/exposure barrier |
+| P9A-D09 | Preserve ADR-016 holds/365d/immutability and live/backup key lifetime; finite audit disposal remains a separate policy/design gate |
+| P9A-D10 | Three sequential implementation packages; main review gates and external/product launch evidence remain distinct |
+
+Full alternatives/tradeoffs, exact API/preconditions, lock order, final certificate
+condition and unresolved policy conflicts are in ADR-017. User/environment inputs
+**P9A-U01–U06** remain explicitly required at their dependent gates: retention/minor/
+jurisdiction/audit/third-party-reference policy; providers/SMTP; storage/IAM/absolute
+writer bounds; independent backup/ledger/key authority and recovery objectives;
+admin gateway/MFA/operators; target hardware/capacity/abuse/security/license.
+Concrete recommendations are supplied; this is READY_FOR_REVIEW, not BLOCKED on
+missing production credentials. No credentials requested or external contact made.
+
+### Checks actually run in this design round
+
+- PASS all-table coverage:56 migration-created tables present in A,32 migrations,
+  latestV0032. No Java/SQL/config/test/ops/CI/OpenAPI executable diff against
+  accepted `d2a8e3c`; existing migration bytes and exact `.gitleaksignore` unchanged.
+- PASS5 design-document scoped stage,88 local Markdown links, table shapes and
+  staged whitespace/diff checks. Index initially empty; mailbox excluded from
+  the design commit. Mailbox links/whitespace/staged patch checked separately
+  before its own commit; final results are reported with that commit in chat.
+- PASS CI-pinned Gitleaks8.28.0 digest
+  `sha256:cdbb7c955abce02001a9f6c9f602fb195b7fadc1e812065883f695d1eeaba854`:
+  redacted design staged patch clean; full history63 commits before design and
+  **64 through ac82f4f** clean. Existing external synthetic positive control detects
+  the expected generic-api-key/exit1 and the script passes; no new ignores/rule
+  exclusions or history rewrite. Final post-mailbox history is checked in chat.
+- Evidence logs (temporary, untracked): `/tmp/social-p9a-design-checks.YV4cNs/`
+  `docs-checks.json`, `design-staged-scan.log`, `history-before-design.log`,
+  `history-through-design.log`, `positive-control.log`; later mailbox/final scans
+  use the same directory. Logs are not a durable remote CI artifact.
+- Application tests/format/Compose startup/heavy benchmark and restore/storage
+  drills **not rerun/executed** for unchanged executable code. Historical388-pass
+  evidence remains attributed to main's accepted recheck, not this task. All
+  T01–T20 and proposed production drills are future implementation requirements.
+
+### Limitations, findings response and exact next action
+
+No new code is delivered or accepted; ADR-017/retention/reuse/recovery policy is
+not self-accepted. No actual erasure/restore, Java/SQL/config/test change, agent
+spawning, push, external messaging, deployment, Phase9B or public launch occurred.
+Immutable audit's finite disposal path, held/unresolved evidence, actual storage
+writer bounds/backup/key/provider/admin/product gates remain open. R01 preserves
+the unchanged Phase4 fixture commit timeout + isolated58/full388 passing rechecks
+and unproven cause; R02 preserves dense feed p95≈2.02–3.00s, unmet500ms target.
+No capacity/legal compliance/remote CI or lost-notification repair claim.
+
+No new reviewer finding ID exists to respond to in round1. P78-R1 and P78-D1 main
+dispositions stay preserved; this thread does not reopen, resolve or re-accept them.
+Main next reviews A+B+C and records each D01–D10 disposition in this mailbox. If
+approved, main explicitly activates **9A-I only** for the user-opened named chat
+`Develop Phase 9A-I — Erasure Foundation & Identity`, using C's G0/I.1–I.3 scope.
+Otherwise main records stable review finding IDs; design thread responds to them.
+II/III, real data operations, launch and Phase9B require their separate gates.
