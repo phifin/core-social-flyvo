@@ -4,9 +4,9 @@
 
 - Task: phase-9a-erasure-recovery-design
 - Round: 1
-- State: READY_FOR_REVIEW — A+B+C documentation/design delivered
-- Last writer: Phase 9A design thread, 2026-10-17
-- Next owner: main orchestrator/reviewer — review D01–D10; no implementation activated
+- State: ACCEPTED — local synthetic design with ADR-017 C01–C05
+- Last writer: main orchestrator/reviewer, 2026-10-17
+- Next owner: main — archive design acceptance and activate 9A-I only
 - New chat: `Plan Phase 9A — Erasure, Recovery & Release Gates`
 - Accepted executable baseline: `d2a8e3c2b5942f1019ba2a48157da6ce3a5ed662`
 - Phases7–8 main acceptance: `96700ecd81472534e535c65ee62bcbabdfdf9749`
@@ -73,8 +73,8 @@ This audit note is subsequent documentation, not a self-referential push hash.
 
 ## Current design review findings
 
-No findings for this new design task yet. Prior phase findings remain preserved
-in the accepted archive; only main may resolve future findings/accept decisions.
+Main accepts design with binding refinements C01–C05 in ADR-017, recorded below.
+No unresolved design finding blocks local9A-I. Prior phase findings remain preserved.
 
 ## Design delivery — A+B+C, 2026-10-17
 
@@ -164,3 +164,46 @@ approved, main explicitly activates **9A-I only** for the user-opened named chat
 `Develop Phase 9A-I — Erasure Foundation & Identity`, using C's G0/I.1–I.3 scope.
 Otherwise main records stable review finding IDs; design thread responds to them.
 II/III, real data operations, launch and Phase9B require their separate gates.
+
+## Main design review — ACCEPTED with refinements, 2026-10-17
+
+Reviewed design `ac82f4f`, handoff `fbf2f5b`; clean initial index/tree; executable
+baseline stays `d2a8e3c`. Checked A/B/C against closure/account guards, actual
+moderation resolution/action payload writes, worker external prepare/effect/ack,
+profile and schema boundaries. This is document/static review, not runtime proof.
+
+| Decision | Main disposition |
+|---|---|
+| D01 | ACCEPT local: fixed owner roster/account progress; existing DAG, no reverse imports |
+| D02 | ACCEPT local: strict pending vs DELETED, with nonrecursive final certificate C02 |
+| D03 | ACCEPT synthetic policy only: scoped authorship/reference/tombstone rules; no production approval |
+| D04 | ACCEPT local: bounded passes/fencing/cancellation; unimplemented owners wait without unknown-kind dispatch (C03) |
+| D05 | ACCEPT local: guarded close request, audited current ADMIN progress/resume; no replacement status credential |
+| D06 | ACCEPT synthetic policy only: fresh-proof/new UUID, drain claims,30d handle reservation; U01 still required |
+| D07 | ACCEPT local: terminal fences/reconciliation, distinguish pending case work from final DELETED per C01 |
+| D08 | ACCEPT protocol only: independent intents/cuts; synthetic adapter boundary C04 and resource-export barrier C05; U04 unresolved |
+| D09 | ACCEPT: preserve ADR-016/keys/metadata; existing pending cases may resolve with guarded proof invalidation (C01) |
+| D10 | ACCEPT sequential packaging; activate I only after this review, II/III require main gates |
+
+C01 fixes an actual design ambiguity: ReportWorkflow.resolve always appends an
+encrypted action_detail, even when dismissing. Banning all pending-subject private
+payload writes would prevent cases leaving WAITING_CASE. Existing-root resolution
+is allowed with current authority and atomic guarded inventory/proof invalidation;
+final DELETED still rejects new private data. C02 removes self-reference from the
+12-step completion certificate. C03 prevents dispatching absent II handlers in I.
+C04 isolates synthetic authority and default activation; C05 preserves independent
+resource inventory before the last identifying mapping is removed. These conditions
+are now part of the accepted ADR, not deferred discretionary fixes by development.
+
+No production retention/identity reuse/legal/provider/ledger decision was made;
+U01–U06 remain open at their dependent gates. No actual erasure/restore, executable
+change, application test run, deployment or external coordination in this review.
+Next owner is a new implementation chat named in C, assigned I.1→I.2→I.3 in one
+package, not a return to inventory-only work. Main remains docs/reviewer only.
+
+Main checks: all56 migration-created tables appear in inventory,32 migrations;
+91 local links in the five reviewed/edited docs resolve; whitespace clean. No
+executable/config/test/migration or scanner-ignore change from accepted baseline.
+Pinned redacted history65 commits throughfbf2f5b clean; synthetic positive control
+PASS. Logs `/tmp/social-p9a-main-history.log`, `/tmp/social-p9a-main-positive.log`.
+Application/Compose/restore/benchmark tests not rerun for documentation-only work.

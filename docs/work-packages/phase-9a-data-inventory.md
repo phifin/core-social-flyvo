@@ -1,6 +1,7 @@
 # Phase 9A A — owner data and retention inventory
 
-Status: **Proposed; design only**, 2026-10-17. Task
+Status: **Reviewed/accepted for local synthetic design**, 2026-10-17, subject to
+ADR-017 C01–C05. Proposed actions below are not production policy or implemented code. Task
 `phase-9a-erasure-recovery-design`, executable baseline
 `d2a8e3c2b5942f1019ba2a48157da6ce3a5ed662`, inspected HEAD `8b933eb`.
 Later commits through that HEAD change documentation only. No live database,

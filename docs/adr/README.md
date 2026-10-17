@@ -18,9 +18,9 @@ Records 001–012 are **Accepted for implementation** as of 2026-10-08; ADR-013 
 | [012](012-quality-and-operations.md) | Real-PostgreSQL tests, architecture gates, observability and release discipline |
 | [013](013-local-object-storage-distribution.md) | Pinned PGSTY Silo for local Compose/Testcontainers; supersedes only ADR-008's local distribution |
 | [014](014-report-user-target-proof.md) | Accepted 2026-10-11: narrow moderation-to-profile API proof for USER reports; implemented/accepted with Phase 5 |
-| [015](015-notification-stream-authentication.md) | Accepted 2026-10-14: narrow notification-to-identity stream proof/current-session API; B implemented/verified, pending main phase review |
-| [016](016-moderation-private-payload-retention.md) | Accepted by main 2026-10-16: immutable moderation metadata/private payload split and bounded engineering holds; P78-D1 design resolved, implementation pending |
-| [017](017-account-erasure-and-recovery.md) | **Proposed**, 2026-10-17: account-owned owner erasure checkpoints, strict completion and independent recovery/exposure barrier; Phase 9A design only, D01–D10 awaiting main review |
+| [015](015-notification-stream-authentication.md) | Accepted 2026-10-14: narrow notification-to-identity stream proof/current-session API; implementation accepted with Phase7 on2026-10-17 |
+| [016](016-moderation-private-payload-retention.md) | Accepted by main 2026-10-16: immutable moderation metadata/private payload split and bounded engineering holds; implementation accepted with Phase8 on2026-10-17 |
+| [017](017-account-erasure-and-recovery.md) | Accepted by main2026-10-17 for local synthetic implementation with C01–C05; D01–D10 disposed, U01–U06 remain production gates; only9A-I activated, no code acceptance |
 
 Future ADRs are required before approved-follow workflows, SaaS tenancy, native-client credential transport, account merging, rich HTML/documents/video, nonchronological ranking, broker introduction, service extraction, stricter media revocation, or changes to retention/privacy guarantees. Not every new endpoint needs an ADR.
 

@@ -1,7 +1,8 @@
 # ADR-017 — Owner erasure checkpoints and recovery without resurrection
 
-Status: **Proposed**, 2026-10-17. Requested decision by main; no acceptance,
-implementation, data deletion, restore or deployment is implied. This completes
+Status: **Accepted for local synthetic implementation by main**, 2026-10-17,
+with the binding conditions below. No production policy, data deletion, restore
+or deployment is authorized. Only package9A-I is activated separately. This completes
 workstream B of the [Phase 9A design assignment](../work-packages/phase-9a-design.md).
 Evidence: [56-table inventory](../work-packages/phase-9a-data-inventory.md).
 Execution/test gates: [plan](../work-packages/phase-9a-plan.md).
@@ -29,7 +30,7 @@ DELETED means the approved scoped private-data erasure is complete with enumerat
 minimal metadata/backup exceptions. It is not a promise of anonymity or removal
 from another person's downloads, authored words or provider systems.
 
-## Decision register (all awaiting main review)
+## Decision register (main dispositions below)
 
 | ID | Recommended engineering decision | Alternative / cost |
 |---|---|---|
@@ -43,6 +44,67 @@ from another person's downloads, authored words or provider systems.
 | P9A-D08 | Independent conservative intent ledger before close commit; immutable resource manifests, verified current recovery cut, preservation-control recovery and fail-closed exposure barrier | DB-only manifest rolls back with old backup; asynchronous export alone leaves a loss window; all-or-nothing DB/external atomicity is not available. Conservative false-positive quarantine trades availability for no resurrection |
 | P9A-D09 | Preserve ADR-016 unchanged:365d eligibility, unresolved/held preservation, immutable metadata/audit and key lifetime. Declare audit finite-disposal policy unresolved | Accelerated evidence erase or privileged audit deletion needs a separately accepted superseding ADR, not a job exception or shared-key destruction |
 | P9A-D10 | Three sequential implementation packages with internal gates; local synthetic evidence separate from environment/product/public-release signoff | One thread per small module creates partial handoffs; one unreviewed package spanning public rollout hides external dependencies |
+
+Main accepts D01–D10 for the local synthetic engineering profile, subject to the
+conditions below. D02/D03/D06 retention/reuse semantics are not production product
+approval; D08 accepts the protocol, not a production provider or durability claim.
+D10 activates I only; II/III still require separate main gates.
+
+### Binding main review conditions — 2026-10-17
+
+1. **P9A-C01, pending moderation liveness:** distinguish DELETION_PENDING from
+   final DELETED. Existing scoped cases involving a pending subject must still
+   support authorized review/resolution/dismissal, including their mandatory
+   encrypted action detail. `ReportWorkflow.resolve` always calls appendCase;
+   `JdbcModerationActions.appendCase` inserts action_detail even for dismissal.
+   A blanket ban would strand WAITING_CASE forever. Preserve ADR-016: no fake
+   metadata-only resolution, premature blank payload or trigger exemption.
+   For a bounded structural subject set, acquire all account guards in UUID order,
+   then affected erasure step guards before community/case locks. In the same
+   transaction invalidate any stale moderation/completion proof and include new
+   payload in the pending subject's inventory. Retention starts from the actual
+   terminal case time. Final DELETED forbids new subject-private payload; no new
+   roots for a pending subject through ordinary submissions. Existing source
+   actions still obey owner policy (never restore author-deleted content).
+   Required II tests: close with OPEN case, staff dismiss/resolve afterward,
+   WAITING_CASE→WAITING_RETENTION→DONE only after legitimate redaction; append
+   versus proof/finalization both orders, rollback and no lock-order inversion.
+2. **P9A-C02, nonrecursive certificate:** the completion certificate binds the
+   immutable request/protocol/policy/verification round, resource manifest digest
+   and current versions/proofs of the eleven prerequisite steps. It excludes
+   the completion-manifest step's own receipt/version and final DELETED event.
+   Export outside locks, then exclusively guard subject and steps, compare the
+   captured prerequisite vector, and atomically mark completion-manifest DONE
+   and account DELETED with audit/outbox. Changed vector rejects the stale receipt;
+   repeat with a new immutable attempt ID/digest. Never require a hash containing
+   itself, or mark the final step DONE before verifying its external receipt.
+   Implement the protocol/negative guards in I; successful finalization waits II.
+3. **P9A-C03, bounded activation:** I implements only its assigned handlers; fixed
+   unimplemented owner steps remain WAITING_DEPENDENCY with a safe explicit reason.
+   Do not enqueue unknown JobHandler kinds, produce retry/DEAD storms, silently
+   omit those roster entries or mark them DONE. Register/enable later handlers
+   only at their accepted package gate and resume by reconciliation. No I account
+   reaches DELETED, even an apparently empty account; roster completeness is not
+   guessed from enabled consumers. Add a real worker negative regression.
+4. **P9A-C04, synthetic-only authority:** name/version the local engineering
+   policy in code/docs and every request/certificate. U01–U06 remain unresolved
+   for production. A durable isolated test/local archive can prove protocol
+   mechanics, not independent production failure-domain/latest-cut guarantees.
+   Test fixtures must never silently serve as a runtime archive fallback. Missing
+   configured archive/verified receipt fails strict close closed, not legacy204.
+   New destructive handlers/reconciliation must not auto-run on existing developer
+   data or normal default startup. Enable only explicitly isolated synthetic
+   environments in this assignment; production remains unconfigured/disabled.
+5. **P9A-C05, manifest before loss:** export/verify resource-ID chunks before
+   removing the last owner mapping needed to enumerate them. Preserve retryable
+   intent and mapping while export is unavailable. Final certificate includes
+   complete resource receipts. An asset created after a backup but lost from the
+   restored DB must remain discoverable from the independent manifest/inventory;
+   asynchronous export without a deletion barrier is not proof. I implements
+   chunk/receipt mechanics; actual media purge/restore tests belong to II/III.
+
+These clarify the selected design, not acceptance of code. Implementation must
+report any incompatible discovery rather than weaken these conditions.
 
 Main can accept engineering decisions only; the following inputs need the actual
 product/environment owner. None prevents this concrete proposal or makes design
@@ -122,10 +184,11 @@ logged out, status via approved support/operator process, not a credential bypas
 
 The final account transaction must simultaneously prove: status DELETION_PENDING
 for this request/lifecycle generation; exact current protocol/policy/roster with
-every required step present and DONE; each proof bound to that step's current
+all eleven prerequisite steps present and DONE; each proof bound to that step's current
 version and verification round; no unresolved failure/wait, unexported resource
 chunk, new structured subject association or outstanding writer intent; and the
-independently verified completion receipt for that exact immutable proof digest.
+independently verified completion receipt for that exact nonrecursive proof digest
+(C02). Mark the twelfth completion-manifest step DONE in this final transaction.
 Take subject exclusive then all step rows before checking/changing state. Persist
 DELETED, final timestamp/version, minimal audit and AccountStatusChanged fact
 atomically. Safe historical DEAD/outbox/audit metadata and expiring restricted
@@ -284,8 +347,10 @@ replace erasure proof or source backfill of documents absent from its own index.
 
 The moderation guard for **new** private payloads must cover referenced source/
 reporter/actor/assignee subject IDs without adding earlier locks under a case root.
-No new private payload about a terminal subject through normal account actions;
-existing root assignment/hold/history may continue with minimal IDs only. Cases
+No new private payload about a DELETED subject is permitted. For DELETION_PENDING,
+existing-case review/resolution and its required payload remain allowed only under
+C01's guarded inventory/proof-invalidation protocol; new ordinary roots are denied.
+Existing root assignment/hold/history may continue under their existing rules. Cases
 about other users can mention someone in free text; this policy covers structural
 subject association and does not pretend to discover every natural-language mention.
 Unexpected new structured subject association invalidates prior proof and triggers
@@ -430,6 +495,6 @@ or retired keys while live ciphertext remains is a separate unresolved policy
 change. An optional engineering-default acceptance does not resolve U01–U06 or
 authorize Phase9B, public launch, real erasure or restore.
 
-Main reviews D01–D10 together against the inventory and plan, records dispositions,
-then explicitly activates the first proposed implementation package. Design remains
-READY_FOR_REVIEW until that review; development cannot self-accept this ADR.
+Main reviewed D01–D10 against the inventory, plan and relevant executable paths
+and accepts this design with C01–C05 for local synthetic implementation. The mailbox
+activates I only. This does not resolve U01–U06, accept code or enable II/III/launch.

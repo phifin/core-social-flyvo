@@ -1,8 +1,9 @@
 # Phase 9A C — implementation packages and release evidence
 
-Status: **Proposed; not activated**, 2026-10-17. A+B+C design delivery for main
-review, not implementation completion. [Inventory A](phase-9a-data-inventory.md)
-covers56 actual tables at `d2a8e3c`; [proposed ADR-017 B](../adr/017-account-erasure-and-recovery.md)
+Status: **9A-I ACTIVATED by main**, 2026-10-17, local synthetic scope only.
+II/III remain unactivated. ADR-017 C01–C05 are binding prerequisites/refinements,
+not implementation completion. [Inventory A](phase-9a-data-inventory.md)
+covers56 actual tables at `d2a8e3c`; [accepted local ADR-017 B](../adr/017-account-erasure-and-recovery.md)
 defines decisions D01–D10, user/environment inputs U01–U06, fixed roster, API,
 race/retry/restore contracts. Do not treat this plan as Phase9B authorization.
 
@@ -46,7 +47,7 @@ Three coherent capability groups, sequential inside one assignment:
    scheduler/reconciliation, admin progress/resume and API authorization. Owner
    handlers call account.api; account never calls higher owners. Preserve close
    If-Match/recent-auth/community blocker/session revocation. Add one-way completion
-   guard now that refuses DONE if **any** owner lacks a real proof; no fake handlers
+   guard now that refuses completion if **any** owner lacks a real proof; no fake handlers
    or “disabled module = empty” shortcuts. Full finalization waits for II.
 2. Conservative independent PREPARED intent/export receipt before close commit,
    COMMITTED/completion journal mechanics and technical platform scoped cancellation.
