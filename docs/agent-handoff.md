@@ -58,7 +58,18 @@ rerun is needed for unchanged executable code. Commit verified design documents,
 then separate mailbox commit with real hash, decision requests, limitations and
 READY_FOR_REVIEW to main. Do not self-accept, implement the proposal, or push.
 
-## Review findings
+## Main remote checkpoint — 2026-10-17
+
+Main performed normal fast-forward push of reviewed Phases7–8 plus the Phase9A
+design-only assignment to `origin` (`https://github.com/phifin/core-social-flyvo.git`),
+branch `master`, from `14c983b6502d394bc4e8fc892d6395d0cbbaf076` to
+`6f71d393cc585ddf8daebcfd99fc91072c07b735`; ls-remote confirmed that exact hash.
+Outgoing14 commits inspected; final pinned redacted history scan62 commits clean,
+staged docs/link/whitespace checks clean, archive matches accepted mailbox except
+relative links. No force-push/history rewrite, remote CI claim, release or deployment.
+This audit note is subsequent documentation, not a self-referential push hash.
+
+## Current design review findings
 
 No findings for this new design task yet. Prior phase findings remain preserved
 in the accepted archive; only main may resolve future findings/accept decisions.
