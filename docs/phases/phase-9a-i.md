@@ -4,6 +4,25 @@ Implementation delivery for main review, not acceptance/launch. Assignment `edb3
 executable baseline `d2a8e3c`; accepted local design `eab4da6`, ADR-017 C01–C05.
 Only I.1→I.2→I.3; no II/III, real erasure/restore, agents, push or deployment.
 
+## Main review round 1 — 2026-10-18
+
+**CHANGES_REQUESTED**, executable `ed125b719ed47d5cb97a33157ad3e49977587376`,
+handoff `a9f4d78`. Main's code inspection found two open P2 issues:
+P9AI-R1 (onboarding expiry checked with pre-lock time, requiring proof-chain bound
+review) and P9AI-R2 (old intent export/recovery can affect a later request for the
+same user). These are not newly reproduced runtime failures. Full scenarios,
+regression gates and the combined fix assignment are in the
+[fixed mailbox](../agent-handoff.md). Developer evidence below remains attributed
+to development and does not constitute acceptance. No II/III activation or push.
+
+Main independently ran Java21 full verify on the delivered executable:418 tests
+(62 fast+356 IT), zero failures/errors/skips, BUILD SUCCESS in5m45s, finished
+2026-10-18 12:52:57+07 (`/tmp/social-p9ai-main-verify.log`). Final345-file manifest,
+Compose app/media config, migration diff, whitespace, pinned69-commit history
+secret scan and synthetic positive control also pass. Main did not rerun the
+benchmark/native deployment. Passing existing tests does not resolve the two
+uncovered interleavings; the same development chat owns the combined fix package.
+
 ## Delivered scope and internal gates
 
 I.1: account-owned request/intents/fixed12-step roster, scalar bounded checkpoints,

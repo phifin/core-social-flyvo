@@ -4,10 +4,10 @@
 
 - Task: phase-9a-i-erasure-foundation-identity
 - Round: 1
-- State: READY_FOR_REVIEW — local synthetic implementation only, not accepted
-- Last writer: Phase9A-I development, 2026-10-18
-- Next owner: main reviewer; no automatic II/III activation
-- New chat: `Develop Phase 9A-I — Erasure Foundation & Identity`
+- State: CHANGES_REQUESTED — review round 1; local synthetic only, not accepted
+- Last writer: main reviewer, 2026-10-18
+- Next owner: existing Phase9A-I development chat; fix both findings below
+- Reuse chat: `Develop Phase 9A-I — Erasure Foundation & Identity`
 - Accepted executable baseline: `d2a8e3c2b5942f1019ba2a48157da6ce3a5ed662`
 - Accepted design: original `ac82f4f`, main decision/refinements `eab4da6`
 - Actual implementation commit: `ed125b719ed47d5cb97a33157ad3e49977587376`
@@ -266,6 +266,106 @@ including failed benchmark/native probes, remain under the evidence root above.
 These are development responses, **not reviewer resolution/acceptance**.
 
 ## Main review requested / next gate
+
+### Main review round 1 — CHANGES_REQUESTED, 2026-10-18
+
+Reviewed executable `ed125b719ed47d5cb97a33157ad3e49977587376`, delivered by
+documentation-only `a9f4d78`. No implementation changes by main. Both findings
+below are **code-inspection findings**, not newly reproduced runtime failures.
+Existing green tests do not cover these interleavings. G1 is not accepted;
+II/III remain inactive. C01–C05 developer responses remain preserved above;
+there is no blanket acceptance of the proof/drain protocol.
+
+Independent main checks on this unchanged executable:
+
+- Java21 `./mvnw -B -ntp verify`: **418 PASS (62 fast +356 IT)**, zero
+  failures/errors/skips,5m45s, finished2026-10-18 12:52:57+07. Includes formatting,
+  architecture/OpenAPI and actual PostgreSQL/storage tests. Raw local log:
+  `/tmp/social-p9ai-main-verify.log` (temporary, not committed).
+- Developer's final345-file executable manifest rechecked: all hashes match.
+  Diff against activation shows only new migrations V0033–V0037, not edits to
+  V0001–V0032. Code diff whitespace and Compose app/media config checks pass.
+- Pinned Gitleaks8.28.0 full history through `a9f4d78`:69 commits, no leaks;
+  synthetic external positive-control wrapper passes (expected detection).
+- Main did not rerun the heavy benchmark or native fresh/upgrade deployment;
+  those remain the developer's attributed evidence, not independent reruns.
+  No remote operation, production operation or code change in this review.
+
+#### P9AI-R1 — P2 — Recheck onboarding expiry after lock acquisition (OPEN)
+
+Anchors: `OAuthAuthentication.java:248–260`,
+`JdbcIdentityRepository.java:425–434`, `Authentication.java:130–158`, and
+`IdentityErasure.java:99–114` (all under the existing identity module).
+`register` samples application time before `consumeOnboarding` executes its
+UPDATE. The SQL expiry predicate uses that constant even after waiting for the
+onboarding row lock. An attempt entering just before expiry can acquire the lock
+just after expiry and still consume the capability; `initiate` then samples new
+time and issues another full 30-minute registration intent. A short wait across
+the boundary is sufficient, even within the configured lock timeout.
+
+Required outcome: expired onboarding cannot mint a successor proof after a lock
+wait. Audit the callback→onboarding→mailbox chain for the same time-of-check /
+time-of-use issue and document a defensible absolute bound for the 50-minute
+claim-release barrier. This review establishes the stale expiry check, not an
+end-to-end reproduced post-erasure takeover. Do not claim that regression proven
+without exercising the complete chain. Do not simply increase the wait constant
+or weaken fresh-proof requirements. Use a consistent clock contract and either
+post-lock validation or inherited absolute limits as appropriate.
+
+Regression gate: deterministic real PostgreSQL row-lock/latch cases before, at
+and after expiry; rejected consumption must roll back and produce no new intent
+or mail. Cover the full old-proof/claim-release boundary and fresh-proof new-UUID
+success, including any callback waits. Explain clock control rather than relying
+on arbitrary sleeps. Preserve existing provider/CSRF/refresh denials.
+
+#### P9AI-R2 — P2 — Bind recovery receipts to the exact request (OPEN)
+
+Anchors: `account/application/Erasures.java:77–101,368–373` and
+`account/application/ErasureExports.java:57–79` (under
+`src/main/java/com/flyvo/socialcore/`). `preparedRecovered(A)` tests only whether
+any request exists for A's user. `addExport` can mix A's intent/generation with
+the current request B's timestamp. COMMITTED completion/failure likewise finds
+the current RECOVERY_INTENT step by user, without matching intent/request.
+
+Failure sequence: close attempt A obtains its PREPARED receipt, then fails the
+current-version/authority recheck; a later valid close B at a new account version
+creates request B. A's still-queued PREPARED job runs after B, fabricating
+COMMITTED(A) although A never committed. Its receipt can mark B's recovery step
+DONE before B's own COMMITTED receipt is verified. A stale failure can also
+affect B's current recovery state. This corrupts immutable recovery history and
+the proof gating owner execution; it is not a claim that an ACTIVE account is
+directly erased. Existing post-network recheck tests stop before this later
+request/delayed-delivery sequence.
+
+Required outcome: all reconciliation and export completion/failure mutations
+must bind to the exact immutable request/intent, lifecycle generation and
+applicable current execution/round. An unmatched PREPARED is not evidence of a
+commit and must remain uncommitted (or explicitly quarantined); do not rewrite
+or delete archive history to mask the issue. Preserve legitimate same-intent
+historical backfill and fenced retry/rollback behavior.
+
+Regression gate: real PostgreSQL, real worker and archive; A rejected after
+append, B valid at a new version, delayed A delivery after B while B's COMMITTED
+export is held/failing. Assert no COMMITTED(A), no B-DONE/proof from A, no stale
+failure poisoning B, and normal progression only from B's own valid receipt.
+Also cover same-intent recovery, duplicate delivery and fenced rollback.
+
+### Next development package — both fixes, one sequential handoff
+
+Reuse the named existing development chat. Set IN_PROGRESS, preserve each finding
+verbatim and append per-ID responses/evidence. First fix request/receipt binding
+(P9AI-R2), then proof expiry/bound (P9AI-R1), then run combined regression gates.
+Main does not prescribe a parallel abstraction or a new dependency. Stay within
+I.1–I.3 and existing owner APIs. If a schema change is necessary, allocate V0038
+or later after inspecting HEAD; never edit V0001–V0037.
+
+Run targeted tests plus formatting/full Java21 `./mvnw verify`, denied-access,
+real-PG concurrency, architecture/OpenAPI and affected operational checks.
+Update protocol/phase docs and executable evidence manifest. Rerun runtime or
+benchmark checks when affected; distinguish new checks from prior evidence and
+retain failures. Commit verified code first, then a separate mailbox commit
+with its real code hash, READY_FOR_REVIEW and next owner main. Only main resolves
+these IDs. No push, agents, II/III, real erasure/restore or deployment.
 
 Review `ed125b719ed47d5cb97a33157ad3e49977587376` against ADR-017 C01–C05 and the
 whole I.1–I.3 assignment. In particular disposition the implemented owner protocol,
