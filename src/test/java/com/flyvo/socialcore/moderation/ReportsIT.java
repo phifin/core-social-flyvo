@@ -40,16 +40,19 @@ class ReportsIT {
   @Container
   static final PostgreSQLContainer PG =
       new PostgreSQLContainer(
-          "postgres@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873");
+              "postgres@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873")
+          .withDatabaseName("p9a_reports");
 
   @DynamicPropertySource
   static void props(DynamicPropertyRegistry r) {
+    com.flyvo.socialcore.support.SyntheticErasureFixture.enable(r);
     r.add("app.database.url", PG::getJdbcUrl);
     r.add("app.database.username", PG::getUsername);
     r.add("app.database.password", PG::getPassword);
   }
 
   @Autowired Reports reports;
+  @Autowired com.flyvo.socialcore.account.api.AccountErasure erasure;
   @Autowired com.flyvo.socialcore.moderation.api.CaseOperations operations;
   @Autowired AccountCommands accounts;
   @Autowired Profiles profiles;
@@ -81,6 +84,9 @@ class ReportsIT {
               return u;
             });
     var sid = UUID.randomUUID();
+    // These source-policy races deliberately call the trusted account primitive.
+    // Pre-export its conservative intent before entering the race transaction.
+    erasure.exportPrepared(tx.execute(s -> erasure.prepare(id, 0)));
     var t = clock.instant().atOffset(ZoneOffset.UTC);
     jdbc.update(
         "INSERT INTO identity.auth_session(id,user_id,created_at,last_seen_at,authenticated_at,idle_expires_at,absolute_expires_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",

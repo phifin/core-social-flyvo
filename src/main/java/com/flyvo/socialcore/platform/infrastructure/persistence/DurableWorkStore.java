@@ -63,6 +63,27 @@ public class DurableWorkStore implements DurableWork {
     if (handlers.isEmpty()) return true;
     record Job(UUID id, String kind, String payload, long generation, int attempts) {}
     var kinds = handlers.stream().map(com.flyvo.socialcore.platform.api.JobHandler::kind).toList();
+    tx.executeWithoutResult(
+        s -> {
+          var args = new java.util.ArrayList<Object>(kinds);
+          args.add(time(clock.instant()));
+          jdbc.query(
+              "SELECT id,kind,payload->>'data' FROM platform.job WHERE kind IN ("
+                  + String.join(",", java.util.Collections.nCopies(kinds.size(), "?"))
+                  + ") AND status='RUNNING' AND attempts>=10 AND lease_until<=? ORDER BY lease_until,id LIMIT 1 FOR UPDATE SKIP LOCKED",
+              r -> {
+                String kind = r.getString(2);
+                handlers.stream()
+                    .filter(h -> h.kind().equals(kind))
+                    .findFirst()
+                    .orElseThrow()
+                    .failed(r.getString(3), 10);
+                jdbc.update(
+                    "UPDATE platform.job SET status='DEAD',lease_owner=NULL,lease_until=NULL,last_error_code='FINAL_LEASE_EXPIRED' WHERE id=?",
+                    r.getObject(1, UUID.class));
+              },
+              args.toArray());
+        });
     var claim =
         tx.execute(
             status -> {
@@ -117,6 +138,21 @@ public class DurableWorkStore implements DurableWork {
                 != 1) throw new IllegalStateException("JOB_LEASE_EXPIRED");
           });
     } catch (RuntimeException failure) {
+      tx.executeWithoutResult(
+          s -> {
+            if (!jdbc.queryForList(
+                    "SELECT id FROM platform.job WHERE id=? AND status='RUNNING' AND lease_owner=? AND lease_generation=? AND lease_until>? FOR UPDATE",
+                    claim.id(),
+                    owner,
+                    claim.generation(),
+                    time(clock.instant()))
+                .isEmpty())
+              handlers.stream()
+                  .filter(h -> h.kind().equals(claim.kind()))
+                  .findFirst()
+                  .orElseThrow()
+                  .failed(claim.payload(), claim.attempts());
+          });
       finish(
           new Claim(claim.id(), owner, claim.generation(), claim.attempts(), null, null),
           "JOB_HANDLER_FAILED");
@@ -373,6 +409,10 @@ public class DurableWorkStore implements DurableWork {
               owner,
               time(clock.instant().plusSeconds(60)),
               id);
+          jdbc.update(
+              "INSERT INTO platform.work_effect(job_id,generation,started_at) SELECT id,lease_generation,? FROM platform.job WHERE id=?",
+              time(clock.instant()),
+              id);
           return jdbc.queryForObject(
               "SELECT j.lease_generation,j.attempts,p.ciphertext,p.expires_at FROM platform.job j LEFT JOIN platform.secret_mail_payload p ON p.job_id=j.id WHERE j.id=?",
               (rs, n) ->
@@ -397,6 +437,13 @@ public class DurableWorkStore implements DurableWork {
     return Boolean.TRUE.equals(
         tx.execute(
             status -> {
+              // The original SMTP invocation has returned even when cancellation fenced its ack.
+              // An unacknowledged crashed invocation stays unfinished; expiry is NOT drain proof.
+              jdbc.update(
+                  "UPDATE platform.work_effect SET ended_at=GREATEST(started_at,?) WHERE job_id=? AND generation=? AND ended_at IS NULL",
+                  time(clock.instant()),
+                  claim.id(),
+                  claim.generation());
               boolean dead =
                   error != null
                       && (claim.attempts() >= 10
@@ -549,7 +596,7 @@ public class DurableWorkStore implements DurableWork {
               "DELETE FROM platform.secret_mail_payload WHERE job_id IN (SELECT p.job_id FROM platform.secret_mail_payload p JOIN platform.job j ON j.id=p.job_id WHERE p.expires_at<=? OR j.status='DEAD' ORDER BY p.expires_at,p.job_id LIMIT 500)",
               now);
           jdbc.update(
-              "DELETE FROM platform.job WHERE id IN (SELECT j.id FROM platform.job j WHERE j.status='COMPLETED' AND j.completed_at<? AND NOT EXISTS(SELECT 1 FROM platform.secret_mail_payload p WHERE p.job_id=j.id) ORDER BY j.completed_at LIMIT 500)",
+              "DELETE FROM platform.job WHERE id IN (SELECT j.id FROM platform.job j WHERE j.status='COMPLETED' AND j.completed_at<? AND NOT EXISTS(SELECT 1 FROM platform.secret_mail_payload p WHERE p.job_id=j.id) AND NOT EXISTS(SELECT 1 FROM platform.work_effect e WHERE e.job_id=j.id AND e.ended_at IS NULL) ORDER BY j.completed_at LIMIT 500)",
               time(clock.instant().minusSeconds(30 * 86400L)));
           var cutoff = time(clock.instant().minusSeconds(30 * 86400L));
           jdbc.update(

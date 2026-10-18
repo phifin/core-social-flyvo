@@ -71,6 +71,33 @@ class ArchitectureTest {
   }
 
   @Test
+  void erasureAcknowledgementsComeOnlyFromAssignedOwnerHandlers() {
+    var methods =
+        java.util.Set.of(
+            "begin",
+            "advance",
+            "recordResources",
+            "resourcesExported",
+            "resourceIds",
+            "stepDone",
+            "executionFailed");
+    var allowed =
+        java.util.Set.of(
+            ROOT + ".account.application.Erasures",
+            ROOT + ".account.application.ErasureExports",
+            ROOT + ".account.application.ErasureTechnical",
+            ROOT + ".identity.application.IdentityErasure",
+            ROOT + ".profile.application.ProfileErasure");
+    PRODUCTION.stream()
+        .flatMap(c -> c.getMethodCallsFromSelf().stream())
+        .filter(
+            c ->
+                c.getTargetOwner().getName().equals(ROOT + ".account.api.AccountErasure")
+                    && methods.contains(c.getTarget().getName()))
+        .forEach(c -> assertThat(allowed).contains(c.getOriginOwner().getName()));
+  }
+
+  @Test
   void deliberatelyForbiddenFixtureIsDetected() {
     var fixtures = new ClassFileImporter().importPackages("com.flyvo.archfixtures");
     var result = ModuleRules.boundaries("com.flyvo.archfixtures").evaluate(fixtures);

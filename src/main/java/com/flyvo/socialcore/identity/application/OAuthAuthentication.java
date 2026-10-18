@@ -123,6 +123,10 @@ public class OAuthAuthentication {
       result =
           tx.execute(
               status -> {
+                // A consumed state is not an unlimited network-completion credential. This
+                // bounds pre-erasure anonymous proof chains before unique claims are released.
+                if (!clock.instant().isBefore(transaction.expiresAt()))
+                  throw new Failure(401, "INVALID_OAUTH_TRANSACTION");
                 var existing = store.external(proof.provider(), proof.issuer(), proof.subject());
                 if (!"LOGIN".equals(transaction.intent())) {
                   var actor = new ActorContext(transaction.userId(), transaction.sessionId());

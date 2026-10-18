@@ -84,6 +84,13 @@ and email, permits missing email and uses no assumed Facebook OIDC/PKCE support.
 
 ## Browser and account recovery
 
+For package9A-I synthetic receipt-backed close, proof/claim drain, fresh-UUID reuse,
+handle reservation and admin DEAD recovery, follow [erasure operations](erasure.md).
+The later historical paragraphs describe the accepted pre9A baseline, not a
+receipt-free runtime fallback. Normal/default environments keep new maintenance
+disabled and valid close fails503 until the explicitly isolated policy/archive is
+configured. Production U01–U06 and full erasure/restore remain gated.
+
 Phase8's account-owner lifecycle prerequisite adds an authentication epoch. A
 suspended account that is reinstated needs a **fresh login**: old Bearer/refresh
 families and recent-authentication proofs remain invalid even when their expiry

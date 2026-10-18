@@ -11,6 +11,18 @@ Security rules here are implementation requirements. Product-specific privacy re
 
 ## Local authentication
 
+Phase9A-I receipt-backed close and admin progress/resume are implemented only for
+explicitly isolated synthetic data. Default/normal environments cannot fall back
+to receipt-free close204. Archive append occurs outside business locks, followed
+by repeated current session/recent-auth/version/ownership checks. Revoked users
+receive no progress credential; only current ACTIVE ADMIN gets audited/no-store
+fixed-step metadata. No raw checkpoint, former identity or object reference is
+returned. Body16KiB/CSRF/Origin/strong If-Match remain enforced. Identity claims
+stay held through bounded proof/SMTP drain; provider transaction expiry is rechecked
+after exchange, and fresh-proof re-registration uses a different UUID. See
+[protocol](account-erasure.md) and [operations](../ops/erasure.md). Full erasure,
+pending moderation case protocol/final proofs, restore and public policy remain gated.
+
 Registration is two-step to prevent unverified-account pre-hijacking. `POST /auth/registrations` takes email, returns a generic 202, and sends a short-lived email verification link bound to a browser transaction. It does **not** preinstall a password or create an active account. Completion takes the verification secret plus a newly chosen password from the mailbox owner and creates account, verified login email, local credential and initial profile atomically. Links expire in 30 minutes; incomplete intents expire without reserving the email. Verification must not make an attacker-supplied password usable just because the victim clicked a link. An existing email receives recovery/sign-in guidance with the same outward 202 behavior; never silently overwrite it.
 
 Use Argon2id through Spring Security's supported encoder and encoded algorithm identifier. Baseline minimum: 19 MiB, two iterations, parallelism one; benchmark deployment hardware, prefer a higher cost within a 200–500 ms login budget and bounded concurrent hashing capacity. Rehash opportunistically on successful login. Passwords: 15–128 Unicode characters, no silent truncation, no forced composition rules, allow paste, reject known compromised/common values using a local maintained list initially. Never log/hash passwords with a general-purpose fast hash. The parameter floor is from [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html); the input policy and timing budget are project decisions.

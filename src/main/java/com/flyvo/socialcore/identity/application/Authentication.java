@@ -41,6 +41,9 @@ public class Authentication {
   private final Set<String> common;
   private final SessionQueries sessions;
   private final com.flyvo.socialcore.community.api.MembershipQueries communities;
+  private final com.flyvo.socialcore.account.api.AccountErasure erasure;
+  private final com.flyvo.socialcore.platform.api.ScopedWork scoped;
+  private final com.flyvo.socialcore.identity.application.port.IdentityErasureStore erasureStore;
 
   public Authentication(
       IdentityRepository store,
@@ -55,7 +58,10 @@ public class Authentication {
       org.springframework.transaction.PlatformTransactionManager manager,
       ObjectMapper json,
       SessionQueries sessions,
-      com.flyvo.socialcore.community.api.MembershipQueries communities)
+      com.flyvo.socialcore.community.api.MembershipQueries communities,
+      com.flyvo.socialcore.account.api.AccountErasure erasure,
+      com.flyvo.socialcore.platform.api.ScopedWork scoped,
+      com.flyvo.socialcore.identity.application.port.IdentityErasureStore erasureStore)
       throws java.io.IOException {
     this.store = store;
     this.commands = commands;
@@ -70,6 +76,9 @@ public class Authentication {
     this.json = json;
     this.sessions = sessions;
     this.communities = communities;
+    this.erasure = erasure;
+    this.scoped = scoped;
+    this.erasureStore = erasureStore;
     dummy = passwords.encode(secrets.randomToken());
     try (var stream =
         new org.springframework.core.io.ClassPathResource("security/common-passwords.txt")
@@ -123,8 +132,16 @@ public class Authentication {
     if (browser == null) throw Failure.invalid();
     var now = clock.instant();
     if (!store.dispatch(secrets.emailKey(email), "VERIFICATION", now)) return;
-    if (store.emailOwner(email) != null) {
-      work.mail(UUID.randomUUID().toString(), email, "SIGN_IN_GUIDANCE", "", now.plusSeconds(1800));
+    var owner = store.emailOwner(email);
+    if (owner != null) {
+      if (accounts.guard(owner, false).active() && email.equals(store.email(owner)))
+        scoped.mail(
+            owner,
+            UUID.randomUUID().toString(),
+            email,
+            "SIGN_IN_GUIDANCE",
+            "",
+            now.plusSeconds(1800));
       return;
     }
     var id = UUID.randomUUID();
@@ -148,6 +165,7 @@ public class Authentication {
         status -> {
           var now = clock.instant();
           var intent = store.intent(hashSecret(secret));
+          now = clock.instant();
           if (intent == null
               || intent.consumedAt() != null
               || !now.isBefore(intent.expiresAt())
@@ -359,7 +377,7 @@ public class Authentication {
           var id = UUID.randomUUID();
           var secret = secrets.randomToken();
           store.oneTime(id, user, "RESET_PASSWORD", secrets.hash(secret), null, now);
-          work.mail(id.toString(), email, "RESET_PASSWORD", secret, now.plusSeconds(1800));
+          scoped.mail(user, id.toString(), email, "RESET_PASSWORD", secret, now.plusSeconds(1800));
         });
   }
 
@@ -441,7 +459,8 @@ public class Authentication {
           var secret = secrets.randomToken();
           var id = UUID.randomUUID();
           store.oneTime(id, actor.userId(), "CHANGE_EMAIL", secrets.hash(secret), email, now);
-          work.mail(id.toString(), email, "CHANGE_EMAIL", secret, now.plusSeconds(1800));
+          scoped.mail(
+              actor.userId(), id.toString(), email, "CHANGE_EMAIL", secret, now.plusSeconds(1800));
         });
   }
 
@@ -457,7 +476,8 @@ public class Authentication {
           store.invalidateTokens(actor.userId(), "RESET_PASSWORD", clock.instant());
           store.consumeOneTime(token.id(), clock.instant());
           store.revokeAll(actor.userId(), actor.sessionId(), "EMAIL_CHANGED", clock.instant());
-          work.mail(
+          scoped.mail(
+              actor.userId(),
               UUID.randomUUID().toString(),
               old,
               "EMAIL_CHANGED",
@@ -468,7 +488,8 @@ public class Authentication {
   }
 
   void notify(UUID user, String kind) {
-    work.mail(
+    scoped.mail(
+        user,
         UUID.randomUUID().toString(),
         store.email(user),
         kind,
@@ -513,16 +534,28 @@ public class Authentication {
   }
 
   public void close(ActorContext actor, long expectedVersion) {
+    var intent =
+        tx.execute(
+            status -> {
+              validateClose(actor, expectedVersion);
+              return erasure.prepare(actor.userId(), expectedVersion);
+            });
+    erasure.exportPrepared(intent);
     tx.executeWithoutResult(
         status -> {
-          current(actor, true, true);
-          if (accounts.find(actor.userId()).version() != expectedVersion)
-            throw new Failure(412, "STALE_VERSION");
-          if (communities.ownsActiveCommunity(actor.userId()))
-            throw new Failure(409, "COMMUNITY_OWNERSHIP_BLOCKS_DELETION");
+          validateClose(actor, expectedVersion);
           commands.requestDeletion(actor.userId());
+          erasureStore.start(actor.userId());
           store.revokeAll(actor.userId(), null, "ACCOUNT_DELETION", clock.instant());
         });
+  }
+
+  private void validateClose(ActorContext actor, long expectedVersion) {
+    current(actor, true, true);
+    if (accounts.find(actor.userId()).version() != expectedVersion)
+      throw new Failure(412, "STALE_VERSION");
+    if (communities.ownsActiveCommunity(actor.userId()))
+      throw new Failure(409, "COMMUNITY_OWNERSHIP_BLOCKS_DELETION");
   }
 
   byte[] hashSecret(String secret) {

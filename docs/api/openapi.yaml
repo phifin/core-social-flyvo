@@ -479,7 +479,7 @@ paths:
           description: "Request deletion and immediately revoke all sessions"
         default:
           "$ref": "#/components/responses/Problem"
-      description: "Requires authentication within five minutes. Phase 1 has no communities/ownership blockers; Phase 2 must integrate its ownership API. Full erasure is Phase 9A."
+      description: "Requires recent authentication within five minutes, strong If-Match and zero active community ownership. Phase9A-I requires explicitly isolated synthetic policy and verified independent PREPARED receipt before committing the request. Missing policy/archive or verification fails closed with503; no legacy204 fallback. Network runs outside business locks and auth/version/ownership are repeated afterward.204 means irreversible DELETION_PENDING plus revoked sessions, not completed erasure. No package-I account reaches DELETED; later owners remain waiting. No status token or public progress URL is issued."
       parameters:
         -
           "$ref": "#/components/parameters/Origin"
@@ -2904,6 +2904,51 @@ paths:
       responses:
         '200': {description: Audited operator-only progress, content: {application/json: {schema: {$ref: '#/components/schemas/SearchRebuild'}}}}
         default: {$ref: '#/components/responses/Problem'}
+  /api/v1/admin/accounts/{userId}/erasure:
+    get:
+      operationId: readAccountErasure
+      summary: Audited current ACTIVE ADMIN progress without private owner data
+      security: [{BearerAuth: []}]
+      parameters:
+        - {name: userId, in: path, required: true, schema: {type: string, format: uuid}}
+      description: Always twelve fixed steps. No email/name/raw checkpoint/resource IDs/storage keys or completion deadline. Ordinary users403 even for own UUID; unauthenticated/revoked session401, missing target/request404. Historical integrity failure is visible without inventing request time. No production readiness claim.
+      responses:
+        '200':
+          description: Audited progress
+          headers:
+            ETag: {schema: {type: string}}
+            Cache-Control: {schema: {type: string, const: no-store}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErasureProgress'}}}
+        default: {$ref: '#/components/responses/Problem'}
+  /api/v1/admin/accounts/{userId}/erasure/resumes:
+    post:
+      operationId: resumeAccountErasure
+      summary: Audited versioned new execution after an inspected DEAD cause
+      security: [{BearerAuth: []}]
+      parameters:
+        - {name: userId, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[0-9]{1,18}"$'}}
+        - {$ref: '#/components/parameters/Origin'}
+        - {$ref: '#/components/parameters/Csrf'}
+      description: Current ACTIVE ADMIN only; body16KiB maximum. Missing precondition428, stale412, active/live execution or absent handler409, invalid selector/extra fields400. Preserve original request/checkpoint/resources/cumulative failures and DEAD execution. An owner selector can resume its failed independent resource export; no arbitrary payload, force-DONE, hold clear, expired mail replay or new budget from reconciliation. Completion and later owners are unavailable in I.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [step]
+              properties:
+                step: {$ref: '#/components/schemas/ErasureStep'}
+      responses:
+        '200':
+          description: New bounded execution committed with audit
+          headers:
+            ETag: {schema: {type: string}}
+            Cache-Control: {schema: {type: string, const: no-store}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErasureProgress'}}}
+        default: {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
     BearerAuth:
@@ -3015,6 +3060,31 @@ components:
           schema:
             "$ref": "#/components/schemas/Problem"
   schemas:
+    ErasureStep:
+      type: string
+      enum: [RECOVERY_INTENT, IDENTITY, PROFILE, COMMUNITY, GRAPH, CONTENT, MODERATION, TECHNICAL, MEDIA, NOTIFICATION, SEARCH, COMPLETION]
+    ErasureStepView:
+      type: object
+      required: [step, status, reason, nextCheckAt, version, failures, updatedAt]
+      properties:
+        step: {$ref: '#/components/schemas/ErasureStep'}
+        status: {type: string, enum: [PENDING, RUNNABLE, RUNNING, RETRY, FAILED, DONE, WAITING_DEPENDENCY, WAITING_RETENTION, WAITING_HOLD, WAITING_CASE, WAITING_EXTERNAL]}
+        reason: {type: [string, 'null'], maxLength: 64}
+        nextCheckAt: {type: [string, 'null'], format: date-time}
+        version: {type: integer, format: int64, minimum: 0}
+        failures: {type: integer, format: int64, minimum: 0}
+        updatedAt: {type: string, format: date-time}
+    ErasureProgress:
+      type: object
+      required: [userId, requestId, accountStatus, protocol, policy, version, steps]
+      properties:
+        userId: {type: string, format: uuid}
+        requestId: {type: [string, 'null'], format: uuid, description: Null only for an explicitly reported historical integrity blocker}
+        accountStatus: {type: string}
+        protocol: {type: string, const: erasure-v1}
+        policy: {type: string, const: isolated-synthetic-v1}
+        version: {type: integer, format: int64, minimum: 0}
+        steps: {type: array, minItems: 12, maxItems: 12, items: {$ref: '#/components/schemas/ErasureStepView'}}
     SearchUser:
       type: object
       required: [id, handle, name, version]

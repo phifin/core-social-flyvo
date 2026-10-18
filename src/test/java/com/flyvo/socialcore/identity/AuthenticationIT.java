@@ -54,7 +54,8 @@ class AuthenticationIT {
   @Container
   static final PostgreSQLContainer POSTGRES =
       new PostgreSQLContainer(
-          "postgres@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873");
+              "postgres@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873")
+          .withDatabaseName("p9a_auth");
 
   @Container
   static final GenericContainer<?> MAIL =
@@ -64,6 +65,7 @@ class AuthenticationIT {
 
   @DynamicPropertySource
   static void properties(DynamicPropertyRegistry r) {
+    com.flyvo.socialcore.support.SyntheticErasureFixture.enable(r);
     r.add("app.database.url", POSTGRES::getJdbcUrl);
     r.add("app.database.username", POSTGRES::getUsername);
     r.add("app.database.password", POSTGRES::getPassword);

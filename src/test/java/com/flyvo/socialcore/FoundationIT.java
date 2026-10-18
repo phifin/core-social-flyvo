@@ -28,7 +28,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @Testcontainers
 @org.springframework.test.context.ActiveProfiles("test")
 class FoundationIT {
-  private static final int LATEST_MIGRATIONS = 32;
+  private static final int LATEST_MIGRATIONS = 37;
 
   @Container
   static final PostgreSQLContainer POSTGRES =
@@ -114,9 +114,9 @@ class FoundationIT {
             "SELECT to_jsonb(s)::text state FROM notification.source_state s ORDER BY source_id");
     var upgrade =
         Flyway.configure().dataSource(url, POSTGRES.getUsername(), POSTGRES.getPassword()).load();
-    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(1);
+    assertThat(upgrade.migrate().migrationsExecuted).isEqualTo(LATEST_MIGRATIONS - 31);
     upgrade.validate();
-    assertThat(upgrade.info().applied()).hasSize(32);
+    assertThat(upgrade.info().applied()).hasSize(LATEST_MIGRATIONS);
     assertThat(
             java.util.Arrays.stream(upgrade.info().applied())
                 .limit(31)

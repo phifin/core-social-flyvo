@@ -4,6 +4,11 @@ Images are in the first usable content phase. Use an S3-compatible object store,
 
 ## Upload sequence
 
+Phase9A-I's narrow profile erasure first obtains an independent receipt for its
+avatar asset ID, then calls the existing release API transactionally before dropping
+profile/avatar mapping. This is source-binding release only, not full media erasure,
+all-version absence or restore proof; the media roster step stays waiting for II.
+
 Phase 4 implements this sequence, including source-authorized post/avatar access,
 real Silo processing and durable recovery. [Phase evidence](phases/phase-4.md),
 [implemented OpenAPI](api/openapi.yaml) and [operations](../ops/media.md) distinguish

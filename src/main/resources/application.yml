@@ -74,6 +74,11 @@ app:
     from: ${MAIL_FROM:no-reply@social-core.invalid}
   worker:
     enabled: ${WORKER_ENABLED:true}
+  erasure:
+    enabled: ${ERASURE_SYNTHETIC_ENABLED:false}
+    policy: ${ERASURE_POLICY:}
+    archive-directory: ${ERASURE_ARCHIVE_DIRECTORY:}
+    lineage: ${ERASURE_LINEAGE:}
   notification:
     stream:
       max-global: ${NOTIFICATION_STREAM_MAX_GLOBAL:100}

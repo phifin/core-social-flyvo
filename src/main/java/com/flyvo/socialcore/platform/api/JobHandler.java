@@ -8,4 +8,7 @@ public interface JobHandler {
   String kind();
 
   void apply(String payload);
+
+  /** Called under the current job-first fence; failure metadata joins its terminal ack. */
+  default void failed(String payload, int attempts) {}
 }

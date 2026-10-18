@@ -10,6 +10,15 @@ This is the source of truth for lifecycle semantics. Database details are in [da
 
 ## Account, identity and profile
 
+Phase9A-I adds the [fixed-roster erasure protocol](account-erasure.md) under the
+explicit local `isolated-synthetic-v1` policy. Request acceptance requires independent
+PREPARED proof before DELETION_PENDING; I cannot transition to DELETED. Owner steps
+and resource receipts are not event-consumer counts. Credentials/proofs/mail drain
+before email/provider reuse; a fresh proof creates a new UUID. Profile disappears
+with an immutable UUID/source-version absence tombstone; canonical handle claims
+reserve its former handle30d without a former-user pointer. Later owners remain
+waiting; inaccessible data is not claimed erased or anonymous.
+
 `UserAccount` (`account`) is the durable actor: UUID, status, platform role, created time and version. Status is `PENDING_VERIFICATION -> ACTIVE -> SUSPENDED` (reversible) or `DELETION_PENDING -> DELETED` (terminal after erasure). Suspended users cannot authenticate/use private APIs; their content is hidden by account-status checks. Status changes are attributable and audited. A deletion request revokes access immediately and starts the retention/erasure workflow. Before deleting, an owner transfers or archives owned communities.
 
 `AuthIdentity` (`identity`) is an external login binding, uniquely `(provider, issuer, subject)`; provider is GOOGLE or FACEBOOK initially. Subject, not email, identifies a provider principal. `LocalCredential` is at most one per user. `LoginEmail` is the unique normalized login/recovery address, with verification time, not a public profile field. A user may have all three authentication methods. Provider email is an observation and cannot replace the login email or link accounts implicitly. Explicit unlinking must leave at least one usable login method; recovery email alone is not a login method.

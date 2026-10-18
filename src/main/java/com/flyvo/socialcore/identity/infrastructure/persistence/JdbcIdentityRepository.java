@@ -389,13 +389,13 @@ public class JdbcIdentityRepository implements IdentityRepository {
         "DELETE FROM identity.external_onboarding WHERE id IN (SELECT id FROM identity.external_onboarding WHERE expires_at<? ORDER BY expires_at LIMIT 500)",
         t(now.minusSeconds(86400)));
     jdbc.update(
-        "DELETE FROM identity.registration_intent WHERE id IN (SELECT id FROM identity.registration_intent WHERE expires_at<? ORDER BY expires_at LIMIT 500)",
+        "DELETE FROM identity.registration_intent WHERE id IN (SELECT r.id FROM identity.registration_intent r WHERE expires_at<? AND NOT EXISTS(SELECT 1 FROM identity.erasure_mailbox m WHERE m.email_normalized=r.email_normalized) AND NOT EXISTS(SELECT 1 FROM identity.login_email e JOIN identity.erasure_marker m ON m.user_id=e.user_id WHERE e.email_normalized=r.email_normalized) AND NOT EXISTS(SELECT 1 FROM identity.one_time_token t JOIN identity.erasure_marker m ON m.user_id=t.user_id WHERE t.target_email=r.email_normalized) ORDER BY expires_at LIMIT 500)",
         t(now.minusSeconds(86400)));
     jdbc.update(
         "DELETE FROM identity.oauth_transaction WHERE id IN (SELECT id FROM identity.oauth_transaction WHERE expires_at<? ORDER BY expires_at LIMIT 500)",
         t(now.minusSeconds(86400)));
     jdbc.update(
-        "DELETE FROM identity.one_time_token WHERE id IN (SELECT id FROM identity.one_time_token WHERE expires_at<? ORDER BY expires_at LIMIT 500)",
+        "DELETE FROM identity.one_time_token WHERE id IN (SELECT id FROM identity.one_time_token t WHERE expires_at<? AND NOT EXISTS(SELECT 1 FROM identity.erasure_marker m WHERE m.user_id=t.user_id) ORDER BY expires_at LIMIT 500)",
         t(now.minusSeconds(7 * 86400)));
     jdbc.update(
         "DELETE FROM identity.email_dispatch_window WHERE (email_key,purpose,window_start) IN (SELECT email_key,purpose,window_start FROM identity.email_dispatch_window WHERE window_start<? ORDER BY window_start LIMIT 500)",

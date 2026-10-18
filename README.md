@@ -6,6 +6,14 @@ A reusable Java backend core for social networks and communities. The core has n
 
 ## Start here
 
+Phase9A-I is implemented for explicitly isolated synthetic environments, pending
+main review. It adds receipt-backed closure, a fixed twelve-owner roster, admin
+progress/resume and bounded identity/profile cleanup. Normal/default Compose keeps
+new maintenance off; a valid close without configured verified synthetic archive
+fails503. No package-I account reaches DELETED; II/III and public launch remain
+gated. See [protocol](docs/account-erasure.md), [operations](ops/erasure.md) and
+[package evidence](docs/phases/phase-9a-i.md). Do not enable against existing data.
+
 Phase 4 exposes bounded post publication/query/history, current-policy variant access
 and versioned avatar replacement. [Local storage operations](ops/media.md) explains
 enabling the real Silo pipeline; there is no fake storage fallback.

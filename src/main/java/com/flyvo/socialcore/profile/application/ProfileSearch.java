@@ -39,19 +39,27 @@ public class ProfileSearch implements ProfileSearchSources {
     batch(ids);
     var profiles = store.summaries(ids);
     var statuses = accounts.snapshots(ids);
-    return profiles.stream()
-        .map(
-            p -> {
-              var a = statuses.get(p.userId());
-              return new Source(
-                  p.userId(),
-                  p.version(),
-                  a == null ? null : a.version(),
-                  a != null && a.active(),
-                  p.handle(),
-                  p.displayName());
-            })
-        .toList();
+    var result =
+        new ArrayList<Source>(
+            profiles.stream()
+                .map(
+                    p -> {
+                      var a = statuses.get(p.userId());
+                      return new Source(
+                          p.userId(),
+                          p.version(),
+                          a == null ? null : a.version(),
+                          a != null && a.active(),
+                          p.handle(),
+                          p.displayName());
+                    })
+                .toList());
+    for (var e : store.tombstones(ids).entrySet()) {
+      var a = statuses.get(e.getKey());
+      result.add(
+          new Source(e.getKey(), e.getValue(), a == null ? null : a.version(), false, "", ""));
+    }
+    return List.copyOf(result);
   }
 
   @Transactional(readOnly = true)

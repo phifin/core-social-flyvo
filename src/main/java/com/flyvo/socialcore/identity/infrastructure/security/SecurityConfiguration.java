@@ -90,6 +90,10 @@ class SecurityConfiguration {
                     .authenticated()
                     .requestMatchers(HttpMethod.POST, "/api/v1/admin/search/rebuilds")
                     .authenticated()
+                    .requestMatchers(HttpMethod.GET, "/api/v1/admin/accounts/*/erasure")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/api/v1/admin/accounts/*/erasure/resumes")
+                    .authenticated()
                     .requestMatchers(
                         HttpMethod.GET,
                         "/api/v1/notifications",

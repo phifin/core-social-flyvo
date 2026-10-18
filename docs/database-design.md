@@ -20,6 +20,28 @@ Rows without a public resource identity (follows, membership key, reaction assoc
 
 ## Account, identity, profile
 
+Phase9A-I concretely adds V0033–V0037; V0001–V0032 are unchanged. V0033 owns
+erasure_intent (immutable expected generation/local policy), erasure_request
+(t0/roster/round/version/manifest chain), all twelve erasure_step rows, immutable
+≤100-UUID erasure_export chunks/verified receipts and erasure_issue for historical
+integrity failures. Composite FKs bind subject/request/step, shape/size/one-way
+guards and deferred roster completeness reject incomplete protocol state. A package-I
+trigger denies a new DELETED transition. Indexed subject/owner/kind/UUID backlogs
+remain account-owned; no new SQL view or foreign consumer is introduced.
+
+V0034 adds opaque platform.work_scope, durable per-invocation work_effect and explicit
+job cancellation outcome columns, retaining old error/attempt history. V0035 adds
+identity.erasure_marker/transient erasure_mailbox plus owner/target traversal
+indexes; normal proof pruning preserves marked last enumeration mappings. V0036
+losslessly backfills profile.handle_claim LIVE rows, arbitrates RESERVED expiry
+with the same unique key/advisory namespace, and defers completeness checks until
+commit. Immutable profile.erasure_tombstone retains UUID/source version only and
+denies reprovisioning that UUID. V0037 corrects bulk creation lock growth: unique
+claim arbitration needs no per-row advisory lock for new profiles; bounded
+rename/reserve/expiry keep sorted advisory keys. No earlier migration was edited
+to fix the observed20,050-profile benchmark seed failure. Retention/clock/lock/rollback details are in
+[erasure protocol](account-erasure.md); no mixed-old-writer compatibility is claimed.
+
 Phase8's lifecycle prerequisite adds V0029: nonnegative authentication_epoch on
 account.user_account and identity.auth_session. Sessions capture the account
 epoch at issuance; suspension increments it, reinstatement never resets it.

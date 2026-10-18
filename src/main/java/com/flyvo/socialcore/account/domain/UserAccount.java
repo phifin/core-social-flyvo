@@ -62,6 +62,10 @@ public class UserAccount {
     return authenticationEpoch;
   }
 
+  public Instant deletionRequestedAt() {
+    return deletionRequestedAt;
+  }
+
   public void requestDeletion(Instant now) {
     if (!"ACTIVE".equals(status)) throw new IllegalStateException("Account is not active");
     status = "DELETION_PENDING";

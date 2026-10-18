@@ -68,7 +68,10 @@ Migration allocation **tentative**, recheck HEAD immediately before coding:
 V0033 account request/prepared intent/steps/manifests and guards; V0034 platform
 technical effect correlation/cancellation indexes; V0035 identity erasure traversal/
 proof correlation as needed; V0036 profile handle claims/reservation. Do not create
-an empty migration merely to fill a slot; no edits to V0001–V0032. Current account
+an empty migration merely to fill a slot; no edits to V0001–V0032. Development
+allocation additionally uses V0037 for the observed bulk-profile handle-lock
+correction; it belongs to I.3, not activation of II. Future tentative numbers
+below must be reallocated after main review. Current account
 status CHECK already includes DELETED; that is not proof the new operation exists.
 
 For D06 handle uniqueness, recommend a profile-owned canonical handle-claim row

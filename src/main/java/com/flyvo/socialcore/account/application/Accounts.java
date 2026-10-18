@@ -19,16 +19,22 @@ public class Accounts implements AccountCommands, AccountQueries {
   private final Clock clock;
   private final DurableWork work;
   private final tools.jackson.databind.ObjectMapper json;
+  private final Erasures erasures;
+  private final com.flyvo.socialcore.account.application.port.ErasureStore erasureStore;
 
   public Accounts(
       AccountRepository entities,
       Clock clock,
       DurableWork work,
-      tools.jackson.databind.ObjectMapper json) {
+      tools.jackson.databind.ObjectMapper json,
+      Erasures erasures,
+      com.flyvo.socialcore.account.application.port.ErasureStore erasureStore) {
     this.entities = entities;
     this.clock = clock;
     this.work = work;
     this.json = json;
+    this.erasures = erasures;
+    this.erasureStore = erasureStore;
   }
 
   @Transactional(readOnly = true)
@@ -80,8 +86,10 @@ public class Accounts implements AccountCommands, AccountQueries {
   public void requestDeletion(UUID id) {
     if (!guard(id, true).active()) throw Failure.conflict();
     var value = entities.find(id);
-    value.requestDeletion(clock.instant());
+    var at = erasureStore.now();
+    value.requestDeletion(at);
     entities.flush();
+    erasures.committed(id, value.version(), at);
     work.audit(id, "ACCOUNT_DELETION_REQUESTED", "account", id, "SUCCESS", null);
     work.event(
         "AccountDeletionRequested",

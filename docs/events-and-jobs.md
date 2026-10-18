@@ -1,5 +1,16 @@
 # Events, jobs and notification delivery
 
+Phase9A-I adds ERASURE_EXPORT/RECONCILE/SCAN/TECHNICAL, IDENTITY_ERASURE and
+PROFILE_ERASURE only under explicit isolated synthetic activation. Fixed later
+owner rows produce no unknown-kind jobs or fake proofs. AccountDeletionRequested
+v1 stays unchanged; profile erasure emits ProfileUpdated v1 at its retained absence
+version, without names/avatar/body. Existing search consumes current owner snapshots;
+its package-II erasure proof/terminal replay guards are not claimed implemented.
+DB job handlers now have optional bounded failure observations under their existing
+job-first fence; expired tenth claims become DEAD, and the account step is repaired
+to FAILED without an automatic replacement budget. Mail work_effect records external
+invocation drain independently from cancellation fences. See [protocol](account-erasure.md).
+
 Phase8 adds MODERATION_ENCRYPT/MODERATION_RETENTION DB-only handlers to the same
 fenced executor: one root/≤100 payloads, verified crypto/redaction/history/audit/
 continuation/fenced ack atomic.60s enqueue/audited ADMIN resume use these handlers;
