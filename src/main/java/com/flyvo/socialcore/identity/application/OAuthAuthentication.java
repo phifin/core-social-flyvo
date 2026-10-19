@@ -66,6 +66,7 @@ public class OAuthAuthentication {
         status -> {
           if (!"LOGIN".equals(intent)) auth.current(actor, true, "LINK".equals(intent));
           var id = UUID.randomUUID();
+          var now = store.databaseTime();
           store.oauth(
               new OAuth(
                   id,
@@ -76,10 +77,10 @@ public class OAuthAuthentication {
                   secrets.hash(binding),
                   "GOOGLE".equals(p) ? secrets.hash(nonce) : null,
                   "GOOGLE".equals(p) ? secrets.encrypt("pkce:" + id, verifier) : null,
-                  clock.instant().plusSeconds(600),
+                  now.plusSeconds(600),
                   null),
               secrets.hash(state),
-              clock.instant());
+              now);
         });
     return new Start(location, binding);
   }
@@ -90,14 +91,15 @@ public class OAuthAuthentication {
         tx.execute(
             status -> {
               var value = store.oauth(auth.hashSecret(state));
+              var now = store.databaseTime();
               if (value == null
                   || !name.toUpperCase(java.util.Locale.ROOT).equals(value.provider())
                   || browser == null
                   || !MessageDigest.isEqual(value.browserHash(), secrets.hash(browser))
                   || value.consumedAt() != null
-                  || !clock.instant().isBefore(value.expiresAt()))
+                  || !now.isBefore(value.expiresAt()))
                 throw new Failure(401, "INVALID_OAUTH_TRANSACTION");
-              if (!store.consumeOAuth(value.id(), clock.instant()))
+              if (!store.consumeOAuth(value.id(), now))
                 throw new Failure(401, "INVALID_OAUTH_TRANSACTION");
               return value;
             });
@@ -125,12 +127,12 @@ public class OAuthAuthentication {
               status -> {
                 // A consumed state is not an unlimited network-completion credential. This
                 // bounds pre-erasure anonymous proof chains before unique claims are released.
-                if (!clock.instant().isBefore(transaction.expiresAt()))
-                  throw new Failure(401, "INVALID_OAUTH_TRANSACTION");
+                callbackTime(transaction);
                 var existing = store.external(proof.provider(), proof.issuer(), proof.subject());
                 if (!"LOGIN".equals(transaction.intent())) {
                   var actor = new ActorContext(transaction.userId(), transaction.sessionId());
                   auth.current(actor, true, "LINK".equals(transaction.intent()));
+                  callbackTime(transaction);
                   var guarded = store.external(proof.provider(), proof.issuer(), proof.subject());
                   if (existing != null && !sameBinding(existing, guarded)) {
                     if ("LINK".equals(transaction.intent()))
@@ -155,6 +157,7 @@ public class OAuthAuthentication {
                         actor.sessionId(),
                         "SUCCESS",
                         proof.provider());
+                    callbackTime(transaction);
                     return new Result("reauthenticated", null, null);
                   }
                   if (existing != null && !actor.userId().equals(existing.userId())) {
@@ -177,6 +180,7 @@ public class OAuthAuthentication {
                       actor.userId(),
                       "SUCCESS",
                       proof.provider());
+                  callbackTime(transaction);
                   return new Result("linked", null, null);
                 }
                 if (existing != null) {
@@ -184,6 +188,7 @@ public class OAuthAuthentication {
                   // Never grant from an observation made before the guard or follow a new owner
                   // by acquiring a second account guard out of order. A new flow is required.
                   var guarded = store.external(proof.provider(), proof.issuer(), proof.subject());
+                  callbackTime(transaction);
                   if (!sameBinding(existing, guarded))
                     return new Result("identity_conflict", null, null);
                   var grant = auth.grant(guarded.userId());
@@ -194,6 +199,7 @@ public class OAuthAuthentication {
                       existing.userId(),
                       "SUCCESS",
                       proof.provider());
+                  callbackTime(transaction);
                   return new Result("signed_in", grant.refreshSecret(), null);
                 }
                 if (proof.email() != null) {
@@ -210,12 +216,17 @@ public class OAuthAuthentication {
                 // is
                 // still required.
                 var secret = secrets.randomToken();
+                var now = callbackTime(transaction);
+                var expiry = now.plusSeconds(600);
+                if (expiry.isAfter(transaction.expiresAt().plusSeconds(600)))
+                  expiry = transaction.expiresAt().plusSeconds(600);
                 store.onboarding(
                     UUID.randomUUID(),
                     secrets.hash(secret),
                     secrets.hash(browser),
                     secrets.encrypt("onboarding", json.writeValueAsString(proof)),
-                    clock.instant().plusSeconds(600));
+                    expiry);
+                callbackTime(transaction);
                 return new Result("verify_recovery_email", null, secret);
               });
     } catch (org.springframework.dao.DataIntegrityViolationException conflict) {
@@ -245,19 +256,28 @@ public class OAuthAuthentication {
         && observed.userId().equals(guarded.userId());
   }
 
+  private java.time.Instant callbackTime(OAuth transaction) {
+    var now = store.databaseTime();
+    if (!now.isBefore(transaction.expiresAt())) throw new Failure(401, "INVALID_OAUTH_TRANSACTION");
+    return now;
+  }
+
   public void register(
       String email, String onboarding, String browser, String registrationBrowser) {
     String normalized = auth.normalize(email);
     tx.executeWithoutResult(
         status -> {
-          var encrypted =
-              store.consumeOnboarding(
-                  auth.hashSecret(onboarding),
-                  secrets.hash(browser == null ? "" : browser),
-                  clock.instant());
-          if (encrypted == null) throw new Failure(401, "INVALID_PROOF");
-          var proof = json.readValue(secrets.decrypt("onboarding", encrypted), ProviderProof.class);
-          auth.initiate(normalized, registrationBrowser, proof);
+          var value = store.onboarding(auth.hashSecret(onboarding));
+          var now = store.databaseTime();
+          if (value == null
+              || value.consumedAt() != null
+              || !MessageDigest.isEqual(
+                  value.browserHash(), secrets.hash(browser == null ? "" : browser))
+              || !now.isBefore(value.expiresAt())
+              || !store.consumeOnboarding(value.id(), now)) throw new Failure(401, "INVALID_PROOF");
+          var proof =
+              json.readValue(secrets.decrypt("onboarding", value.proof()), ProviderProof.class);
+          auth.initiate(normalized, registrationBrowser, proof, value.expiresAt());
         });
   }
 }

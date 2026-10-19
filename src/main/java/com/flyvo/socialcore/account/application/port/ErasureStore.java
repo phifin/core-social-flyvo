@@ -6,7 +6,14 @@ import java.util.List;
 import java.util.UUID;
 
 public interface ErasureStore {
-  record Intent(UUID id, UUID user, long expectedVersion, Instant createdAt, UUID lineage) {}
+  record Intent(UUID id, UUID user, long expectedVersion, Instant createdAt, UUID lineage) {
+    public boolean matches(Request request) {
+      return request != null
+          && id.equals(request.id())
+          && user.equals(request.user())
+          && expectedVersion + 1 == request.generation();
+    }
+  }
 
   record Request(
       UUID id,

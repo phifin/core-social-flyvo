@@ -58,6 +58,9 @@ public final class IdentityState {
 
   public record ProviderProof(String provider, String issuer, String subject, String email) {}
 
+  public record Onboarding(
+      UUID id, byte[] browserHash, byte[] proof, Instant expiresAt, Instant consumedAt) {}
+
   public record OAuth(
       UUID id,
       String provider,

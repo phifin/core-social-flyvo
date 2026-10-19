@@ -6,6 +6,9 @@ import java.util.List;
 import java.util.UUID;
 
 public interface IdentityRepository {
+  /** The same PostgreSQL wall-clock authority used by erasure retention, sampled after locks. */
+  Instant databaseTime();
+
   UUID emailOwner(String email);
 
   String email(UUID user);
@@ -81,5 +84,7 @@ public interface IdentityRepository {
 
   void onboarding(UUID id, byte[] hash, byte[] browser, byte[] proof, Instant expires);
 
-  byte[] consumeOnboarding(byte[] hash, byte[] browser, Instant now);
+  Onboarding onboarding(byte[] hash);
+
+  boolean consumeOnboarding(UUID id, Instant now);
 }

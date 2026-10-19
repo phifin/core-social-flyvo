@@ -10,6 +10,10 @@ DB job handlers now have optional bounded failure observations under their exist
 job-first fence; expired tenth claims become DEAD, and the account step is repaired
 to FAILED without an automatic replacement budget. Mail work_effect records external
 invocation drain independently from cancellation fences. See [protocol](account-erasure.md).
+The external lease also carries its immutable producer dedup/execution key.
+Recovery exports compare it and the exact request/generation/round before receipt
+or failure acknowledgement; a stale close/export cannot certify or fail a later
+request for the same user. Job payload format,60s leases and retry budgets do not change.
 
 Phase8 adds MODERATION_ENCRYPT/MODERATION_RETENTION DB-only handlers to the same
 fenced executor: one root/≤100 payloads, verified crypto/redaction/history/audit/

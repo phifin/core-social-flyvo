@@ -78,6 +78,9 @@ public class Erasures implements AccountErasure {
       ErasureStore.Intent i, String operation, String owner, String kind, List<UUID> ids) {
     var id = UUID.randomUUID();
     var request = store.request(i.user());
+    if (!i.matches(request)) request = null;
+    if (!"PREPARED".equals(operation) && request == null)
+      throw new IllegalStateException("ERASURE_EXPORT_REQUEST_MISMATCH");
     var record =
         new Journal(
             i.lineage(),
@@ -88,7 +91,7 @@ public class Erasures implements AccountErasure {
             POLICY,
             ErasureProtocol.rosterDigest(),
             i.expectedVersion() + 1,
-            1,
+            request == null ? 1 : request.round(),
             operation,
             owner,
             kind,
@@ -365,10 +368,15 @@ public class Erasures implements AccountErasure {
   }
 
   @Transactional(propagation = Propagation.MANDATORY)
-  public void preparedRecovered(UUID intentId) {
+  public void preparedRecovered(UUID intentId, long round) {
     var intent = store.intent(intentId);
-    accounts.guard(intent.user(), false);
-    if (store.request(intent.user()) != null && store.export(intentId, "COMMITTED") == null)
+    var account = accounts.guard(intent.user(), false);
+    var request = store.request(intent.user());
+    if (account != null
+        && "DELETION_PENDING".equals(account.status())
+        && intent.matches(request)
+        && request.round() == round
+        && store.export(intentId, "COMMITTED") == null)
       addExport(intent, "COMMITTED", null, null, null);
   }
 

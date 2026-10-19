@@ -91,6 +91,14 @@ receipt-free runtime fallback. Normal/default environments keep new maintenance
 disabled and valid close fails503 until the explicitly isolated policy/archive is
 configured. Production U01–U06 and full erasure/restore remain gated.
 
+Anonymous OAuth→onboarding→mailbox TTLs use PostgreSQL `clock_timestamp()` for
+issuance and post-lock expiry checks, sharing the erasure retention clock. Do not
+substitute JVM time or transaction-start time. Successor deadlines inherit the
+parent's absolute limit; lock/network waits cannot add a new lifetime after expiry.
+The50m bound is for source-issued chains under this contract, not a claim about
+arbitrary imported/old-binary rows or unverified restored data. Retain the existing
+write-stop/compatible-artifact/lineage gates; no activation on developer data.
+
 Phase8's account-owner lifecycle prerequisite adds an authentication epoch. A
 suspended account that is reinstated needs a **fresh login**: old Bearer/refresh
 families and recent-authentication proofs remain invalid even when their expiry

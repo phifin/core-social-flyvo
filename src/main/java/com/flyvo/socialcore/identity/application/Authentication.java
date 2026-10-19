@@ -129,12 +129,21 @@ public class Authentication {
   }
 
   void initiate(String email, String browser, ProviderProof proof) {
+    initiate(email, browser, proof, null);
+  }
+
+  void initiate(String email, String browser, ProviderProof proof, Instant upstreamExpiry) {
     if (browser == null) throw Failure.invalid();
-    var now = clock.instant();
-    if (!store.dispatch(secrets.emailKey(email), "VERIFICATION", now)) return;
+    var now = proofTime(upstreamExpiry);
+    boolean allowed = store.dispatch(secrets.emailKey(email), "VERIFICATION", now);
+    // Dispatch's unique issuance-window row and the owner's guard can both wait.
+    now = proofTime(upstreamExpiry);
+    if (!allowed) return;
     var owner = store.emailOwner(email);
     if (owner != null) {
-      if (accounts.guard(owner, false).active() && email.equals(store.email(owner)))
+      var account = accounts.guard(owner, false);
+      now = proofTime(upstreamExpiry);
+      if (account.active() && email.equals(store.email(owner)))
         scoped.mail(
             owner,
             UUID.randomUUID().toString(),
@@ -142,10 +151,14 @@ public class Authentication {
             "SIGN_IN_GUIDANCE",
             "",
             now.plusSeconds(1800));
+      proofTime(upstreamExpiry);
       return;
     }
     var id = UUID.randomUUID();
     var secret = secrets.randomToken();
+    var expiry = now.plusSeconds(1800);
+    if (upstreamExpiry != null && expiry.isAfter(upstreamExpiry.plusSeconds(1800)))
+      expiry = upstreamExpiry.plusSeconds(1800);
     store.intent(
         id,
         email,
@@ -153,9 +166,16 @@ public class Authentication {
         proof == null ? "LOCAL" : "EXTERNAL",
         proof == null ? null : secrets.encrypt("provider-proof", json.writeValueAsString(proof)),
         secrets.hash(browser),
-        now.plusSeconds(1800),
+        expiry,
         now);
-    work.mail(id.toString(), email, "VERIFY_EMAIL", secret, now.plusSeconds(1800));
+    work.mail(id.toString(), email, "VERIFY_EMAIL", secret, expiry);
+    proofTime(upstreamExpiry);
+  }
+
+  private Instant proofTime(Instant expiry) {
+    var now = store.databaseTime();
+    if (expiry != null && !now.isBefore(expiry)) throw new Failure(401, "INVALID_PROOF");
+    return now;
   }
 
   public Grant complete(String secret, String browser, String password) {
@@ -163,9 +183,8 @@ public class Authentication {
     String encoded = password == null ? null : encodeNew(password);
     return tx.execute(
         status -> {
-          var now = clock.instant();
           var intent = store.intent(hashSecret(secret));
-          now = clock.instant();
+          var now = store.databaseTime();
           if (intent == null
               || intent.consumedAt() != null
               || !now.isBefore(intent.expiresAt())
@@ -190,7 +209,10 @@ public class Authentication {
           profiles.provision(user);
           store.consumeIntent(intent.id(), now);
           work.audit(user, "REGISTRATION_COMPLETED", "account", user, "SUCCESS", null);
-          return grant(user, encoded == null);
+          var grant = grant(user, encoded == null);
+          // Unique email/provider/profile/session writes may also have waited after the read.
+          proofTime(intent.expiresAt());
+          return grant;
         });
   }
 

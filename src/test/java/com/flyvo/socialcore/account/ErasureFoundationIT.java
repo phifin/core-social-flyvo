@@ -115,7 +115,10 @@ class ErasureFoundationIT {
   @Autowired ErasureStore store;
   @Autowired Erasures internal;
   @Autowired Authentication auth;
-  @Autowired IdentityRepository identity;
+
+  @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+  IdentityRepository identity;
+
   @Autowired ProfileCommands profiles;
   @Autowired JdbcTemplate jdbc;
   @Autowired org.springframework.transaction.PlatformTransactionManager manager;
@@ -135,6 +138,10 @@ class ErasureFoundationIT {
   void isolatePriorExecutions() {
     flowClock.fixed = null;
     provider.afterExchange = () -> {};
+    org.mockito.Mockito.doAnswer(
+            call -> flowClock.fixed == null ? call.callRealMethod() : flowClock.fixed)
+        .when(identity)
+        .databaseTime();
     jdbc.update(
         "UPDATE platform.job SET available_at=timestamptz '2100-01-01 00:00:00Z' WHERE kind='MAIL' AND status IN ('PENDING','RETRY')");
     jdbc.update(
@@ -196,6 +203,208 @@ class ErasureFoundationIT {
 
   void exports() {
     for (int i = 0; i < 20; i++) jobs.consumeExternalJob(UUID.randomUUID(), List.of(exporter));
+  }
+
+  UUID rejectPreparedCloseThenCommitNextVersion(ActorContext user) {
+    var changed = new java.util.concurrent.atomic.AtomicBoolean();
+    org.mockito.Mockito.doAnswer(
+            call -> {
+              var receipt = call.callRealMethod();
+              var record =
+                  json.readValue(
+                      new String(
+                          (byte[]) call.getArgument(2), java.nio.charset.StandardCharsets.UTF_8),
+                      Erasures.Journal.class);
+              if (record.subject().equals(user.userId()) && changed.compareAndSet(false, true))
+                jdbc.update(
+                    "UPDATE account.user_account SET version=version+1 WHERE id=?", user.userId());
+              return receipt;
+            })
+        .when(archive)
+        .append(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.any());
+    try {
+      assertThatThrownBy(() -> auth.close(user, 0)).hasMessage("STALE_VERSION");
+    } finally {
+      org.mockito.Mockito.reset(archive);
+    }
+    assertThat(changed).isTrue();
+    var rejected =
+        jdbc.queryForObject(
+            "SELECT id FROM account.erasure_intent WHERE user_id=? AND expected_version=0",
+            UUID.class,
+            user.userId());
+    assertThat(store.export(rejected, "PREPARED").receipt()).isNotNull();
+    auth.close(user, 1);
+    assertThat(store.request(user.userId()).id()).isNotEqualTo(rejected);
+    return rejected;
+  }
+
+  void onlyExportDue(UUID user, UUID export) {
+    jdbc.update(
+        "UPDATE platform.job SET available_at=timestamptz '2100-01-01Z' WHERE kind='ERASURE_EXPORT' AND payload->>'data' IN (SELECT e.id::text FROM account.erasure_export e JOIN account.erasure_intent i ON i.id=e.intent_id WHERE i.user_id=?) AND status IN ('PENDING','RETRY')",
+        user);
+    jdbc.update(
+        "UPDATE platform.job SET available_at=clock_timestamp() WHERE kind='ERASURE_EXPORT' AND payload->>'data'=? AND status IN ('PENDING','RETRY')",
+        export.toString());
+  }
+
+  @Test
+  void rejectedPreparedDeliveryAfterLaterCloseCannotInventCommitOrCertifyAnotherRequest() {
+    var user = actor(false);
+    var rejected = rejectPreparedCloseThenCommitNextVersion(user);
+    var request = store.request(user.userId());
+    var ownCommit = store.export(request.id(), "COMMITTED");
+    var before = store.step(user.userId(), AccountErasure.Step.RECOVERY_INTENT, false);
+    onlyExportDue(user.userId(), store.export(rejected, "PREPARED").id());
+    assertThat(jobs.consumeExternalJob(UUID.randomUUID(), List.of(exporter))).isTrue();
+    assertThat(store.export(rejected, "COMMITTED")).isNull();
+    assertThat(store.step(user.userId(), AccountErasure.Step.RECOVERY_INTENT, false))
+        .isEqualTo(before);
+    assertThat(store.export(ownCommit.id()).receipt()).isNull();
+    tx().executeWithoutResult(s -> internal.reconcile(user.userId()));
+    assertThat(store.step(user.userId(), AccountErasure.Step.IDENTITY, false).view().status())
+        .isEqualTo("WAITING_DEPENDENCY");
+    onlyExportDue(user.userId(), ownCommit.id());
+    assertThat(jobs.consumeExternalJob(UUID.randomUUID(), List.of(exporter))).isTrue();
+    assertThat(store.step(user.userId(), AccountErasure.Step.RECOVERY_INTENT, false).proof())
+        .isEqualTo(ownCommit.digest());
+    assertThat(store.export(rejected, "COMMITTED")).isNull();
+  }
+
+  @Test
+  void obsoleteCommittedExportCannotPoisonCurrentRequestOnFailureOrPublishAFalseReceipt()
+      throws Exception {
+    var user = actor(false);
+    var rejected = rejectPreparedCloseThenCommitNextVersion(user);
+    var intent = store.intent(rejected);
+    var badId = UUID.randomUUID();
+    // Model an immutable queued artifact left by the reviewed bug. Never rewrite its history.
+    var record =
+        new Erasures.Journal(
+            intent.lineage(),
+            badId,
+            rejected,
+            user.userId(),
+            AccountErasure.PROTOCOL,
+            AccountErasure.POLICY,
+            json.readValue(store.export(rejected, "PREPARED").record(), Erasures.Journal.class)
+                .rosterDigest(),
+            1,
+            1,
+            "COMMITTED",
+            null,
+            null,
+            null,
+            Instant.now(),
+            intent.createdAt(),
+            List.of());
+    var encoded = json.writeValueAsString(record);
+    var digest =
+        java.util.HexFormat.of()
+            .formatHex(
+                java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(encoded.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+    tx().executeWithoutResult(
+            s -> {
+              store.addExport(badId, rejected, "COMMITTED", null, null, null, encoded, digest);
+              var export = store.export(badId);
+              jobs.job(
+                  "ERASURE_EXPORT", export.execution().toString(), badId.toString(), Instant.now());
+            });
+    var current = store.request(user.userId());
+    var before = store.step(user.userId(), AccountErasure.Step.RECOVERY_INTENT, false);
+    var offline = ARCHIVE.resolveSibling(ARCHIVE.getFileName() + "-r2-offline");
+    Files.move(ARCHIVE, offline);
+    try {
+      onlyExportDue(user.userId(), badId);
+      assertThat(jobs.consumeExternalJob(UUID.randomUUID(), List.of(exporter))).isFalse();
+      assertThat(store.step(user.userId(), AccountErasure.Step.RECOVERY_INTENT, false))
+          .isEqualTo(before);
+      assertThat(store.request(user.userId())).isEqualTo(current);
+    } finally {
+      Files.move(offline, ARCHIVE);
+    }
+    onlyExportDue(user.userId(), badId);
+    assertThat(jobs.consumeExternalJob(UUID.randomUUID(), List.of(exporter))).isFalse();
+    assertThat(Files.exists(ARCHIVE.resolve(badId + ".record"))).isFalse();
+    assertThat(store.export(badId).receipt()).isNull();
+    assertThat(store.export(badId).record()).isEqualTo(encoded);
+    assertThat(store.step(user.userId(), AccountErasure.Step.RECOVERY_INTENT, false))
+        .isEqualTo(before);
+    var own = store.export(current.id(), "COMMITTED");
+    onlyExportDue(user.userId(), own.id());
+    assertThat(jobs.consumeExternalJob(UUID.randomUUID(), List.of(exporter))).isTrue();
+    assertThat(store.step(user.userId(), AccountErasure.Step.RECOVERY_INTENT, false).proof())
+        .isEqualTo(own.digest());
+  }
+
+  @Test
+  void supersededExportExecutionCannotAcknowledgeOrChargeItsSuccessorAfterRealAppend() {
+    for (boolean failAfterAppend : List.of(false, true)) {
+      var user = actor(false);
+      auth.close(user, 0);
+      var committed = store.export(store.request(user.userId()).id(), "COMMITTED");
+      var nextExecution = UUID.randomUUID();
+      var once = new java.util.concurrent.atomic.AtomicBoolean();
+      org.mockito.Mockito.doAnswer(
+              call -> {
+                var result = call.callRealMethod();
+                if (committed.id().equals(call.getArgument(0)) && once.compareAndSet(false, true)) {
+                  tx().executeWithoutResult(
+                          s -> {
+                            store.resumeExport(committed.id(), nextExecution);
+                            jobs.job(
+                                "ERASURE_EXPORT",
+                                nextExecution.toString(),
+                                committed.id().toString(),
+                                Instant.now());
+                          });
+                  if (failAfterAppend) throw new IllegalStateException("SYNTHETIC_OLD_EXECUTION");
+                }
+                return result;
+              })
+          .when(archive)
+          .append(
+              org.mockito.ArgumentMatchers.any(),
+              org.mockito.ArgumentMatchers.anyString(),
+              org.mockito.ArgumentMatchers.any());
+      try {
+        onlyExportDue(user.userId(), committed.id());
+        assertThat(jobs.consumeExternalJob(UUID.randomUUID(), List.of(exporter)))
+            .isEqualTo(!failAfterAppend);
+      } finally {
+        org.mockito.Mockito.reset(archive);
+      }
+      assertThat(once).isTrue();
+      assertThat(Files.exists(ARCHIVE.resolve(committed.id() + ".record"))).isTrue();
+      assertThat(store.export(committed.id()).receipt()).isNull();
+      assertThat(store.export(committed.id()).execution()).isEqualTo(nextExecution);
+      assertThat(
+              jdbc.queryForObject(
+                  "SELECT failures FROM account.erasure_export WHERE id=?",
+                  Long.class,
+                  committed.id()))
+          .isZero();
+      assertThat(
+              store.step(user.userId(), AccountErasure.Step.RECOVERY_INTENT, false).view().status())
+          .isNotEqualTo("DONE");
+      assertThat(
+              store
+                  .step(user.userId(), AccountErasure.Step.RECOVERY_INTENT, false)
+                  .view()
+                  .failures())
+          .isZero();
+      for (int i = 0; i < 2; i++) {
+        onlyExportDue(user.userId(), committed.id());
+        jobs.consumeExternalJob(UUID.randomUUID(), List.of(exporter));
+      }
+      assertThat(store.export(committed.id()).receipt()).isEqualTo(committed.digest());
+      assertThat(store.step(user.userId(), AccountErasure.Step.RECOVERY_INTENT, false).proof())
+          .isEqualTo(committed.digest());
+    }
   }
 
   @Test
@@ -1105,6 +1314,10 @@ class ErasureFoundationIT {
 
   @Test
   void providerExchangeCompletingAfterOriginalTransactionExpiryIsRejected() {
+    org.mockito.Mockito.doAnswer(
+            call -> flowClock.fixed == null ? call.callRealMethod() : flowClock.fixed)
+        .when(identity)
+        .databaseTime();
     var user = actor(false);
     provider.proof =
         new com.flyvo.socialcore.identity.domain.IdentityState.ProviderProof(

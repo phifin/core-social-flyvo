@@ -176,7 +176,7 @@ public class DurableWorkStore implements DurableWork {
           var args = new java.util.ArrayList<Object>(kinds);
           args.add(time(clock.instant()));
           jdbc.query(
-              "SELECT id,kind,payload->>'data',lease_generation FROM platform.job WHERE kind IN ("
+              "SELECT id,kind,payload->>'data',lease_generation,dedup_key FROM platform.job WHERE kind IN ("
                   + String.join(",", java.util.Collections.nCopies(kinds.size(), "?"))
                   + ") AND status='RUNNING' AND attempts>=10 AND lease_until<=? ORDER BY lease_until,id LIMIT 1 FOR UPDATE SKIP LOCKED",
               r -> {
@@ -184,7 +184,7 @@ public class DurableWorkStore implements DurableWork {
                     .failed(
                         r.getString(3),
                         new com.flyvo.socialcore.platform.api.ExternalJobHandler.Lease(
-                            r.getLong(4), 10, clock.instant()));
+                            r.getLong(4), 10, clock.instant(), r.getString(5)));
                 jdbc.update(
                     "UPDATE platform.job SET status='DEAD',lease_owner=NULL,lease_until=NULL,last_error_code='FINAL_LEASE_EXPIRED' WHERE id=?",
                     r.getObject(1, UUID.class));
@@ -199,7 +199,7 @@ public class DurableWorkStore implements DurableWork {
               args.add(time(clock.instant()));
               var rows =
                   jdbc.query(
-                      "SELECT id,kind,payload->>'data',lease_generation,attempts FROM platform.job WHERE kind IN ("
+                      "SELECT id,kind,payload->>'data',lease_generation,attempts,dedup_key FROM platform.job WHERE kind IN ("
                           + String.join(",", java.util.Collections.nCopies(kinds.size(), "?"))
                           + ") AND ((status IN ('PENDING','RETRY') AND available_at<=?) OR (status='RUNNING' AND lease_until<=?)) AND attempts<10 ORDER BY available_at,id LIMIT 1 FOR UPDATE SKIP LOCKED",
                       (rs, n) ->
@@ -210,7 +210,8 @@ public class DurableWorkStore implements DurableWork {
                               new com.flyvo.socialcore.platform.api.ExternalJobHandler.Lease(
                                   rs.getLong(4) + 1,
                                   rs.getInt(5) + 1,
-                                  clock.instant().plusSeconds(60))),
+                                  clock.instant().plusSeconds(60),
+                                  rs.getString(6))),
                       args.toArray());
               if (rows.isEmpty()) return null;
               var c = rows.getFirst();

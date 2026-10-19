@@ -19,7 +19,12 @@ receive no progress credential; only current ACTIVE ADMIN gets audited/no-store
 fixed-step metadata. No raw checkpoint, former identity or object reference is
 returned. Body16KiB/CSRF/Origin/strong If-Match remain enforced. Identity claims
 stay held through bounded proof/SMTP drain; provider transaction expiry is rechecked
-after exchange, and fresh-proof re-registration uses a different UUID. See
+after exchange, and fresh-proof re-registration uses a different UUID.
+Anonymous callback/onboarding/mailbox issuance and expiry now use PostgreSQL
+`clock_timestamp()` after relevant locks, with inherited absolute successor limits
+and post-write rollback checks. A cached pre-lock time or delayed exchange cannot
+renew an expired proof. Recovery export outcomes bind to the exact request/
+generation/round/current execution, never merely the same user. See
 [protocol](account-erasure.md) and [operations](../ops/erasure.md). Full erasure,
 pending moderation case protocol/final proofs, restore and public policy remain gated.
 

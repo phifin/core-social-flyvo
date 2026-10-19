@@ -22,6 +22,10 @@ public class JdbcIdentityRepository implements IdentityRepository {
     this.jdbc = jdbc;
   }
 
+  public Instant databaseTime() {
+    return jdbc.queryForObject("SELECT clock_timestamp()", OffsetDateTime.class).toInstant();
+  }
+
   private static OffsetDateTime t(Instant now) {
     return now.atOffset(ZoneOffset.UTC);
   }
@@ -422,15 +426,25 @@ public class JdbcIdentityRepository implements IdentityRepository {
         t(expires));
   }
 
-  public byte[] consumeOnboarding(byte[] hash, byte[] browser, Instant now) {
-    var rows =
-        jdbc.query(
-            "UPDATE identity.external_onboarding SET consumed_at=? WHERE secret_hash=? AND browser_binding_hash=? AND consumed_at IS NULL AND expires_at>? RETURNING provider_proof_encrypted",
-            (rs, n) -> rs.getBytes(1),
+  public Onboarding onboarding(byte[] hash) {
+    return first(
+        "SELECT * FROM identity.external_onboarding WHERE secret_hash=? FOR UPDATE",
+        (rs, n) ->
+            new Onboarding(
+                uuid(rs, "id"),
+                rs.getBytes("browser_binding_hash"),
+                rs.getBytes("provider_proof_encrypted"),
+                instant(rs, "expires_at"),
+                instant(rs, "consumed_at")),
+        hash);
+  }
+
+  public boolean consumeOnboarding(UUID id, Instant now) {
+    return jdbc.update(
+            "UPDATE identity.external_onboarding SET consumed_at=? WHERE id=? AND consumed_at IS NULL AND expires_at>?",
             t(now),
-            hash,
-            browser,
-            t(now));
-    return rows.isEmpty() ? null : rows.getFirst();
+            id,
+            t(now))
+        == 1;
   }
 }

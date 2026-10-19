@@ -89,6 +89,21 @@ effects run outside locks; receipt/current step/worker fence ack runs transactio
 DEAD resource export appears in admin progress and can be resumed by its owner
 selector without changing the immutable record or hiding its failure count.
 
+Every non-PREPARED journal must match the immutable request ID/subject/lifecycle
+generation, verification round and t0 of its own intent. A delayed PREPARED for
+rejected close A may retain its own verified receipt, but cannot invent COMMITTED(A)
+merely because a later request B exists for the same user. Historical backfill
+is allowed only for that exact intent/request. No archive record is rewritten or
+deleted to hide an unmatched intent or old invalid COMMITTED artifact.
+
+The external worker supplies its immutable producer execution key in the lease.
+Export preparation/ack/failure compares it with the export's current execution;
+COMMITTED ack also compares the captured recovery step/version/round after reacquiring
+the guard. Superseded executions cannot write receipts or charge the successor's
+failure count. An invalid old export records only its own failure history, not
+another request's recovery proof/status. Normal retries, DEAD and audited resume
+keep the same immutable journal and existing worker fence.
+
 ErasureCertificate binds request/subject/generation, protocol/policy/roster,
 verification round, resource-manifest digest and exactly eleven current prerequisite
 proof/version/round entries. It has no own final-step receipt/version or DELETED
@@ -105,12 +120,29 @@ mappings. Bounded stages remove bound OAuth/PKCE, oldest-first refresh generatio
 enters account checkpoints or archive.
 
 Login email/provider uniqueness is retained until the full anonymous chain bound
-passes: LOGIN10m → onboarding10m → mailbox30m =50m from t0, using DB time for
-erasure eligibility. OAuth repeats original transaction expiry **after** external
-exchange; mailbox completion reevaluates time after acquiring its intent lock.
-Thus an unbounded network exchange cannot renew a pre-cut proof. Unknown anonymous
-transactions are not attributed by guessed email; unrelated anonymous ciphertext
-keeps its normal TTL. Existing per-email HMAC issuance windows are not reset.
+passes: LOGIN10m → onboarding10m → mailbox30m =50m from t0. Issuance, capability
+validation and erasure eligibility use the same PostgreSQL `clock_timestamp()`
+authority, not JVM-clock offsets or transaction-start `now()`. Onboarding is read
+FOR UPDATE before sampling time; callback and mailbox validation also sample after
+their row/account guards. Dispatch-window/account waits and final registration
+writes are followed by another expiry check; failure rolls back consumption,
+successor intent/mail and all registration effects in that transaction.
+
+For an anonymous LOGIN issued at L, its fixed expiry is E=L+10m. The callback must
+finish before E, including network and account-guard waits; onboarding expiry
+O≤E+10m. Registration must consume before O, even after dispatch waits, and its
+mailbox expiry M≤O+30m. Therefore M≤L+50m≤t0+50m for pre-t0 chains. Successor
+deadlines never renew from a late wait. Expiry is strict: equal time is invalid.
+A callback's committed state consumption is not an unlimited network credential;
+failure after exchange keeps it consumed without minting onboarding/session.
+
+The bound assumes trusted source-issued TTLs and one authoritative DB time domain;
+it is not certification of arbitrary imported/old-binary proof rows, clock rollback,
+or restored data. Do not activate maintenance on existing developer data or reuse
+an unverified old lineage. Those activation/recovery/clock-operability gates remain
+with main/U04/U06. Unknown anonymous transactions are not attributed by guessed
+email; unrelated anonymous ciphertext keeps its normal TTL. Existing per-email
+HMAC issuance windows are not reset.
 
 ScopedWork correlates new authenticated mail by opaque producer scope; captured
 legacy proof IDs select exact dedup handles. Its cancellation is out-of-business-TX,
