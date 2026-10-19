@@ -3,14 +3,16 @@
 ## Routing
 
 - Task: phase-9a-i-erasure-foundation-identity
-- Round: 1
-- State: CHANGES_REQUESTED — review round 1; local synthetic only, not accepted
-- Last writer: main reviewer, 2026-10-18
-- Next owner: existing Phase9A-I development chat; fix both findings below
+- Round: 2
+- State: READY_FOR_REVIEW — repair candidate; history secret-scan gate blocked, not accepted
+- Last writer: Phase9A-I development, 2026-10-19
+- Next owner: main reviewer — disposition R2/R1 and exact manifest-hash scan exception
 - Reuse chat: `Develop Phase 9A-I — Erasure Foundation & Identity`
 - Accepted executable baseline: `d2a8e3c2b5942f1019ba2a48157da6ce3a5ed662`
 - Accepted design: original `ac82f4f`, main decision/refinements `eab4da6`
-- Actual implementation commit: `ed125b719ed47d5cb97a33157ad3e49977587376`
+- Actual repair code commit: `bbbde93c170246372895907dd4e446696521452d`
+- Previously reviewed implementation: `ed125b719ed47d5cb97a33157ad3e49977587376`;
+  original handoff `a9f4d78`, main CHANGES_REQUESTED review `9170d53`
 - Activation/assignment: `edb3aad`; this handoff is committed separately afterward
 - Design archive: [Phase9A design review](handoffs/phase-9a-erasure-recovery-design.md).
 - Prior executable review: [Phases7–8](handoffs/phase-7-8-notifications-search-moderation-ops.md).
@@ -267,6 +269,22 @@ These are development responses, **not reviewer resolution/acceptance**.
 
 ## Main review requested / next gate
 
+### Development repair plan after review9170d53
+
+1. R2: bind journal creation/recovery and exporter success/failure to exact immutable
+   intent/request/generation/round and the worker's current execution key. Exercise
+   rejected A, later committed B, delayed/failed A and held B using real worker/PG/
+   archive, plus same-intent backfill, duplicates and fenced rollback.
+2. R1: audit callback→onboarding→mailbox lock/expiry and inherited deadlines using
+   one defensible clock contract; add deterministic PG lock/latch boundary tests,
+   full old-proof/claim-release and fresh-proof/new-UUID regressions. Do not lengthen
+   the50m barrier or infer an end-to-end takeover from inspection alone.
+3. Run targeted gates then formatting/full Java21 verify, affected runtime/shared
+   worker benchmark checks and pinned secret/doc/manifest checks; retain failures.
+   Commit verified fixes/docs first, then separate real-hash READY_FOR_REVIEW mailbox.
+   Findings below remain verbatim/OPEN until main dispositions them. No II/III,
+   agents, real erasure/restore, push or production configuration.
+
 ### Main review round 1 — CHANGES_REQUESTED, 2026-10-18
 
 Reviewed executable `ed125b719ed47d5cb97a33157ad3e49977587376`, delivered by
@@ -381,3 +399,129 @@ Phase9 artifact/forward-fix rehearsal and target-environment performance/operati
 Unproven SMTP invocation end stays waiting; historical baseline cannot certify old
 backups. No account in I can reach DELETED. No real erasure/restore, agents, push,
 release, deployment or Phase9B occurred or is authorized by this handoff.
+
+## Development repair response round 2 — 2026-10-19
+
+READY_FOR_REVIEW is routing to main, **not acceptance or an all-gates-complete
+claim**. Verified behavioral repair is committed at
+`bbbde93c170246372895907dd4e446696521452d`; this mailbox is a separate later
+documentation commit. The required post-code-commit history scan failed on one
+documented non-secret manifest hash. Its exact exception requires main's decision;
+no ignore/rule/history change was made to manufacture a passing gate. No push.
+
+### P9AI-R2 developer response — proposed addressed, remains OPEN
+
+`Intent.matches` binds request ID/user/lifecycle generation. Non-PREPARED journals
+must match their own request/round/t0; recovered PREPARED can create COMMITTED
+only for the same pending request/round. An unmatched A remains uncommitted
+history, never a fabricated record using B's timestamp or authority.
+
+Actual worker leases carry immutable producer execution keys, including expired
+tenth claims. Export prepare/ack/failure matches current execution and exact
+journal/request/generation/round; COMMITTED ack rechecks the captured recovery
+context/version after the guard. Old immutable invalid artifacts retain their own
+failure history but cannot acknowledge or charge another request/successor.
+No network under business locks, new job payload, schema or retry-budget change.
+
+Real PG/worker/archive regressions cover rejected A after actual append, valid B
+at a new version with B COMMITTED held, delayed A, old invalid COMMITTED(A)
+failure, and superseded success/failure after append. They assert no fabricated
+COMMITTED(A), no B proof/DONE/failure from A and progress only from B's receipt.
+Existing same-intent historical recovery, duplicates, DEAD/resume and fenced
+rollback tests pass. RED on reviewed code:2 tests/2 failures; targeted fixed
+gate10 fast+25 IT PASS. Only main may resolve this ID.
+
+### P9AI-R1 developer response — proposed addressed, remains OPEN
+
+Identity issuance/validation now shares account retention's PostgreSQL
+`clock_timestamp()` authority, not JVM offsets/transaction-start time. Onboarding
+locks before sampling; callback, dispatch/account guards, mailbox locks and final
+registration effects get post-wait/write expiry checks with transactional rollback.
+Successors inherit absolute parent limits; equality is expired. Committed callback
+consumption before network stays consumed on late denial without a new capability.
+
+For pre-t0 LOGIN issued at L: E=L+600s, onboarding O≤E+600s, mailbox M≤O+1800s,
+so M≤L+3000s≤t0+3000s. No wait constant or denial relaxed. Trusted source-issued
+TTLs/one authoritative DB clock are explicit assumptions; arbitrary imported/
+old-binary rows, clock rollback/restored lineage are not certified. Existing data
+activation remains prohibited; main/U04/U06 retain those external gates.
+
+New21-case `ErasureProofChainIT` uses real PG row locks/`pg_blocking_pids`, provider
+latches, actual worker/archive and controlled test-only DB-time ports. Before/
+exact/after−1µs/0/+1µs groups cover onboarding, dispatch, OAuth state, callback
+network/account guard and mailbox; denied commands leave no successor/registration
+effects. Other tests cover post-provision rollback, full inherited anonymous chain,
+and real erasure: claims held at50m−1µs, released by genuine drain at50m; old
+LOGIN/onboarding/mailbox/reset denied, fresh proof creates a different UUID.
+Original subject stays PENDING/eight future owners waiting/0 DELETED. RED proves
+stale expiry consumption (2/3 failed), not an old-code end-to-end takeover.
+Only main may resolve this ID.
+
+### Repair-round checks and retained evidence
+
+Details/failure ledger: [phase record](phases/phase-9a-i.md), repair sections.
+Durable local evidence `/home/vonhuphi/social-p9ai-fixes.pwd74E/`; raw RED,
+failed fixture runs, reports and interrupted benchmark preserved. No real data.
+
+- Combined targeted100 PASS (13 fast+87 IT),1m30s,October18 14:10:38+07.
+- Final Java21 `./mvnw -B -ntp verify`:442 PASS (62 fast+380 IT), no failures/
+  errors/skips,7m48s,October18 14:19:10+07; formatter, architecture/OpenAPI,
+  real PG/storage and all37 migration prefixes/checksums included.
+- All346 manifest rows rechecked unchanged October19 and before commit;
+  executable digest `4518697616d7c069f55f083c75ac6a4422455c10a51e155804763e3a1f9a3ae0`,
+  runtime288 digest `ed7b71f954e3f955ff8ac52befb26acec35f9a3d495043324785a4b7f634dca2`.
+  No migration/dependency/config/OpenAPI/benchmark/ignore change.
+- Unchanged heavy benchmark16 outcomes,3200/3200 success,0 request/acquisition
+  failures,6m18s,October19 21:49:38+07. Interrupted prior attempt stopped after
+  pool10's1600 successes, not relabeled PASS. Dense p95=1.497–3.455s>500ms;
+  R02/public capacity gate remains open, no pool/timeouts tuned.
+- Fresh isolated native app/media Compose build/bootstrap/probe PASS. Readiness/
+  liveness200, metrics401, real mailbox202/200, admin/CSRF403, stale412, strict
+  receipt-backed close204, revoked401, audited progress200/no-store/ETag.
+  SQL37 migrations/0 DELETED/12 steps,8 waiting; own-request COMMITTED receipt
+  matches recovery proof/generation/round. Running private buckets403. App and
+  then dependencies stopped; synthetic volumes/keys retained, developer data
+  untouched. No new native upgrade/restore claim; original upgrade evidence is
+  separately attributed, current full verify covers unchanged prefixes.
+- Positive secret-scan control PASS; pinned full history through9170d53
+  (70 commits) PASS; staged code/mailbox diffs PASS; Markdown38 local links/whitespace
+  PASS; reviewer findings match9170d53 verbatim. Post-code history result below
+  is a failure, not superseded by these narrower checks.
+
+### New delivery blocker — exact non-secret history finding, not suppressed
+
+Pinned Gitleaks8.28.0 full history through `bbbde93` scans71 commits and exits1
+with exactly one `generic-api-key` finding. Reports:
+`secret-history-code.log`, `secret-history-code-report.json` (redacted).
+Fingerprint:
+`bbbde93c170246372895907dd4e446696521452d:docs/phases/phase-9a-i.md:generic-api-key:324`.
+The match is the literal label `API346-file SHA-256:` followed by the executable
+manifest digest above (lines324–325), verified against the retained346-file
+manifest. It is not an operational credential. Staged stdin scanning did not
+flag this multiline context; the post-commit full-history gate did.
+
+Changing later prose cannot remove the historical finding. Do not amend/rewrite
+history, broaden scanner rules or silently add an ignore. **Main decision needed:**
+review the manifest evidence and, if satisfied, authorize/apply only that exact
+commit/path/rule/line exception using the existing narrowly reviewed pattern,
+then rerun positive control/full history. No such approval is inferred here.
+Until that decision/check, delivery verification is incomplete and no push/
+launch/phase acceptance is claimed. Original P9AI-R1/R2 findings stay OPEN.
+
+### C01–C05, limitations and exact next action
+
+- C01 unchanged: moderation pending-case semantics preserved; owner proof stays II.
+- C02 unchanged: eleven prerequisites, no recursive own final certificate; no
+  account can reach DELETED in I.
+- C03 unchanged: eight future owners stay waiting, never dispatched/fake DONE.
+- C04 preserved: default-off synthetic-only activation, verified independent local
+  archive, missing archive fails closed. Real latest-cut/clock/backup/key authority,
+  imported lineage and U01–U06 remain unapproved; no real erasure/restore.
+- C05 preserved: verified resource receipt before last identity/profile mapping
+  loss; failures/fences remain visible. Source release is not media purge/restore proof.
+
+Main reviews actual `bbbde93`, per-ID regressions and the precise scan blocker;
+only main decides dispositions/any exact scanner exception/G1. Do not activate
+II/III or accept ADRs. Public SLA/U01–U06, later owner proofs, true latest-cut/
+backup/key authority, writer quiescence and restore drills remain open. No agent,
+push, release, deployment, real erasure/restore or Phase9B occurred.
