@@ -4,11 +4,12 @@ This blueprint is the architectural source of truth. Phases 0–3 are implemente
 
 ## Read first
 
-Phase9A-I now has a local synthetic implementation pending main review; this
+Phase9A-I is accepted at executable `bbbde93`, G1 review `faf0ad8` (2026-10-20); this
 supersedes the introductory historical statement that all Phase9 is unimplemented.
 [Protocol](account-erasure.md) and [evidence](phases/phase-9a-i.md) define the partial
-surface. II/III/full erasure/restore/production remain unimplemented or unactivated;
-the fixed mailbox alone routes further work.
+surface. II is explicitly assigned but not implemented; III/full erasure/restore/
+production remain unimplemented or unactivated. The fixed mailbox routes further
+work through the [complete II assignment](work-packages/phase-9a-ii.md).
 
 Read the current [thread handoff](agent-handoff.md) and [thread workflow](thread-workflow.md) before this reading sequence. The mailbox sets current scope and review state; accepted architecture/security documents remain authoritative.
 

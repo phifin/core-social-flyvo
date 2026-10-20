@@ -1,7 +1,9 @@
 # Phase 9A C — implementation packages and release evidence
 
-Status: **9A-I ACTIVATED by main**, 2026-10-17, local synthetic scope only.
-II/III remain unactivated. ADR-017 C01–C05 are binding prerequisites/refinements,
+Status: **9A-I ACCEPTED; 9A-II ACTIVATED by main**, 2026-10-20, local synthetic only.
+G1 review `faf0ad8` accepts executable `bbbde93`; [II assignment](phase-9a-ii.md)
+defines current scope and replaces tentative II migration numbering: startV0038
+after inspecting HEAD. III remains unactivated. ADR-017 C01–C05 are binding prerequisites/refinements,
 not implementation completion. [Inventory A](phase-9a-data-inventory.md)
 covers56 actual tables at `d2a8e3c`; [accepted local ADR-017 B](../adr/017-account-erasure-and-recovery.md)
 defines decisions D01–D10, user/environment inputs U01–U06, fixed roster, API,
@@ -25,12 +27,16 @@ G0 main dispositions on D01–D10; local policy profile + package activation
   -> separately authorized launch (not part of any assignment here)
 ```
 
-Recommend next development chat **`Develop Phase 9A-I — Erasure Foundation & Identity`**,
+Historical G0 recommendation: **`Develop Phase 9A-I — Erasure Foundation & Identity`**,
 opened manually by the user **after main acceptance/activation**. One writer,
 no spawned agents; main remains reviewer. It delivers the entire I package with
 verified internal slice commits, not an early handoff after one module. Other owner
 steps must remain explicitly pending; I cannot claim end-to-end erasure. Do not
 activate II/III merely because their plan is written.
+
+G1 is now accepted and the current new chat is
+**`Develop Phase 9A-II — Sources, Media & Completion`**. Its explicit assignment
+activates II.1–II.4 only; the historical I recommendation above is not current routing.
 
 G0 must record engineering policy/version and which defaults are accepted **only
 for synthetic local fixtures**. Real retention/restore operations remain forbidden

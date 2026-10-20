@@ -2,7 +2,8 @@
 
 Status: **Accepted for local synthetic implementation by main**, 2026-10-17,
 with the binding conditions below. No production policy, data deletion, restore
-or deployment is authorized. Only package9A-I is activated separately. This completes
+or deployment is authorized. Package activation is recorded separately in the
+fixed mailbox: G1 accepted I and activated II on2026-10-20; III is not activated. This completes
 workstream B of the [Phase 9A design assignment](../work-packages/phase-9a-design.md).
 Evidence: [56-table inventory](../work-packages/phase-9a-data-inventory.md).
 Execution/test gates: [plan](../work-packages/phase-9a-plan.md).
@@ -48,7 +49,8 @@ from another person's downloads, authored words or provider systems.
 Main accepts D01–D10 for the local synthetic engineering profile, subject to the
 conditions below. D02/D03/D06 retention/reuse semantics are not production product
 approval; D08 accepts the protocol, not a production provider or durability claim.
-D10 activates I only; II/III still require separate main gates.
+D10 originally activated I only; later G1 acceptance `faf0ad8` activates II through
+its separate assignment. III still requires G2 and explicit main activation.
 
 ### Binding main review conditions — 2026-10-17
 
@@ -497,4 +499,6 @@ authorize Phase9B, public launch, real erasure or restore.
 
 Main reviewed D01–D10 against the inventory, plan and relevant executable paths
 and accepts this design with C01–C05 for local synthetic implementation. The mailbox
-activates I only. This does not resolve U01–U06, accept code or enable II/III/launch.
+originally activated I only. Later code acceptance/II activation is separately
+recorded at G1 `faf0ad8` and the current mailbox, not inferred from this design.
+Neither decision resolves U01–U06 or enables III/launch.

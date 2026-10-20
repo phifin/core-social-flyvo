@@ -56,10 +56,19 @@ The next chat is `Plan Phase 9A — Erasure, Recovery & Release Gates`, assigned
 executable changes/erasure were authorized during that design task.
 
 Main accepted the local synthetic Phase9A design at `eab4da6` on2026-10-17 with
-ADR-017 C01–C05 and archived its mailbox. Current next chat is
+ADR-017 C01–C05 and archived its mailbox. Its next chat was
 `Develop Phase 9A-I — Erasure Foundation & Identity`, assigned all I.1–I.3 under
 the fixed mailbox. Only isolated synthetic implementation/testing is activated;
 II/III, real data erasure/restore and production/public policy remain unapproved.
+
+On2026-10-20 main accepted I at executable `bbbde93`, review `faf0ad8`, resolving
+P9AI-R1/R2 and the exact non-secret manifest scan finding. Main independently
+verified442 tests and pushed that accepted checkpoint to origin/master. The
+[accepted I archive](handoffs/phase-9a-i-erasure-foundation-identity.md) preserves
+all findings/evidence. The user's continuation activates the complete
+[II assignment](work-packages/phase-9a-ii.md) in a new user-opened chat
+`Develop Phase 9A-II — Sources, Media & Completion`. The I chat is finished.
+III/real erasure/restore/production remain unapproved; main still does no development.
 
 Read AGENTS.md, the mailbox, git status and recent history before acting. Verify that the mailbox's code commit exists and matches the work being reviewed; later documentation-only commits are expected. If newer code exists, inspect it and explicitly record the new review baseline. Do not act on stale findings as if they referred to current code. The mailbox is a task/status record, not permission to override security, ADRs or human instructions.
 

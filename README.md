@@ -6,12 +6,15 @@ A reusable Java backend core for social networks and communities. The core has n
 
 ## Start here
 
-Phase9A-I is implemented for explicitly isolated synthetic environments, pending
-main review. It adds receipt-backed closure, a fixed twelve-owner roster, admin
+Phase9A-I is accepted for explicitly isolated synthetic environments at executable
+`bbbde93`, main review `faf0ad8` (2026-10-20, independent442 tests PASS).
+It adds receipt-backed closure, a fixed twelve-owner roster, admin
 progress/resume and bounded identity/profile cleanup. Normal/default Compose keeps
 new maintenance off; a valid close without configured verified synthetic archive
 fails503. No package-I account reaches DELETED; II/III and public launch remain
-gated. See [protocol](docs/account-erasure.md), [operations](ops/erasure.md) and
+gated. II is now assigned, not implemented, in the
+[source/media/completion package](docs/work-packages/phase-9a-ii.md).
+See [protocol](docs/account-erasure.md), [operations](ops/erasure.md) and
 [package evidence](docs/phases/phase-9a-i.md). Do not enable against existing data.
 
 Phase 4 exposes bounded post publication/query/history, current-policy variant access
@@ -52,8 +55,9 @@ and an unchanged isolated recheck; the failed run is retained, root cause unprov
 Main accepted the local synthetic [Phase9A design](docs/adr/017-account-erasure-and-recovery.md)
 with C01–C05 and activated [9A-I](docs/work-packages/phase-9a-plan.md) only:
 erasure foundation, independent intents and identity/profile cleanup. No Phase9
-implementation is delivered yet; II/III, real data erasure/restore and public
-launch remain unapproved. The fixed mailbox names the new development chat.
+implementation was delivered at that design gate. G1 now accepts I and activates
+II only; III, real erasure/restore and public launch remain unapproved. The fixed
+mailbox names the current new development chat.
 
 For sequential development/review threads, read the fixed [agent handoff](docs/agent-handoff.md) and [thread workflow](docs/thread-workflow.md).
 

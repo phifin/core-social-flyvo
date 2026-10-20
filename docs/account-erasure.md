@@ -1,6 +1,7 @@
 # Account erasure — implemented package 9A-I
 
-Local synthetic implementation, pending main review. Read [ADR-017 C01–C05](adr/017-account-erasure-and-recovery.md),
+Local synthetic I implementation accepted at `bbbde93`, G1 review `faf0ad8`.
+II is separately assigned, not yet implemented. Read [ADR-017 C01–C05](adr/017-account-erasure-and-recovery.md),
 [inventory](work-packages/phase-9a-data-inventory.md), [package plan](work-packages/phase-9a-plan.md)
 and [operator guide](../ops/erasure.md). This is **not complete erasure**, a restore
 implementation, production policy or permission to process developer/real data.
