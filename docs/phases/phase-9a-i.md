@@ -1,5 +1,33 @@
 # Phase9A-I — Erasure Foundation & Identity
 
+## Main round 2 acceptance — 2026-10-20
+
+**G1 ACCEPTED, local synthetic scope only**, executable
+`bbbde93c170246372895907dd4e446696521452d` (repair handoff `d63ea95`).
+P9AI-R1/R2 resolved after code/test review: post-lock DB-time proof expiry with
+inherited limits, and exact request/generation/round/execution-bound export
+success/failure. Main found no new blocking issue in the repair diff.
+
+Independent Java21 full verify:442 PASS (62 fast+380 IT), zero failures/errors/
+skips,6m17s, finished2026-10-20 20:57:09+07. Evidence:
+`/home/vonhuphi/social-p9ai-main-review2.Pke8Z3/verify.log`. The preceding October19
+main run lost its `/tmp` log on continuation; surviving XML had380 successful ITs
+but no retained final Maven result. It is not claimed full PASS; this unchanged
+rerun supplies the final gate. Native Compose and3200-request benchmark remain
+developer evidence inspected by main, not independent reruns.
+
+Main verified the346-row manifest before applying one exact Gitleaks exception
+for this document's non-secret manifest checksum in `bbbde93` at line324.
+October20 recheck matches345 rows; only reviewed `.gitleaksignore` differs, and
+its original git blob matches the original manifest. Full72-commit history scan,
+synthetic positive control, Compose app/media config and whitespace pass.
+No general scan exclusion or executable/schema/config change by main.
+
+The original delivery and failed attempts below remain historical evidence.
+No production/restore/public-launch approval, SLA or full-erasure claim follows.
+C01–C05 future-owner requirements and U01–U06 remain binding; II is a separate
+main assignment, not already delivered code.
+
 Implementation delivery for main review, not acceptance/launch. Assignment `edb3aad`, accepted
 executable baseline `d2a8e3c`; accepted local design `eab4da6`, ADR-017 C01–C05.
 Only I.1→I.2→I.3; no II/III, real erasure/restore, agents, push or deployment.

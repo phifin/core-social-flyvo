@@ -4,9 +4,9 @@
 
 - Task: phase-9a-i-erasure-foundation-identity
 - Round: 2
-- State: READY_FOR_REVIEW — repair candidate; history secret-scan gate blocked, not accepted
-- Last writer: Phase9A-I development, 2026-10-19
-- Next owner: main reviewer — disposition R2/R1 and exact manifest-hash scan exception
+- State: ACCEPTED — G1 passed, local synthetic Phase9A-I only
+- Last writer: main reviewer, 2026-10-20
+- Next owner: main — archive accepted review and activate the separate II package
 - Reuse chat: `Develop Phase 9A-I — Erasure Foundation & Identity`
 - Accepted executable baseline: `d2a8e3c2b5942f1019ba2a48157da6ce3a5ed662`
 - Accepted design: original `ac82f4f`, main decision/refinements `eab4da6`
@@ -108,6 +108,9 @@ No new executable code or application test run was produced by this main review.
 
 No implementation finding yet. D01–D10 accepted only as qualified by ADR-017
 C01–C05; U01–U06 remain external/product gates. Prior findings stay in archives.
+
+The paragraph above is the original assignment baseline. Implementation findings
+P9AI-R1/R2 and their round-2 dispositions appear below; it is not the current verdict.
 
 ## Development plan (I.1 → I.2 → I.3)
 
@@ -309,7 +312,7 @@ Independent main checks on this unchanged executable:
   those remain the developer's attributed evidence, not independent reruns.
   No remote operation, production operation or code change in this review.
 
-#### P9AI-R1 — P2 — Recheck onboarding expiry after lock acquisition (OPEN)
+#### P9AI-R1 — P2 — Recheck onboarding expiry after lock acquisition (RESOLVED round 2)
 
 Anchors: `OAuthAuthentication.java:248–260`,
 `JdbcIdentityRepository.java:425–434`, `Authentication.java:130–158`, and
@@ -336,7 +339,7 @@ or mail. Cover the full old-proof/claim-release boundary and fresh-proof new-UUI
 success, including any callback waits. Explain clock control rather than relying
 on arbitrary sleeps. Preserve existing provider/CSRF/refresh denials.
 
-#### P9AI-R2 — P2 — Bind recovery receipts to the exact request (OPEN)
+#### P9AI-R2 — P2 — Bind recovery receipts to the exact request (RESOLVED round 2)
 
 Anchors: `account/application/Erasures.java:77–101,368–373` and
 `account/application/ErasureExports.java:57–79` (under
@@ -525,3 +528,78 @@ only main decides dispositions/any exact scanner exception/G1. Do not activate
 II/III or accept ADRs. Public SLA/U01–U06, later owner proofs, true latest-cut/
 backup/key authority, writer quiescence and restore drills remain open. No agent,
 push, release, deployment, real erasure/restore or Phase9B occurred.
+
+## Main review round 2 — continued 2026-10-20
+
+Reviewed repair executable `bbbde93c170246372895907dd4e446696521452d`, delivered
+by documentation-only `d63ea95`. No newer implementation or unrelated worktree
+edits appeared on continuation. Main changes review/assignment documents and one
+precise secret-scan disposition only; it implements no feature or behavioral fix.
+
+### Findings and scan-blocker dispositions
+
+- **P9AI-R2 RESOLVED:** inspected exact intent/request/user/generation/t0/round
+  matching, journal identity/digest validation and current producer execution key
+  through prepare/ack/failure (including final expired claims). COMMITTED ack
+  compares the captured recovery context after reacquiring guards. Rejected A's
+  delayed PREPARED no longer fabricates COMMITTED(A) or certifies B. Real-worker/
+  archive regression tests also cover invalid old COMMITTED, superseded execution,
+  same-intent history, retry/DEAD/resume and rollback. Existing archive history is
+  not rewritten. No new blocking finding in the repair diff.
+- **P9AI-R1 RESOLVED:** inspected FOR UPDATE before onboarding expiry sampling,
+  common PostgreSQL clock authority, callback/post-dispatch/account/mailbox and
+  final-write rechecks, inherited successor limits and transactional rollback.
+  The 21-case real-PG proof-chain suite covers boundary microseconds, real row
+  waits/provider latches, full inherited bound, actual claim drain and fresh-proof
+  new UUID. Its controlled test clock is explicit; this does not certify arbitrary
+  old/imported rows, DB clock rollback or restored lineage. Those remain excluded
+  by synthetic-only activation/U04/U06. The RED evidence establishes the original
+  stale expiry defect, not an independently reproduced takeover.
+- **History scan blocker RESOLVED:** main independently reproduced one finding
+  across72 commits on October19, verified the reported digest against the retained
+  346-file manifest and checked all346 rows before changing the ignore file.
+  Approved/applied only fingerprint
+  `bbbde93c170246372895907dd4e446696521452d:docs/phases/phase-9a-i.md:generic-api-key:324`.
+  This is a non-secret manifest checksum, not a credential. No broad hash/path/
+  docs exclusion, rule change, history rewrite or code suppression. Full history
+  and the synthetic detection positive control pass with that exact exception.
+
+### Independent verification and continuation evidence
+
+The October19 main full verify progressed through the new25 foundation/21 proof
+chain tests successfully. On October20 continuation its `/tmp` log was absent and
+no Maven process remained. Surviving Failsafe summary reported380 completed,
+zero failures/errors/skips, but the final Maven outcome was not retained; **do not
+label that attempt full-verify PASS**. Main reruns once on the unchanged executable,
+with evidence outside `/tmp`: `/home/vonhuphi/social-p9ai-main-review2.Pke8Z3/`.
+Final result is recorded below when the run completes.
+
+October20 manifest check matches345 rows; the sole expected difference is main's
+reviewed `.gitleaksignore` exception. `git show bbbde93:.gitleaksignore` matches the
+original manifest entry exactly. The346-row original check passed before that
+exception on October19. No executable/runtime/config/migration changed.
+Pinned full-history scan and positive control rerun PASS; Compose app/media config
+checks and whitespace PASS. Native Compose/benchmark evidence in the developer
+response was inspected, not independently rerun by main. Dense p95 remains above
+500ms; original timeout/interruption/failure evidence remains recorded.
+
+Final independent Java21 `./mvnw -B -ntp verify`: **442 PASS (62 fast +380 IT)**,
+zero failures/errors/skips, BUILD SUCCESS in6m17s, finished2026-10-20 20:57:09+07.
+Raw log is `verify.log` in the durable evidence directory above. Formatting,
+architecture/OpenAPI, PostgreSQL/migration and real storage suites pass; no
+exclusion or timeout/lease/pool adjustment. The missing October19 final log
+remains an evidence limitation, not a hidden successful attempt.
+
+**G1 ACCEPTED** for isolated synthetic package I at `bbbde93`; P9AI-R1/R2 and the
+exact scan blocker are resolved. C01's pending-case implementation, C02 successful
+finalization and C05 physical media proof remain II work; C03's eight waiting
+owners and C04 default-off/strict receipt are accepted for I, not waived.
+No I account can reach DELETED. U01–U06, performance500ms, actual writer drain,
+production policy/provider/ledger/key authority and restore readiness stay open.
+
+The user's request to continue authorizes main to prepare/activate the separate
+II package after this review is committed. Main will archive this mailbox with
+its actual review hash, then route to a named new development chat. No II code,
+real erasure/restore, release or deployment occurred here. A remote checkpoint
+is eligible only after the exact outgoing-history/secret checks; remote CI is
+not inferred from local verification.

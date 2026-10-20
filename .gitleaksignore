@@ -3,3 +3,7 @@
 abfd2552a557b8882ea63ea655656774e88e4bda:docs/agent-handoff.md:generic-api-key:228
 # Same reviewed non-secret hash copied verbatim into the main-owned accepted archive.
 4dd092cb5ac87b7102e13c12fb17bd1605cf8c58:docs/handoffs/phase-4-posts-media.md:generic-api-key:482
+# P9AI review round 2: verified SHA-256 of the 346-file executable manifest,
+# not a credential. Main reviewed the manifest and every row on 2026-10-19.
+# Exact historical commit/path/rule/line only; no general hash or docs exclusion.
+bbbde93c170246372895907dd4e446696521452d:docs/phases/phase-9a-i.md:generic-api-key:324
