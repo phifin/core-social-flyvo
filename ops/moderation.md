@@ -147,3 +147,15 @@ retaining cumulative failures, and starts baseline scanning. It changes no hold
 or payload and never erases old jobs. Missing receipts stay pending. Exported
 metadata includes no reasons/body/ciphertext. One-way redaction controls are also
 exported; import/latest-cut verification and restore remain III.
+
+After V0052, new exports are format2: eligibility state, source anchor and exact
+source+365-day deadline share the root/version observation; history includes its
+original createdAt. recordedAt never starts retention. UNRESOLVED/UNKNOWN and
+hold deadlines remain conservative independent controls. No private reason or
+payload is added. Baselines fit both100 rows and the unchanged16KiB byte cap.
+
+Existing export bodies/digests/receipts remain format1 and immutable. Their cached
+complete state restarts from the first history page on next observation, even for
+already-redacted roots. The bounded scanner (or explicit ADMIN PRESERVATION start)
+appends new format2 records; monitor pending/DEAD receipts rather than treating
+legacy completion as current provenance. No restore/import is introduced.

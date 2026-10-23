@@ -187,3 +187,48 @@ prefetch uses9 roots: the existing position0..9/unique constraint bounds their
 complete root+attachment collection to99 even before the mutation budget applies.
 The skewed current-mention regression exercises10,001 historical offset rows and
 last-recipient narrowing without changing another author's body.
+
+
+## Main round1 repair plan — baseline2f28960 (recorded before repair code)
+
+1. P9AII-R1: change only PostRetention's lifecycle bypass to explicit
+   DELETION_PENDING/DELETED or erasure-origin. Retain sorted account-before-post
+   guard and descendant protection. Add real-PG/durable POST_RETENTION regressions
+   with erasure disabled for suspended authors' due revisions, deleted posts/replies
+   and removed-post media release; reinstate afterward and prove work stays complete.
+   Keep enabled erasure close-first/marker descendant tests.
+2. P9AII-R2: extend CaseStore.Control's locked source observation with typed
+   eligibility provenance (report resolved_at or standalone action created_at,
+   SQL365-day eligible-at; UNRESOLVED/UNKNOWN are explicit). Export format2 for
+   BASELINE/PRESERVE/COMMITTED with original history created_at and no private bytes.
+   Keep ADR-016 eligibility/hold rules unchanged and observation time separate.
+3. Allocate V0052 after confirming HEAD's latestV0051. Add immutable format metadata
+   to preservation exports and format to baseline state; old rows defaultformat1.
+   Format2 baseline observation resets old version/format cursor/completion without
+   rewriting any old record/digest/receipt. Pending-root queries and acknowledgement
+   require the current format, so an old complete cache/receipt cannot certify it.
+   Global bounded scanning covers previously complete/redacted roots independently
+   of account status; no account provenance fabrication or III importer.
+4. Regression matrix: inspect actual appended/verified files for OPEN/terminal
+   reports, standalone actions, holds/releases, exact source+365d deadlines and
+   timestamps different from export time. Exercise old-format complete baselines,
+   history with >100 rows across pages, archive retry/superseded execution/stale root version and
+   post-redaction export, plus fresh/51 upgrade and earlier checksum preservation.
+5. Sequential targeted tests, formatting/full Java21 verify; current-source manifest,
+   isolated fresh/upgrade native evidence and unchanged3200-request benchmark,
+   diff/config/links and pinned staged/history/positive scans. Preserve failed
+   attempts and historical evidence attribution. Commit fixes/contract docs first,
+   then mailbox with actual code hash/per-ID responses and READY_FOR_REVIEW→main.
+   Findings remain OPEN for main; no agents/push/III/real-data erasure/restore.
+
+Repair refinement from actual archive verification: a100-row history page can
+exceed the existing16KiB archive cap. Publish that unchanged cap through the
+existing RecoveryArchive API and choose the largest fitting UTF-8 prefix (at most
+100 fetched rows) before persisting an intent. Advance only that prefix after its
+verified receipt; no skipped rows or larger archive/worker budget. The207-row
+legacy/redacted fixture inspects every real archived page, unique history ID and
+original timestamp, including a first page shorter than100 because of byte size.
+The initial archive-cap failure and later overly strict page-count test failure
+are retained as failed attempts. Final combined targeted run:95 IT +62 fast PASS,
+2026-10-23 20:40:06+07; full/native/benchmark delivery evidence follows in the
+phase record and mailbox, with no historical result relabelled.

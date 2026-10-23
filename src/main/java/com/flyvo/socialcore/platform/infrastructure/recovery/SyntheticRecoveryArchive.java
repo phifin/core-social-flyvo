@@ -54,7 +54,10 @@ public class SyntheticRecoveryArchive implements RecoveryArchive {
 
   public Receipt append(UUID id, String expected, byte[] bytes) {
     boundary();
-    if (id == null || bytes == null || bytes.length > 16384 || !digest(bytes).equals(expected))
+    if (id == null
+        || bytes == null
+        || bytes.length > MAX_RECORD_BYTES
+        || !digest(bytes).equals(expected))
       throw new IllegalStateException("ARCHIVE_DIGEST_MISMATCH");
     var target = root.resolve(id + ".record");
     Path pending = null;
@@ -93,7 +96,7 @@ public class SyntheticRecoveryArchive implements RecoveryArchive {
     try {
       var file = root.resolve(receipt.recordId() + ".record");
       if (Files.isSymbolicLink(file)
-          || Files.size(file) > 16384
+          || Files.size(file) > MAX_RECORD_BYTES
           || !digest(Files.readAllBytes(file)).equals(receipt.digest()))
         throw new IllegalStateException("ARCHIVE_INTEGRITY_FAILURE");
     } catch (java.io.IOException e) {

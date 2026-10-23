@@ -50,7 +50,8 @@ public class PostRetention implements JobHandler {
     var p = store.find(id, true);
     // Closure can win before the content owner has marked this root. Ordinary parent
     // retention must then leave other authors' descendants for the erasure branch.
-    if (!author.active() || store.erasureOrigin(id)) return;
+    if (java.util.Set.of("DELETION_PENDING", "DELETED").contains(author.status())
+        || store.erasureOrigin(id)) return;
     var cutoff = clock.instant().minusSeconds(30L * 86400);
     boolean more = store.pruneRevisions(id, cutoff);
     if (p.deleted() != null && !p.deleted().isAfter(cutoff)) {

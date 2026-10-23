@@ -51,7 +51,7 @@ class ErasureMigrationIT {
     jdbc.update(
         "INSERT INTO account.user_account(id,status,deletion_requested_at,created_at,updated_at,version) VALUES (?,'DELETION_PENDING',now()-interval '2 hours',now()-interval '3 hours',now(),1)",
         pending);
-    for (int prefix = 33; prefix <= 51; prefix++) {
+    for (int prefix = 33; prefix <= 52; prefix++) {
       var candidate = migration(PG.getJdbcUrl(), prefix);
       assertThat(candidate.migrate().migrationsExecuted).isEqualTo(1);
       candidate.validate();
@@ -110,8 +110,8 @@ class ErasureMigrationIT {
         reaction,
         user,
         post);
-    var candidate = migration(url, 51);
-    assertThat(candidate.migrate().migrationsExecuted).isEqualTo(14);
+    var candidate = migration(url, 52);
+    assertThat(candidate.migrate().migrationsExecuted).isEqualTo(15);
     candidate.validate();
     assertThat(
             Arrays.stream(candidate.info().applied())
@@ -131,6 +131,81 @@ class ErasureMigrationIT {
                 Boolean.class,
                 reaction))
         .isFalse();
+  }
+
+  @Test
+  void preservationFormatUpgradeRetainsLegacyReceiptsAndRollsBackFailedPrefix() {
+    var admin =
+        new JdbcTemplate(
+            new org.springframework.jdbc.datasource.DriverManagerDataSource(
+                PG.getJdbcUrl(), PG.getUsername(), PG.getPassword()));
+    admin.execute("CREATE DATABASE p9a_ii_format_upgrade");
+    String url = PG.getJdbcUrl().replace("/p9a_migrations?", "/p9a_ii_format_upgrade?");
+    var prior = migration(url, 51);
+    prior.migrate();
+    var sums =
+        Arrays.stream(prior.info().applied())
+            .map(org.flywaydb.core.api.MigrationInfo::getChecksum)
+            .toList();
+    var jdbc =
+        new JdbcTemplate(
+            new org.springframework.jdbc.datasource.DriverManagerDataSource(
+                url, PG.getUsername(), PG.getPassword()));
+    UUID id = UUID.randomUUID(), root = UUID.randomUUID();
+    String record = "{\"operation\":\"BASELINE\",\"version\":7}";
+    String digest =
+        jdbc.queryForObject(
+            "SELECT encode(sha256(convert_to(?,'UTF8')),'hex')", String.class, record);
+    jdbc.update(
+        "INSERT INTO moderation.preservation_export(id,root_type,root_id,root_version,operation,record,digest,receipt_digest,verified_at,execution_id) VALUES (?,'REPORT',?,7,'BASELINE',?,?,?,timestamptz '2020-01-01 00:00:00Z',?)",
+        id,
+        root,
+        record,
+        digest,
+        digest,
+        id);
+    jdbc.update(
+        "INSERT INTO moderation.preservation_state(root_type,root_id,root_version,complete) VALUES ('REPORT',?,7,true)",
+        root);
+    jdbc.execute("ALTER TABLE moderation.preservation_state ADD COLUMN format_version text");
+    assertThatThrownBy(() -> migration(url, 52).migrate())
+        .isInstanceOf(org.flywaydb.core.api.FlywayException.class);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM information_schema.columns WHERE table_schema='moderation' AND table_name='preservation_export' AND column_name='format_version'",
+                Integer.class))
+        .isZero();
+    jdbc.execute("ALTER TABLE moderation.preservation_state DROP COLUMN format_version");
+    var candidate = migration(url, 52);
+    assertThat(candidate.migrate().migrationsExecuted).isEqualTo(1);
+    candidate.validate();
+    assertThat(
+            Arrays.stream(candidate.info().applied())
+                .limit(51)
+                .map(org.flywaydb.core.api.MigrationInfo::getChecksum)
+                .toList())
+        .isEqualTo(sums);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT record FROM moderation.preservation_export WHERE id=?", String.class, id))
+        .isEqualTo(record);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT format_version=1 AND receipt_digest=digest AND verified_at=timestamptz '2020-01-01 00:00:00Z' FROM moderation.preservation_export WHERE id=?",
+                Boolean.class,
+                id))
+        .isTrue();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT complete AND root_version=7 AND format_version=1 FROM moderation.preservation_state WHERE root_id=?",
+                Boolean.class,
+                root))
+        .isTrue();
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    "UPDATE moderation.preservation_export SET format_version=2 WHERE id=?", id))
+        .isInstanceOf(org.springframework.dao.DataAccessException.class);
   }
 
   @Test
@@ -163,8 +238,8 @@ class ErasureMigrationIT {
                 "SELECT to_regclass('moderation.report_erasure_source') IS NULL", Boolean.class))
         .isTrue();
     jdbc.execute("DROP TABLE moderation.preservation_state");
-    assertThat(migration(url, 51).migrate().migrationsExecuted).isEqualTo(6);
-    migration(url, 51).validate();
+    assertThat(migration(url, 52).migrate().migrationsExecuted).isEqualTo(7);
+    migration(url, 52).validate();
   }
 
   @Test

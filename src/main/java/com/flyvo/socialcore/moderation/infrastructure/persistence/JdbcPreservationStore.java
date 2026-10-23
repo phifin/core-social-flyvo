@@ -42,6 +42,7 @@ public class JdbcPreservationStore implements PreservationStore {
   private static Export export(ResultSet r, int n) throws SQLException {
     return new Export(
         r.getObject("id", UUID.class),
+        r.getInt("format_version"),
         new CaseStore.Root(
             CaseOperations.Root.valueOf(r.getString("root_type")),
             r.getObject("root_id", UUID.class)),
@@ -58,8 +59,9 @@ public class JdbcPreservationStore implements PreservationStore {
 
   public void add(Export e) {
     jdbc.update(
-        "INSERT INTO moderation.preservation_export(id,root_type,root_id,root_version,operation,actor_id,community_id,hold_until,record,digest,execution_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO moderation.preservation_export(id,format_version,root_type,root_id,root_version,operation,actor_id,community_id,hold_until,record,digest,execution_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
         e.id(),
+        e.formatVersion(),
         e.root().type().name(),
         e.root().id(),
         e.version(),
@@ -109,14 +111,16 @@ public class JdbcPreservationStore implements PreservationStore {
 
   public State state(CaseStore.Root root, long version) {
     jdbc.update(
-        "INSERT INTO moderation.preservation_state(root_type,root_id,root_version) VALUES (?,?,?) ON CONFLICT(root_type,root_id) DO UPDATE SET root_version=EXCLUDED.root_version,after_history=NULL,complete=false,pending_export=NULL,pending_after=NULL,pending_complete=false WHERE moderation.preservation_state.root_version<>EXCLUDED.root_version",
+        "INSERT INTO moderation.preservation_state(root_type,root_id,root_version,format_version) VALUES (?,?,?,?) ON CONFLICT(root_type,root_id) DO UPDATE SET root_version=EXCLUDED.root_version,format_version=EXCLUDED.format_version,after_history=NULL,complete=false,pending_export=NULL,pending_after=NULL,pending_complete=false WHERE moderation.preservation_state.root_version<>EXCLUDED.root_version OR moderation.preservation_state.format_version<>EXCLUDED.format_version",
         root.type().name(),
         root.id(),
-        version);
+        version,
+        FORMAT_VERSION);
     return jdbc.queryForObject(
         "SELECT * FROM moderation.preservation_state WHERE root_type=? AND root_id=? FOR UPDATE",
         (r, n) ->
             new State(
+                r.getInt("format_version"),
                 r.getLong("root_version"),
                 r.getObject("after_history", UUID.class),
                 r.getBoolean("complete"),
@@ -129,7 +133,7 @@ public class JdbcPreservationStore implements PreservationStore {
 
   public void pending(CaseStore.Root r, long version, UUID export, UUID after, boolean complete) {
     jdbc.update(
-        "UPDATE moderation.preservation_state SET pending_export=?,pending_after=?,pending_complete=? WHERE root_type=? AND root_id=? AND root_version=?",
+        "UPDATE moderation.preservation_state SET pending_export=?,pending_after=?,pending_complete=? WHERE root_type=? AND root_id=? AND root_version=? AND format_version=2",
         export,
         after,
         complete,
@@ -140,7 +144,7 @@ public class JdbcPreservationStore implements PreservationStore {
 
   public void acknowledge(CaseStore.Root r, long version) {
     if (jdbc.update(
-            "UPDATE moderation.preservation_state s SET after_history=pending_after,complete=pending_complete,pending_export=NULL,pending_after=NULL,pending_complete=false WHERE root_type=? AND root_id=? AND root_version=? AND EXISTS(SELECT 1 FROM moderation.preservation_export e WHERE e.id=s.pending_export AND e.root_type=s.root_type AND e.root_id=s.root_id AND e.root_version=s.root_version AND e.receipt_digest=e.digest)",
+            "UPDATE moderation.preservation_state s SET after_history=pending_after,complete=pending_complete,pending_export=NULL,pending_after=NULL,pending_complete=false WHERE root_type=? AND root_id=? AND root_version=? AND EXISTS(SELECT 1 FROM moderation.preservation_export e WHERE e.id=s.pending_export AND e.root_type=s.root_type AND e.root_id=s.root_id AND e.root_version=s.root_version AND e.format_version=s.format_version AND s.format_version=2 AND e.receipt_digest=e.digest)",
             r.type().name(),
             r.id(),
             version)
@@ -159,7 +163,8 @@ public class JdbcPreservationStore implements PreservationStore {
                 r.getString("operation"),
                 r.getObject("action_id", UUID.class),
                 r.getObject("assigned_to", UUID.class),
-                instant(r, "hold_until")),
+                instant(r, "hold_until"),
+                instant(r, "created_at")),
         root.id(),
         after,
         after,
@@ -188,7 +193,7 @@ public class JdbcPreservationStore implements PreservationStore {
                 + relevant
                 + "), roots AS ("
                 + roots()
-                + ") SELECT r.type,r.id FROM roots r JOIN relevant v ON v.type=r.type AND v.id=r.id LEFT JOIN moderation.preservation_state p ON p.root_type=r.type AND p.root_id=r.id WHERE r.retention_state<>'DONE' OR p.root_version IS NULL OR p.root_version<>r.version OR NOT COALESCE(p.complete,false) ORDER BY r.type,r.id LIMIT 1",
+                + ") SELECT r.type,r.id FROM roots r JOIN relevant v ON v.type=r.type AND v.id=r.id LEFT JOIN moderation.preservation_state p ON p.root_type=r.type AND p.root_id=r.id WHERE r.retention_state<>'DONE' OR p.format_version<>2 OR p.root_version IS NULL OR p.root_version<>r.version OR NOT COALESCE(p.complete,false) ORDER BY r.type,r.id LIMIT 1",
             JdbcPreservationStore::root,
             args);
     return list.isEmpty() ? null : list.getFirst();

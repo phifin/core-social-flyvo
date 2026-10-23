@@ -250,6 +250,13 @@ ERASURE_COMPLETE use short prepare/effect/ack; no network under business locks.
 MODERATION_PRESERVE exports immutable independent controls; MODERATION_PRESERVATION
 keysets baseline roots/history. Ten-attempt/60s lease semantics are unchanged.
 
+Preservation format2 includes locked source eligibility and original history time;
+recordedAt is observation only. Baselines restart on root version or format change,
+including format1 complete/redacted roots. Each page exports at most100 rows within
+the existing16KiB archive record limit and advances only after a matching verified
+format/root/version receipt. Old immutable jobs/records keep their own bytes and
+receipt; stale acknowledgement cannot complete a successor baseline.
+
 GraphErased carries the existing minimal RelationshipChanged shape, retaining the
 pair ID/sequence with inactive flags and no private block/mute payload. Content
 maintenance emits existing versioned PostAudienceChanged/PostDeleted/CommentDeleted/

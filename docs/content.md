@@ -178,6 +178,9 @@ choice with a one-way tombstone. At DB t0+30d, nested100-item stages remove all
 owned revisions, attachment/alt-text mappings after verified asset-ID export,
 recipients, mentions, hashtags and authored body/link/comment text. A complete
 post with arbitrary descendants is never one collection item. Ordinary queued
-parent retention skips terminal authors/erasure-origin posts, preserving other
+parent retention skips DELETION_PENDING/DELETED authors or erasure-origin posts, preserving other
 authors' replies, immutable history/reply IDs and shared community content.
 Post/comment/reaction terminal shapes cannot be restored by old writes.
+SUSPENDED authors still receive ordinary due revision/post/media retention through
+the durable worker, including with account erasure disabled. Reinstatement does
+not need to replace an already completed retention job; access denial is unchanged.

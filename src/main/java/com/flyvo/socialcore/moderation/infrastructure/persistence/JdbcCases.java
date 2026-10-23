@@ -32,9 +32,9 @@ class JdbcCases implements CaseStore {
   public Control control(Root root, boolean lock) {
     String sql =
         report(root)
-            ? "SELECT id,community_id,source_author_id,parent_author_id,version,assigned_to,status,hold_until,hold_reason,retention_state,clock_timestamp() AS db_now FROM moderation.report WHERE id=?"
+            ? "SELECT id,community_id,source_author_id,parent_author_id,version,assigned_to,status,hold_until,hold_reason,retention_state,resolved_at AS age_anchor,resolved_at+interval '365 days' AS eligible_at,clock_timestamp() AS db_now FROM moderation.report WHERE id=?"
                 + (lock ? " FOR UPDATE" : "")
-            : "SELECT r.action_id AS id,a.community_id,NULL::uuid AS source_author_id,NULL::uuid AS parent_author_id,r.version,NULL::uuid AS assigned_to,'STANDALONE' AS status,r.hold_until,r.hold_reason,r.retention_state,clock_timestamp() AS db_now FROM moderation.action_retention r JOIN moderation.action a ON a.id=r.action_id WHERE r.action_id=?"
+            : "SELECT r.action_id AS id,a.community_id,NULL::uuid AS source_author_id,NULL::uuid AS parent_author_id,r.version,NULL::uuid AS assigned_to,'STANDALONE' AS status,r.hold_until,r.hold_reason,r.retention_state,a.created_at AS age_anchor,a.created_at+interval '365 days' AS eligible_at,clock_timestamp() AS db_now FROM moderation.action_retention r JOIN moderation.action a ON a.id=r.action_id WHERE r.action_id=?"
                 + (lock ? " FOR UPDATE OF r" : "");
     var list =
         jdbc.query(
@@ -51,9 +51,27 @@ class JdbcCases implements CaseStore {
                     at(r, "hold_until"),
                     r.getString("hold_reason"),
                     r.getString("retention_state"),
+                    eligibility(root, r),
                     at(r, "db_now")),
             root.id());
     return list.isEmpty() ? null : list.getFirst();
+  }
+
+  private Eligibility eligibility(Root root, ResultSet r) throws SQLException {
+    var anchor =
+        report(root) ? EligibilityAnchor.REPORT_RESOLVED_AT : EligibilityAnchor.ACTION_CREATED_AT;
+    if (report(root) && Set.of("OPEN", "IN_REVIEW").contains(r.getString("status")))
+      return new Eligibility(EligibilityState.UNRESOLVED, anchor, null, null);
+    Instant at = at(r, "age_anchor"), eligible = at(r, "eligible_at");
+    boolean known =
+        at != null
+            && eligible != null
+            && (!report(root) || Set.of("RESOLVED", "DISMISSED").contains(r.getString("status")));
+    return new Eligibility(
+        known ? EligibilityState.KNOWN : EligibilityState.UNKNOWN,
+        anchor,
+        at,
+        known ? eligible : null);
   }
 
   public List<UUID> subjects(Root root) {

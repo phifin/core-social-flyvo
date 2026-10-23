@@ -56,6 +56,14 @@ terminal shapes cannot be restored. The final account guard replaces I's negativ
 trigger only with current11-proof/resource-receipt/certificate checks, retaining
 terminal denial and exact request/generation/round/lineage/policy bindings.
 
+Review repair V0052 adds format_version (1 or2, legacy default1) to moderation
+preservation_export and preservation_state. The export guard makes this metadata
+immutable with the original record/digest/receipt. Application-created format2
+state resets on version or format mismatch; a legacy complete cursor does not
+certify new provenance. No new table/view/foreign consumer or earlier migration
+checksum changes. Fresh, V0037/V0045/V0051 upgrades and failed-prefix rollback/
+forward recovery are tested against PostgreSQL.
+
 Private bytes do not become immediately erasable because an account is pending.
 Moderation roots still enforce ADR-016; C01 append takes sorted structural account
 guards and moderation/completion step invalidation before the case root. Completion

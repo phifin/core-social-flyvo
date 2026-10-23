@@ -4,8 +4,11 @@ import java.time.Instant;
 import java.util.*;
 
 public interface PreservationStore {
+  int FORMAT_VERSION = 2;
+
   record Export(
       UUID id,
+      int formatVersion,
       CaseStore.Root root,
       long version,
       String operation,
@@ -18,6 +21,7 @@ public interface PreservationStore {
       UUID execution) {}
 
   record State(
+      int formatVersion,
       long version,
       UUID after,
       boolean complete,
@@ -32,7 +36,8 @@ public interface PreservationStore {
       String operation,
       UUID action,
       UUID assignee,
-      Instant until) {}
+      Instant until,
+      Instant createdAt) {}
 
   Export find(UUID id);
 

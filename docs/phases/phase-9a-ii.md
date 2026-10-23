@@ -246,3 +246,97 @@ green tests do not accept G2. See the mailbox for precise anchors, scenarios,
 required outcomes and regression gates. Next owner is the existing Phase9A-II
 development chat for the combined repair package. Main changed documentation only,
 did not push this candidate, and has not activated III.
+
+## Development repair — P9AII-R1/R2, review baseline2f28960
+
+Both findings remain OPEN for main's review. R1 narrows ordinary PostRetention's
+bypass to DELETION_PENDING/DELETED or erasure-origin. SUSPENDED accounts retain
+ordinary due cleanup without gaining access. Three real PostgreSQL/durable-worker
+cases cover >500 revisions, a deleted post/descendant and removed-post media while
+erasure is disabled, then reinstatement without replacing completed jobs. Existing
+enabled close-first/erasure-origin descendant protection remains unchanged.
+
+R2 exports format2 with typed KNOWN/UNRESOLVED/UNKNOWN eligibility: report resolved_at
+or standalone action created_at plus the authoritative SQL365-day eligibleAt,
+captured with root/version/control. recordedAt remains observation time; current
+and proposed hold deadlines stay separate. History includes original createdAt;
+private evidence/reasons/ciphertext remain excluded. No ADR-016 rule changes.
+
+V0052 adds immutable export format metadata and format-aware baseline state. Existing
+format1 bodies/digests/receipts are untouched. A format1 complete cache restarts its
+cursor and appends a new baseline, including DONE/redacted roots. Matching format/
+root/version receipts alone advance the current cursor. Pages obey both100 history
+rows and the existing16KiB archive cap; a byte-bounded prefix never skips history.
+V0001–V0051 are unchanged; no new table, dependency, consumer or HTTP shape.
+
+Actual archive-body regressions cover OPEN/RESOLVED/DISMISSED reports, standalone
+actions, both root types' hold/release intents and committed controls, exact source
+deadlines deliberately years before export, private-payload exclusion,207 history
+rows across verified bounded pages, legacy complete/redacted caches and stale root
+receipt isolation. Existing outage/DEAD/resume/superseded-execution and post-redaction
+tests remain. V0051→V0052 proves old receipts/times unchanged and failed-prefix
+transaction rollback/forward recovery, alongside earlier upgrades/checksums.
+
+Final combined targeted command includes ErasureFoundationIT, ErasureMigrationIT,
+ModerationOperationsIT, ErasureProofChainIT and the three new Phase4IT cases:
+95 IT +62 fast PASS, zero failures/errors/skips,2m51s, finished2026-10-23
+20:40:06+07. Failed development attempts (including actual archive byte overflow
+and an overly strict page-count assertion) are retained without weakening the
+archive limit or negative paths. Historical469/native/benchmark rows above remain
+bound to the original submission; repaired delivery evidence is recorded below.
+
+Repaired Java21 `./mvnw -B -ntp verify`: **481 PASS (62 fast +419 IT)**,
+zero failures/errors/skips,7m26s, finished2026-10-23 20:47:49+07. All50 current
+class XML reports agree with the full log; stale targeted/benchmark reports are
+retained but excluded. Architecture, OpenAPI, SQL/object-policy parity, all
+inherited regressions and both finding matrices pass. Existing fork shutdown/
+stopped-container warnings remain in the full log; no test exclusion was added.
+
+All392 executable/config/API/CI manifest paths match repaired bytes. The unchanged
+Dockerfile build passed on retry; the first container build's Spotless dependency
+resolution failure is retained. Fresh and native V0032/V0037/V0051 upgrades all
+reach V0052 with prefix checksums unchanged, real PG/Silo media processing/security,
+CSRF403/stale412/close204, session/media401/post404, SSE closure, restart and
+historical no-data12-proof/certificate finalization. The media subject remains
+PENDING with unproven writer drain; old URL denial uses its real TTL. Inspection
+confirms fixture-only mounts, loopback ports and separate projects/keys. All4
+projects, named/anonymous volumes and generated keys/storage are removed, with
+archives retained durably. Cleanup is not an erasure acknowledgement.
+
+Repaired evidence is separate from the original submission:
+`/home/vonhuphi/social-p9aii-repair-evidence.qj4n9n9k/`, including current-source
+manifest, targeted/full logs and curated XML counts, image build/identity, all4
+native probes/isolation/prefix checksums/archives and explicit cleanup metadata.
+
+Repaired unchanged FeedBenchmarkTool: **3,200/3,200 successes,0 failures**, all16
+scenarios, pool10/diagnostic50,5m22s, finished2026-10-24 01:11:46+07. No heavy
+build/verify/native app overlapped the benchmark. All percentiles below are ms;
+complete outcomes, plans, SQL/connection/heap/CPU/wait samples and CSV/JSON are
+retained in the repaired evidence root. The500ms goal remains OPEN; this successful
+run does not resolve prior timeout root causes or establish production capacity.
+
+| Pool | Scenario | Success/attempt | p50 | p95 | p99 | SQL/attempt |
+|---|---|---|---|---|---|---|
+| 10 | first_burst | 500/500 | 1162.288 | 2467.223 | 3142.581 | 15 |
+| 10 | post_burst_steady | 500/500 | 967.182 | 2100.173 | 2611.730 | 15 |
+| 10 | no_sources | 100/100 | 61.866 | 151.499 | 156.382 | 6 |
+| 10 | rare_old | 100/100 | 182.857 | 384.098 | 437.520 | 12 |
+| 10 | last_page | 100/100 | 261.490 | 560.660 | 625.194 | 11 |
+| 10 | mostly_rejected | 100/100 | 136.153 | 310.829 | 334.768 | 6 |
+| 10 | overlap | 100/100 | 934.595 | 1840.344 | 1978.012 | 15 |
+| 10 | exhausted | 100/100 | 126.412 | 316.581 | 347.372 | 5 |
+| 50 | first_burst | 500/500 | 1238.461 | 2094.718 | 2704.521 | 15 |
+| 50 | post_burst_steady | 500/500 | 882.274 | 1388.575 | 1586.185 | 15 |
+| 50 | no_sources | 100/100 | 28.483 | 51.499 | 56.654 | 6 |
+| 50 | rare_old | 100/100 | 137.947 | 243.186 | 297.808 | 12 |
+| 50 | last_page | 100/100 | 232.629 | 418.179 | 463.446 | 11 |
+| 50 | mostly_rejected | 100/100 | 115.567 | 260.892 | 278.551 | 6 |
+| 50 | overlap | 100/100 | 684.103 | 1266.592 | 1390.801 | 15 |
+| 50 | exhausted | 100/100 | 116.167 | 242.002 | 247.785 | 5 |
+
+Measured resource contention remains visible: pool10 peak pending43 (pool50:37); sampled CPU
+load reaches1.0 in both pools. Pool50 is diagnostic only. Raw acquisition timings,
+DB waits and sampled heap are retained; no pool/timeout/lease/planner change is
+part of these fixes. Final delivery scans/config/diff/link checks and real commit
+provenance are recorded in the mailbox and external evidence index. Findings
+P9AII-R1/R2 stay OPEN for main; development requests review, not acceptance.

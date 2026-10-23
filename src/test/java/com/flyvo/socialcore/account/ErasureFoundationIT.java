@@ -1243,6 +1243,339 @@ class ErasureFoundationIT {
     assertThat(queries.find(user.userId()).status()).isEqualTo("DELETION_PENDING");
   }
 
+  @Autowired com.flyvo.socialcore.moderation.application.port.CaseStore caseStore;
+  @Autowired com.flyvo.socialcore.moderation.application.port.PreservationStore preservationStore;
+  @Autowired com.flyvo.socialcore.moderation.application.port.ModerationActions moderationActions;
+
+  private static final Instant SOURCE_ANCHOR = Instant.parse("2020-02-29T12:34:56.123456Z");
+
+  private com.flyvo.socialcore.moderation.application.port.CaseStore.Root provenanceRoot(
+      String type, String status, ActorContext admin, ActorContext subject) {
+    UUID id = UUID.randomUUID();
+    tx().executeWithoutResult(
+            s -> {
+              if (type.equals("REPORT")) {
+                jdbc.update(
+                    "INSERT INTO moderation.report(id,reporter_id,target_type,target_id,source_author_id,category,status,resolved_at,created_at,updated_at) VALUES (?,?,'USER',?,?,'SPAM',?,?,?,?)",
+                    id,
+                    admin.userId(),
+                    subject.userId(),
+                    subject.userId(),
+                    status,
+                    status.equals("OPEN") ? null : SOURCE_ANCHOR.atOffset(ZoneOffset.UTC),
+                    SOURCE_ANCHOR.minusSeconds(86400).atOffset(ZoneOffset.UTC),
+                    SOURCE_ANCHOR.atOffset(ZoneOffset.UTC));
+                jdbc.update(
+                    "INSERT INTO moderation.report_evidence(report_id,ciphertext,key_id) VALUES (?,?,?)",
+                    id,
+                    secrets.encrypt("report:" + id, "Synthetic private evidence MUST NOT EXPORT"),
+                    secrets.keyId());
+              } else
+                moderationActions.appendCase(
+                    id,
+                    null,
+                    admin.userId(),
+                    null,
+                    "ACCOUNT",
+                    subject.userId(),
+                    "SUSPEND_ACCOUNT",
+                    "Synthetic private reason MUST NOT EXPORT",
+                    "{\"private\":\"Synthetic before MUST NOT EXPORT\"}",
+                    "{\"private\":\"Synthetic after MUST NOT EXPORT\"}",
+                    "synthetic-provenance",
+                    SOURCE_ANCHOR);
+            });
+    return new com.flyvo.socialcore.moderation.application.port.CaseStore.Root(
+        com.flyvo.socialcore.moderation.api.CaseOperations.Root.valueOf(type), id);
+  }
+
+  private tools.jackson.databind.JsonNode archivedPreservation(UUID id) throws Exception {
+    var e = preservationStore.find(id);
+    assertThat(e.receipt()).isEqualTo(e.digest());
+    archive.verify(new RecoveryArchive.Receipt(id, e.digest()));
+    String bytes = Files.readString(ARCHIVE.resolve(id + ".record"));
+    assertThat(bytes.getBytes(java.nio.charset.StandardCharsets.UTF_8).length)
+        .isLessThanOrEqualTo(RecoveryArchive.MAX_RECORD_BYTES);
+    assertThat(bytes)
+        .isEqualTo(e.record())
+        .doesNotContain("MUST NOT EXPORT", "ciphertext", "keyId", "holdReason");
+    return json.readTree(bytes);
+  }
+
+  private void assertEligibility(
+      tools.jackson.databind.JsonNode body, String type, boolean unresolved) {
+    assertThat(body.path("formatVersion").asInt()).isEqualTo(2);
+    var e = body.path("eligibility");
+    assertThat(e.path("anchor").asText())
+        .isEqualTo(type.equals("REPORT") ? "REPORT_RESOLVED_AT" : "ACTION_CREATED_AT");
+    assertThat(e.path("state").asText()).isEqualTo(unresolved ? "UNRESOLVED" : "KNOWN");
+    if (unresolved) {
+      assertThat(e.path("anchorAt").isNull()).isTrue();
+      assertThat(e.path("eligibleAt").isNull()).isTrue();
+    } else {
+      assertThat(Instant.parse(e.path("anchorAt").asText())).isEqualTo(SOURCE_ANCHOR);
+      assertThat(Instant.parse(e.path("eligibleAt").asText()))
+          .isEqualTo(SOURCE_ANCHOR.plusSeconds(365L * 86400));
+      assertThat(Instant.parse(body.path("recordedAt").asText()))
+          .isAfter(SOURCE_ANCHOR.plusSeconds(366L * 86400));
+    }
+  }
+
+  private com.flyvo.socialcore.moderation.application.ModerationPreservation.Baseline baseline(
+      com.flyvo.socialcore.moderation.application.port.CaseStore.Root root) {
+    return tx().execute(s -> preservation.baseline(caseStore.control(root, true)));
+  }
+
+  private void baselineToReceipt(
+      com.flyvo.socialcore.moderation.application.port.CaseStore.Root root) {
+    for (int n = 0; n < 10; n++) {
+      var r = baseline(root);
+      assertThat(r.examined()).isBetween(0, 100);
+      if (r.ready()) return;
+      preservationExports();
+    }
+    throw new AssertionError("Bounded preservation fixture did not converge");
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(
+      strings = {"OPEN", "RESOLVED", "DISMISSED", "STANDALONE"})
+  void preservationArchiveUsesAuthoritativeAgeAnchorRatherThanExportTime(String status)
+      throws Exception {
+    String type = status.equals("STANDALONE") ? "ACTION" : "REPORT";
+    var root = provenanceRoot(type, status, actor(true), actor(false));
+    baselineToReceipt(root);
+    var ids =
+        jdbc.queryForList(
+            "SELECT id FROM moderation.preservation_export WHERE root_id=? AND format_version=2",
+            UUID.class,
+            root.id());
+    assertThat(ids).hasSize(1);
+    assertEligibility(archivedPreservation(ids.getFirst()), type, status.equals("OPEN"));
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(strings = {"REPORT", "ACTION"})
+  void preservationHoldAndReleaseKeepExactEligibilityAndOriginalHistoryTimes(String type)
+      throws Exception {
+    var admin = actor(true);
+    var root = provenanceRoot(type, "DISMISSED", admin, actor(false));
+    Instant until =
+        Instant.now().plusSeconds(7200).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+    var held =
+        cases.hold(
+            admin,
+            null,
+            root.type(),
+            root.id(),
+            0,
+            new com.flyvo.socialcore.moderation.api.CaseOperations.Hold(
+                until, "SYNTHETIC_PRIVATE_HOLD"));
+    cases.hold(
+        admin,
+        null,
+        root.type(),
+        root.id(),
+        held.version(),
+        new com.flyvo.socialcore.moderation.api.CaseOperations.Hold(null, null));
+    preservationExports();
+    baselineToReceipt(root);
+    var ids =
+        jdbc.queryForList(
+            "SELECT id FROM moderation.preservation_export WHERE root_id=? ORDER BY created_at,id",
+            UUID.class,
+            root.id());
+    assertThat(ids).hasSize(5);
+    for (var id : ids) {
+      var b = archivedPreservation(id);
+      assertEligibility(b, type, false);
+      if (b.path("operation").asText().equals("PRESERVE")) {
+        if (b.path("version").asLong() == 0) {
+          assertThat(b.path("holdUntil").isNull()).isTrue();
+          assertThat(Instant.parse(b.path("proposedHoldUntil").asText())).isEqualTo(until);
+        } else {
+          assertThat(Instant.parse(b.path("holdUntil").asText())).isEqualTo(until);
+          assertThat(b.path("proposedHoldUntil").isNull()).isTrue();
+        }
+      }
+      if (b.path("operation").asText().equals("COMMITTED")) {
+        if (b.path("version").asLong() == 1)
+          assertThat(Instant.parse(b.path("holdUntil").asText())).isEqualTo(until);
+        else assertThat(b.path("holdUntil").isNull()).isTrue();
+      }
+      for (var h : b.path("history")) {
+        Instant source =
+            jdbc.queryForObject(
+                    "SELECT created_at FROM moderation.case_history WHERE id=?",
+                    OffsetDateTime.class,
+                    UUID.fromString(h.path("id").asText()))
+                .toInstant();
+        assertThat(Instant.parse(h.path("createdAt").asText())).isEqualTo(source);
+      }
+    }
+  }
+
+  private UUID seedLegacyCompletedBaseline(
+      com.flyvo.socialcore.moderation.application.port.CaseStore.Root root) {
+    UUID id = UUID.randomUUID();
+    var control = tx().execute(t -> caseStore.control(root, true));
+    String record =
+        json.writeValueAsString(
+            Map.of(
+                "id",
+                id,
+                "operation",
+                "BASELINE",
+                "root",
+                root,
+                "version",
+                control.version(),
+                "status",
+                "DISMISSED",
+                "recordedAt",
+                Instant.now(),
+                "history",
+                List.of()));
+    String digest = HexFormat.of().formatHex(secrets.hash(record));
+    jdbc.update(
+        "INSERT INTO moderation.preservation_export(id,root_type,root_id,root_version,operation,record,digest,execution_id) VALUES (?,?,?,?,'BASELINE',?,?,?)",
+        id,
+        root.type().name(),
+        root.id(),
+        control.version(),
+        record,
+        digest,
+        id);
+    var receipt =
+        archive.append(id, digest, record.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    archive.verify(receipt);
+    tx().executeWithoutResult(
+            s -> {
+              preservationStore.receipt(id, digest);
+              jdbc.update(
+                  "INSERT INTO moderation.preservation_state(root_type,root_id,root_version,after_history,complete) VALUES (?,?,?, ?,true)",
+                  root.type().name(),
+                  root.id(),
+                  caseStore.control(root, true).version(),
+                  UUID.randomUUID());
+            });
+    return id;
+  }
+
+  @Test
+  void legacyCompletedBaselineIsRecapturedInBoundedTimestampedPagesWithoutRewritingOldReceipt()
+      throws Exception {
+    var admin = actor(true);
+    var subject = actor(false);
+    var root = provenanceRoot("REPORT", "DISMISSED", admin, subject);
+    jdbc.update(
+        "INSERT INTO moderation.case_history(id,report_id,actor_id,operation,created_at) SELECT gen_random_uuid(),?,?,'SYNTHETIC_LEGACY',?::timestamptz+n*interval '1 second' FROM generate_series(1,205) n",
+        root.id(),
+        admin.userId(),
+        SOURCE_ANCHOR.minusSeconds(3600).atOffset(ZoneOffset.UTC));
+    // First prove upgrade selection also includes a root whose bytes are already redacted.
+    tx().executeWithoutResult(s -> caseStore.redact(root, 100));
+    UUID old = seedLegacyCompletedBaseline(root);
+    String original = preservationStore.find(old).record();
+    assertThat(preservationStore.pendingRoot(subject.userId(), null, null)).isEqualTo(root);
+    assertThat(baseline(root).ready()).isFalse();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT format_version=2 AND NOT complete AND after_history IS NULL FROM moderation.preservation_state WHERE root_id=?",
+                Boolean.class,
+                root.id()))
+        .isTrue();
+    baselineToReceipt(root);
+    assertThat(archivedPreservation(old).has("formatVersion")).isFalse();
+    assertThat(preservationStore.find(old).record()).isEqualTo(original);
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    "UPDATE moderation.preservation_export SET format_version=2 WHERE id=?", old))
+        .isInstanceOf(org.springframework.dao.DataAccessException.class);
+    var ids =
+        jdbc.queryForList(
+            "SELECT id FROM moderation.preservation_export WHERE root_id=? AND format_version=2 ORDER BY created_at,id",
+            UUID.class,
+            root.id());
+    assertThat(ids.size()).isGreaterThanOrEqualTo(3);
+    // More than100 source rows remain after the first byte-bounded page.
+    assertThat(archivedPreservation(ids.getFirst()).path("history").size()).isLessThan(100);
+    var seen = new HashSet<UUID>();
+    for (var id : ids) {
+      var b = archivedPreservation(id);
+      assertEligibility(b, "REPORT", false);
+      assertThat(b.path("retentionState").asText()).isEqualTo("DONE");
+      assertThat(b.path("history").size()).isBetween(1, 100);
+      for (var h : b.path("history")) {
+        UUID hid = UUID.fromString(h.path("id").asText());
+        assertThat(seen.add(hid)).isTrue();
+        assertThat(Instant.parse(h.path("createdAt").asText()))
+            .isEqualTo(
+                jdbc.queryForObject(
+                        "SELECT created_at FROM moderation.case_history WHERE id=?",
+                        OffsetDateTime.class,
+                        hid)
+                    .toInstant());
+      }
+    }
+    assertThat(seen)
+        .hasSize(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM moderation.case_history WHERE report_id=?",
+                Integer.class,
+                root.id()));
+    assertThat(preservationStore.pendingRoot(subject.userId(), null, null)).isNull();
+  }
+
+  @Test
+  void oldRootVersionReceiptCannotCompleteSuccessorProvenanceBaseline() throws Exception {
+    var admin = actor(true);
+    var root = provenanceRoot("REPORT", "OPEN", admin, actor(false));
+    baseline(root);
+    UUID old =
+        jdbc.queryForObject(
+            "SELECT pending_export FROM moderation.preservation_state WHERE root_id=?",
+            UUID.class,
+            root.id());
+    var e = preservationStore.find(old);
+    var lease =
+        new ExternalJobHandler.Lease(1, 1, Instant.now().plusSeconds(60), e.execution().toString());
+    String prepared = tx().execute(s -> preservation.prepare(old.toString(), lease));
+    cases.hold(
+        admin,
+        null,
+        root.type(),
+        root.id(),
+        0,
+        new com.flyvo.socialcore.moderation.api.CaseOperations.Hold(
+            Instant.now().plusSeconds(3600), "SYNTHETIC_HOLD"));
+    baseline(root);
+    UUID next =
+        jdbc.queryForObject(
+            "SELECT pending_export FROM moderation.preservation_state WHERE root_id=?",
+            UUID.class,
+            root.id());
+    assertThat(next).isNotEqualTo(old);
+    String receipt = preservation.execute(prepared);
+    tx().executeWithoutResult(s -> preservation.complete(old.toString(), lease, prepared, receipt));
+    assertThat(archivedPreservation(old).path("version").asLong()).isZero();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT NOT complete AND pending_export=? AND root_version=1 FROM moderation.preservation_state WHERE root_id=?",
+                Boolean.class,
+                next,
+                root.id()))
+        .isTrue();
+    baselineToReceipt(root);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT complete AND format_version=2 AND root_version=1 FROM moderation.preservation_state WHERE root_id=?",
+                Boolean.class,
+                root.id()))
+        .isTrue();
+  }
+
   @Test
   void preservationDeadExportNeedsExplicitAuditedAdminResumeAndRejectsSupersededCallbacks()
       throws Exception {

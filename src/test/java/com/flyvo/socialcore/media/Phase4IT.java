@@ -118,6 +118,7 @@ class Phase4IT {
     }
   }
 
+  @Autowired org.springframework.context.ApplicationContext context;
   @Autowired MutableClock clock;
   @Autowired AccountCommands accountCommands;
   @Autowired AccountQueries accounts;
@@ -1748,6 +1749,106 @@ class Phase4IT {
         "UPDATE account.user_account SET status='SUSPENDED',version=version+1 WHERE id=?",
         a.userId());
     for (var id : ids) assertAll(b, id, false);
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(strings = {"REVISION", "DELETED", "REMOVED_MEDIA"})
+  void suspendedAuthorDueRetentionCompletesThroughDurableWorkerBeforeReinstatement(String scenario)
+      throws Exception {
+    assertThat(context.getEnvironment().getProperty("app.erasure.enabled", Boolean.class, false))
+        .isFalse();
+    jdbc.update(
+        "UPDATE platform.job SET available_at=timestamptz '2100-01-01 00:00:00Z' WHERE kind='POST_RETENTION' AND status IN ('PENDING','RETRY')");
+    var staff = user();
+    var author = user();
+    var other = user();
+    jdbc.update("UPDATE account.user_account SET platform_role='ADMIN' WHERE id=?", staff.userId());
+    UUID image = null;
+    ContentQueries.PostView post;
+    if (scenario.equals("REMOVED_MEDIA")) {
+      var c =
+          communities.create(
+              staff,
+              "suspended-retention-" + UUID.randomUUID(),
+              "Synthetic",
+              "",
+              "PRIVATE",
+              "OPEN",
+              null);
+      memberships.join(author, c.id());
+      image = ready(author, "POST");
+      post = posts.publish(author, request("COMMUNITY", c.id(), List.of(), List.of(image)), null);
+      moderation.apply(
+          staff, c.id(), post.id(), post.version(), "REMOVE_CONTENT", "Synthetic private reason");
+      assertThat(assets.binding(image).released()).isNull();
+    } else {
+      post = publish(author, "PUBLIC", List.of());
+      if (scenario.equals("REVISION")) {
+        posts.edit(
+            author,
+            post.id(),
+            post.version(),
+            new ContentCommands.Edit("Current retained body", null, List.of(), List.of()));
+        jdbc.update(
+            "INSERT INTO content.post_revision(post_id,revision_number,editor_id,body,audience_snapshot,media_ids_snapshot,mentions_snapshot,edited_at) SELECT ?,n,?,'Synthetic old revision','{}','[]','[]',? FROM generate_series(3,503) n",
+            post.id(),
+            author.userId(),
+            clock.instant().atOffset(ZoneOffset.UTC));
+      } else {
+        jdbc.update(
+            "INSERT INTO content.comment(id,post_id,author_id,body,status,created_at,updated_at) VALUES (?,?,?,'Synthetic ordinary descendant','VISIBLE',?,?)",
+            UUID.randomUUID(),
+            post.id(),
+            other.userId(),
+            clock.instant().atOffset(ZoneOffset.UTC),
+            clock.instant().atOffset(ZoneOffset.UTC));
+        posts.delete(author, post.id(), post.version());
+      }
+    }
+    accountCommands.changeStatus(staff, author.userId(), 0, true, "SYNTHETIC_SUSPENSION");
+    denied(() -> reads.read(author, post.id()), 401);
+    clock.now = clock.now.plusSeconds(30L * 86400 + 1);
+    for (int n = 0; n < 10; n++)
+      assertThat(work.consumeJob(UUID.randomUUID(), List.of(retention))).isTrue();
+    assertThat(accounts.find(author.userId()).status()).isEqualTo("SUSPENDED");
+    assertThat(
+            count(
+                "SELECT count(*) FROM platform.job WHERE kind='POST_RETENTION' AND payload->>'data'=? AND status<>'COMPLETED'",
+                post.id().toString()))
+        .isZero();
+    assertThat(
+            count(
+                "SELECT count(*) FROM platform.job WHERE kind='POST_RETENTION' AND payload->>'data'=? AND status='COMPLETED'",
+                post.id().toString()))
+        .isGreaterThanOrEqualTo(scenario.equals("REVISION") ? 2 : 1);
+    assertThat(count("SELECT count(*) FROM content.post_revision WHERE post_id=?", post.id()))
+        .isZero();
+    if (scenario.equals("DELETED")) {
+      assertThat(
+              jdbc.queryForObject(
+                  "SELECT body='' AND link_url IS NULL FROM content.post WHERE id=?",
+                  Boolean.class,
+                  post.id()))
+          .isTrue();
+      assertThat(
+              count("SELECT count(*) FROM content.comment WHERE post_id=? AND body<>''", post.id()))
+          .isZero();
+    }
+    if (image != null) assertThat(assets.binding(image).released()).isNotNull();
+    long jobsBefore =
+        count(
+            "SELECT count(*) FROM platform.job WHERE kind='POST_RETENTION' AND payload->>'data'=?",
+            post.id().toString());
+    accountCommands.changeStatus(staff, author.userId(), 1, false, "SYNTHETIC_REINSTATEMENT");
+    assertThat(accounts.find(author.userId()).active()).isTrue();
+    assertThat(count("SELECT count(*) FROM content.post_revision WHERE post_id=?", post.id()))
+        .isZero();
+    assertThat(
+            count(
+                "SELECT count(*) FROM platform.job WHERE kind='POST_RETENTION' AND payload->>'data'=?",
+                post.id().toString()))
+        .isEqualTo(jobsBefore);
+    if (image != null) assertThat(assets.binding(image).released()).isNotNull();
   }
 
   @Test

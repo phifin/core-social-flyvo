@@ -8,6 +8,21 @@ import java.util.UUID;
 public interface CaseStore {
   record Root(CaseOperations.Root type, UUID id) {}
 
+  enum EligibilityState {
+    KNOWN,
+    UNRESOLVED,
+    UNKNOWN
+  }
+
+  enum EligibilityAnchor {
+    REPORT_RESOLVED_AT,
+    ACTION_CREATED_AT
+  }
+
+  /** Source age provenance, independent of export time and of the separate current hold. */
+  record Eligibility(
+      EligibilityState state, EligibilityAnchor anchor, Instant anchorAt, Instant eligibleAt) {}
+
   record Control(
       Root root,
       UUID community,
@@ -19,6 +34,7 @@ public interface CaseStore {
       Instant holdUntil,
       String holdReason,
       String retentionState,
+      Eligibility eligibility,
       Instant now) {}
 
   record Payload(

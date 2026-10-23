@@ -49,6 +49,7 @@ public class ModerationPreservation implements ExternalJobHandler {
   }
 
   public record Record(
+      int formatVersion,
       UUID lineage,
       UUID id,
       String protocol,
@@ -62,6 +63,7 @@ public class ModerationPreservation implements ExternalJobHandler {
       Instant proposedHoldUntil,
       String status,
       String retentionState,
+      CaseStore.Eligibility eligibility,
       Instant recordedAt,
       List<PreservationStore.History> history) {}
 
@@ -77,28 +79,14 @@ public class ModerationPreservation implements ExternalJobHandler {
       throw new IllegalStateException("PRESERVATION_PREPARE_REQUIRES_TRANSACTION");
     if (history.size() > 100) throw Failure.invalid();
     UUID id = UUID.randomUUID();
-    String record =
-        json.writeValueAsString(
-            new Record(
-                lineage,
-                id,
-                AccountErasure.PROTOCOL,
-                AccountErasure.POLICY,
-                operation,
-                c.root(),
-                c.version(),
-                actor,
-                c.community(),
-                c.holdUntil(),
-                until,
-                c.status(),
-                c.retentionState(),
-                c.now(),
-                history));
+    String record = encode(id, c, actor, until, operation, history);
+    if (record.getBytes(StandardCharsets.UTF_8).length > RecoveryArchive.MAX_RECORD_BYTES)
+      throw new IllegalStateException("PRESERVATION_RECORD_TOO_LARGE");
     String digest = HexFormat.of().formatHex(secrets.hash(record));
     store.add(
         new PreservationStore.Export(
             id,
+            PreservationStore.FORMAT_VERSION,
             c.root(),
             c.version(),
             operation,
@@ -113,31 +101,82 @@ public class ModerationPreservation implements ExternalJobHandler {
     return id;
   }
 
+  private String encode(
+      UUID id,
+      CaseStore.Control c,
+      UUID actor,
+      Instant until,
+      String operation,
+      List<PreservationStore.History> history) {
+    return json.writeValueAsString(
+        new Record(
+            PreservationStore.FORMAT_VERSION,
+            lineage,
+            id,
+            AccountErasure.PROTOCOL,
+            AccountErasure.POLICY,
+            operation,
+            c.root(),
+            c.version(),
+            actor,
+            c.community(),
+            c.holdUntil(),
+            until,
+            c.status(),
+            c.retentionState(),
+            c.eligibility(),
+            c.now(),
+            history));
+  }
+
+  /** Keep the adapter's existing byte limit as well as the100-row collection limit. */
+  private List<PreservationStore.History> boundedHistory(
+      CaseStore.Control c, List<PreservationStore.History> rows) {
+    int low = 0, high = rows.size();
+    while (low < high) {
+      int count = (low + high + 1) / 2;
+      String candidate =
+          encode(new UUID(0, 0), c, null, c.holdUntil(), "BASELINE", rows.subList(0, count));
+      if (candidate.getBytes(StandardCharsets.UTF_8).length <= RecoveryArchive.MAX_RECORD_BYTES)
+        low = count;
+      else high = count - 1;
+    }
+    if (low == 0 && !rows.isEmpty())
+      throw new IllegalStateException("PRESERVATION_HISTORY_ROW_TOO_LARGE");
+    return List.copyOf(rows.subList(0, low));
+  }
+
   public Baseline baseline(CaseStore.Control c) {
     var state = store.state(c.root(), c.version());
     if (state.pending() != null) {
       var e = store.find(state.pending());
-      if (e == null || e.version() != c.version() || !e.root().equals(c.root()))
+      if (e == null
+          || e.formatVersion() != PreservationStore.FORMAT_VERSION
+          || state.formatVersion() != PreservationStore.FORMAT_VERSION
+          || e.version() != c.version()
+          || !e.root().equals(c.root()))
         throw new IllegalStateException("PRESERVATION_BASELINE_MISMATCH");
       if (!e.digest().equals(e.receipt())) return new Baseline(false, 0);
       store.acknowledge(c.root(), c.version());
       state = store.state(c.root(), c.version());
     }
     if (state.complete()) return new Baseline(true, 0);
-    var history = store.history(c.root(), state.after(), 100);
+    var rows = store.history(c.root(), state.after(), 100);
+    var history = boundedHistory(c, rows);
     var id = intent(c, null, c.holdUntil(), "BASELINE", history);
     store.pending(
         c.root(),
         c.version(),
         id,
         history.isEmpty() ? state.after() : history.getLast().id(),
-        history.size() < 100);
+        rows.size() < 100 && history.size() == rows.size());
     return new Baseline(false, history.size());
   }
 
   public void require(UUID id, CaseStore.Control c, UUID actor, Instant until) {
     var e = store.find(id);
     if (e == null
+        || e.formatVersion() != PreservationStore.FORMAT_VERSION
         || !e.root().equals(c.root())
         || e.version() != c.version()
         || !"PRESERVE".equals(e.operation())

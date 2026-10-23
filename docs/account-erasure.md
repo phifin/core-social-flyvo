@@ -251,6 +251,21 @@ conservative recovery evidence. Current ADMIN can explicitly resume at most100
 DEAD immutable exports through PRESERVATION maintenance; cumulative failures and
 old executions remain. No restore/import/latest-cut exposure gate is implemented.
 
+Preservation format2 captures eligibility with the same locked root/version:
+KNOWN report resolved_at or standalone action created_at and the SQL365-day
+eligibleAt, separately from recordedAt (export observation). OPEN/IN_REVIEW is
+UNRESOLVED with null age/deadline; incomplete or unsupported provenance is UNKNOWN,
+never inferred from export time. Hold deadlines remain separate controls. Exported
+history retains its original createdAt. Each page contains at most100 history rows
+and fits the existing16KiB archive limit; only the exported prefix advances.
+
+V0052 labels existing immutable exports/cache as format1 without rewriting bodies,
+digests or receipts. A format1 complete cache cannot certify format2: the next
+root observation resets its cursor and appends a new bounded baseline, including
+already-redacted roots. The independent scanner and relevant-subject traversal
+select these roots; old receipts remain valid only for their original bytes.
+Format1 has insufficient eligibility provenance and must remain conservative.
+
 UUID tombstones, immutable audit/job/control metadata, expiring restricted backups
 and already delivered external copies remain declared retention exceptions, never
 anonymity/compliance or production-durability claims. III and U01–U06 remain gated.
