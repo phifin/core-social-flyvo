@@ -3,12 +3,13 @@
 ## Routing
 
 - Task: phase-9a-ii-sources-media-completion
-- Round: 1
-- State: CHANGES_REQUESTED — main round1; isolated synthetic scope only
-- Last writer: main reviewer, 2026-10-23
-- Next owner: development, existing chat below
+- Round: 2 — development repair after main round1
+- State: READY_FOR_REVIEW — combined P9AII-R1/R2 repair; isolated synthetic scope only
+- Last writer: development, 2026-10-24
+- Next owner: main
 - Chat name: `Develop Phase 9A-II — Sources, Media & Completion`
-- Delivered code commit: `6d3fbfc985cfa1e407e331d79ac5d25ffd3ae3b0`
+- Delivered code commit: `8df0b6b87c9a44dbd688e4ab4497bd16f94e3d0f`
+- Previous submission: `6d3fbfc985cfa1e407e331d79ac5d25ffd3ae3b0` (reviewed in round1)
 - Assignment baseline: `61623032ceb09537b1598d914fac3bb747c39302`
 - Accepted I executable: `bbbde93c170246372895907dd4e446696521452d`
 - G1 acceptance: `faf0ad851496f3708fb0f66f4ca28d7faee294d5`
@@ -291,3 +292,97 @@ READY_FOR_REVIEW and next owner main. Development never pushes. Main is withhold
 this candidate checkpoint while findings remain open. III/9B, real erasure/restore,
 U01–U06 policy decisions, release/deployment and automatic next-phase activation
 remain out of scope.
+
+
+## Development repair delivery — round2, 2026-10-24
+
+**READY_FOR_REVIEW; next owner main.** Verified fixes/affected contracts are committed
+at `8df0b6b87c9a44dbd688e4ab4497bd16f94e3d0f`, against review
+`2f28960e0f7aaf388607578c07e22fe1e526fa88` and original executable `6d3fbfc`.
+This appended report answers the historical pending response markers above; all
+original findings, anchors, verdict, evidence and instructions remain verbatim.
+P9AII-R1/R2 remain **OPEN** for main to assess. Development has not accepted G2.
+
+### P9AII-R1 — developer response, proposed fix for main review
+
+- PostRetention now bypasses only DELETION_PENDING/DELETED or erasure-origin roots.
+  SUSPENDED receives ordinary due revision/post/descendant cleanup and removed-media
+  release. Account access denial and account→post lock order remain unchanged;
+  terminal close-before-marker protection still preserves other authors' descendants.
+- Three new real PostgreSQL/Silo durable-worker Phase4IT cases run with erasure
+  disabled: >500 due revisions (multiple bounded jobs), deleted post/descendant,
+  removed-post media binding. Each suspends before consumption, proves jobs complete
+  while still SUSPENDED, then reinstates and proves no replacement job is needed.
+- Enabled erasure close-first/erasure-origin regressions remain in ErasureFoundationIT;
+  inherited P9AI-R1/R2's21 proof-chain cases remain unchanged and passing. No new
+  maintenance abstraction or authorization relaxation.
+
+### P9AII-R2 — developer response, proposed fix for main review
+
+- Format2 BASELINE/PRESERVE/COMMITTED records carry typed eligibility from the same
+  locked root/version observation: report resolved_at or standalone action created_at
+  and exact SQL365-day eligibleAt. recordedAt is observation only. OPEN/IN_REVIEW
+  is UNRESOLVED with null age/deadline; incomplete/unsupported source is UNKNOWN,
+  without a current-time fallback. Current/proposed hold deadlines remain separate.
+  History carries its original createdAt. ADR-016 retention/hold rules are unchanged;
+  no private evidence, reason, before/after payload, ciphertext or key enters exports.
+- V0052 follows inspected HEAD's V0051. Existing export bodies/digests/receipts are
+  untouched and labelled format1. Baseline state resets on version or format mismatch;
+  a format1 complete cache cannot certify new provenance. Relevant-subject traversal
+  and independent bounded scanning include already-redacted roots; append a new
+  format2 baseline and require matching format/root/version receipt before advancing.
+  Old records remain valid evidence of their original bytes only. No III importer.
+- Actual appended files and independent archive verification cover OPEN, RESOLVED,
+  DISMISSED reports, standalone actions and both root types' hold/release intents/
+  committed controls. Source timestamps are deliberately2020, distinct from export;
+  tests assert exact source+365-day deadlines, hold deadlines and no private payload.
+  A legacy complete/DONE root recaptures all207 history rows in bounded pages with
+  unique IDs/original timestamps and unchanged old receipt. Stale-root acknowledgement,
+  outage/DEAD/explicit resume/superseded execution and post-redaction tests pass.
+- Real archive verification exposed100 rows exceeding its existing16KiB cap. Pages
+  now select the largest fitting UTF-8 prefix within100 fetched rows; advance only
+  that verified prefix. The cap is unchanged. Migration tests cover51→52 old receipt/
+  verified-time preservation, immutable format, failed-prefix rollback/forward
+  recovery and all earlier accepted checksums. No migration V0001–V0051 was edited.
+
+### Repaired verification and delivery provenance
+
+| Check | Current repaired result |
+|---|---|
+| Combined targeted + formatting | **95 IT +62 fast PASS**,0 failures/errors/skips,2m51s, finished2026-10-23 20:40:06+07. Includes both findings, existing moderation controls and inherited proof chain. |
+| Java21 full verify | **481 PASS (62 fast +419 IT)**,0 failures/errors/skips,7m26s, finished2026-10-23 20:47:49+07. All50 current class XML counts match the log; stale targeted/benchmark reports retained but excluded. Architecture/OpenAPI/policy parity pass. |
+| Manifest/image | All392 executable/config/API/CI paths match working and committed repaired bytes. Unchanged Dockerfile image build r2 PASS; first build failed resolving Spotless's org.eclipse.osgi dependency and is retained. |
+| Native fresh/V0032/V0037/V0051 | All4 actual PG/Silo/app probes PASS on V0052; accepted prefix checksums unchanged. Real media upload/process/post/access, CSRF403/stale412/close204, old-session/media401/post404, SSE closure, restart, historical no-data12-proof/certificate finalization and actual old URL TTL denial. Media subject remains PENDING with unproven drain. |
+| Unchanged heavy benchmark | **3,200/3,200 successes,0 failures**, all16 pool10/diagnostic50 scenarios,5m22s, finished2026-10-24 01:11:46+07. Dense pool10 p95=2467.223/2100.173ms; diagnostic50=2094.718/1388.575ms.500ms goal remains OPEN. Complete16-row p50/p95/p99/SQL table is in the phase record, raw resource/wait distributions and CSV/JSON retained. |
+| Delivery checks | Compose config, worktree/index diff and current manifest checks PASS;47 local Markdown links before the fix commit and49 including this report PASS. Pinned redacted code staged/full-history scan and external synthetic positive control PASS; unchanged3 exact exceptions. Mailbox staged/final-history scans and final provenance are retained in the same external evidence root after this report. |
+
+No heavy build/verify/native app overlapped the benchmark. No pool/timeout/lease/
+planner change, test exclusion, fake writer drain, private-payload waiver or owner
+boundary exception. C01–C05 remain binding; no source-access denial is relaxed.
+The full runner's existing fork-shutdown/stopped-container warnings are retained;
+Maven exits0 with all481 cases passing. Failed development attempts are catalogued
+without being relabelled as passes. Original469/native/benchmark evidence above
+remains historical evidence for `6d3fbfc`; this report refers to new repaired runs.
+
+Durable repair evidence: `/home/vonhuphi/social-p9aii-repair-evidence.qj4n9n9k/` —
+`executable-manifest.json`, `targeted/`, `full-verify/` and curated XML counts,
+image build/identity, four native probe/isolation/prefix logs, `native-archives/`,
+`native-cleanup.json`, benchmark raw/CSV/JSON/diagnostics/reports, scan reports,
+`delivery-checks.json`, artifact index and final commit provenance. The expired
+native exec session had no retrievable process exit status after resume; all4
+probe PASS and runner cleanup markers plus independent resource inspection are
+retained. All four projects/named and anonymous fixture volumes are gone; newly
+created keys/storage are removed after retaining archives. No existing developer
+resources were used; fixture teardown is not an erasure acknowledgement.
+
+Affected contracts and full results are in the [phase record](phases/phase-9a-ii.md)
+and [pre-code repair plan/refinement](work-packages/phase-9a-ii-implementation-map.md).
+No assigned repair blocker remains. Main must review each response and alone
+resolve findings/accept G2. The500ms feed goal, prior timeout root causes, real writer
+quiescence, U01–U06/production retention/IAM/keys/latest-cut authority and III restore/
+import/exposure gates remain open/unapproved. No push, deployment, agent spawning,
+real-data erasure/restore or Phase III implementation occurred.
+
+**Next action:** main reviews `8df0b6b87c9a44dbd688e4ab4497bd16f94e3d0f` and the repaired
+regression/evidence matrix, preserves the original finding history and records its
+own disposition for P9AII-R1 and P9AII-R2. No next phase is automatically activated.
