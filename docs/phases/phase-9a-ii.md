@@ -8,6 +8,11 @@ development does not self-accept G2. [Assignment](../work-packages/phase-9a-ii.m
 [ADR-017 C01–C05](../adr/017-account-erasure-and-recovery.md) bind this delivery.
 No agents, push, III, real erasure/restore, provider contact or deployment is used.
 
+Main round1 on2026-10-23 is **CHANGES_REQUESTED** at executable `6d3fbfc`.
+P9AII-R1 (ordinary suspended-author retention) and P9AII-R2 (missing moderation
+eligibility provenance in immutable recovery exports) remain OPEN in the mailbox.
+The implementation report below is developer evidence, not G2 acceptance.
+
 ## Implemented behavior
 
 All twelve fixed owner steps have real registered handlers. Community/graph remove
@@ -215,4 +220,29 @@ any document write. The existing bounded worker retry uses a new transaction and
 writes the permanent blank marker. The named two-order regression checks both this
 safe abort and stale upsert denial; no in-transaction optimistic failure is ignored.
 
-Main reviews the complete package at G2; only main can accept it or push.
+## Main review — round1
+
+Main independently ran Java21 full verify on the submitted executable:469 PASS
+(62 fast +407 IT), zero failures/errors/skips,8m04s, finished2026-10-23 20:10:12+07.
+The50 current-run class XML reports agree with the log; three unrelated older
+target reports are not counted. All391 manifest paths match. Applied V0001–V0037
+are unchanged; diff/Compose checks and pinned full-history scan (76 commits)/
+synthetic positive control pass. The fork shutdown and stopped-container warnings
+remain visible in `/home/vonhuphi/social-p9aii-main-review.YE7Otx/verify.log`.
+Native and benchmark checks above remain developer evidence, not main reruns.
+
+Two code-inspection findings still require fixes and new regressions:
+
+- **P9AII-R1:** `PostRetention` returns for every inactive author, including
+  SUSPENDED; due ordinary cleanup is acknowledged without rescheduling. Suspension
+  must not waive the thirty-day retention policy, including with erasure disabled.
+- **P9AII-R2:** moderation's immutable export contains observation time but not the
+  source terminal/age eligibility anchor required by ADR-016/017. Correct the
+  export and old-format baseline compatibility; do not defer this II prerequisite
+  to implementing the III importer.
+
+Neither finding was separately reproduced as a failing test by main. Existing
+green tests do not accept G2. See the mailbox for precise anchors, scenarios,
+required outcomes and regression gates. Next owner is the existing Phase9A-II
+development chat for the combined repair package. Main changed documentation only,
+did not push this candidate, and has not activated III.

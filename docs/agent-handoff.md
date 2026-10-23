@@ -4,9 +4,9 @@
 
 - Task: phase-9a-ii-sources-media-completion
 - Round: 1
-- State: READY_FOR_REVIEW — isolated synthetic scope only
-- Last writer: development, 2026-10-23
-- Next owner: main
+- State: CHANGES_REQUESTED — main round1; isolated synthetic scope only
+- Last writer: main reviewer, 2026-10-23
+- Next owner: development, existing chat below
 - Chat name: `Develop Phase 9A-II — Sources, Media & Completion`
 - Delivered code commit: `6d3fbfc985cfa1e407e331d79ac5d25ffd3ae3b0`
 - Assignment baseline: `61623032ceb09537b1598d914fac3bb747c39302`
@@ -58,8 +58,9 @@ C01–C05 bind this implementation; no private payload may be waived to obtain D
 Retain the fixed12-owner roster; owner activation requires real handlers,
 proofs and historical reconciliation, not empty/fake acknowledgements.
 
-No main reviewer findings for II have been recorded yet. Development does not self-accept G2 or
-resolve future main findings. Review history is preserved in the archive above.
+Main round1 records **P9AII-R1 and P9AII-R2 OPEN** below. G2 is not accepted.
+Development must respond to each ID without replacing the original finding or
+self-resolving it. Review history is preserved in this file and the I archive above.
 
 ## Verification and delivery
 
@@ -172,8 +173,121 @@ unexpired private moderation, unknown writers, missing receipts and bad provenan
 remain waiting/failed. The500ms feed goal and earlier timeout root causes remain
 open; this run's zero errors does not resolve those earlier causes.
 
-**Next action: main reviews the entire II candidate at the actual code hash above
-and the retained evidence for G2.** Only main accepts/resolves review findings or
-pushes. No automatic III activation is requested. The mailbox is committed
-separately after the code commit; it deliberately contains no self-referential
-mailbox commit hash.
+The developer requested main review at the actual code hash above. The following
+main review supersedes that routing, not the developer's historical evidence.
+Only main accepts/resolves review findings or pushes; III is not activated.
+
+## Main review — round1, 2026-10-23
+
+**Verdict: CHANGES_REQUESTED.** Reviewed executable `6d3fbfc` against assignment
+baseline `6162303`, with developer mailbox `6f0a35d`; no newer executable or local
+edits were present. The two findings below are code-inspection findings, not
+separately reproduced failing tests. Main changed review documentation only.
+Passing existing tests does not cover these missing cases or accept G2.
+
+### P9AII-R1 — P2 — ordinary retention is lost while the author is suspended — OPEN
+
+- Anchor: `src/main/java/com/flyvo/socialcore/content/application/PostRetention.java:53`.
+  The added `!author.active()` return covers SUSPENDED as well as
+  DELETION_PENDING/DELETED. Suspension is reversible and is not an erasure request.
+- Failure scenario: an author edits, deletes or has a post removed, then is
+  suspended when its scheduled thirty-day POST_RETENTION runs. The handler exits
+  before revision/post/descendant redaction and removed-post media release, and
+  before scheduling another bounded pass. `DurableWorkStore` acknowledges that
+  return as COMPLETED. `Posts.changed` schedules retention on source mutations;
+  reinstatement does not replace the consumed job. Without another source mutation,
+  due bytes/bindings can therefore remain indefinitely. This also changes ordinary
+  default erasure-disabled environments, where no account-erasure pass can help.
+- Required outcome: preserve ordinary retention for SUSPENDED accounts. Narrow the
+  erasure-specific bypass to the actual terminal lifecycle/erasure-origin contract,
+  preserving the close-before-content-marker race protection and other authors'
+  descendants. Do not solve this by relaxing account access or by adding a new
+  global maintenance abstraction.
+- Regression expectation: real PostgreSQL/durable-worker coverage for due revision,
+  deleted-post and removed-media work while suspended, including reinstatement
+  after the job, with erasure disabled. Retain terminal close-first and
+  erasure-origin descendant-preservation tests with erasure enabled.
+- Developer response: pending.
+
+### P9AII-R2 — P2 — preservation exports omit retention eligibility provenance — OPEN
+
+- Anchor: `src/main/java/com/flyvo/socialcore/moderation/application/ModerationPreservation.java:51`
+  (`Record` and its construction at lines82–97). Supporting paths:
+  `moderation/application/port/CaseStore.java:11`,
+  `moderation/application/port/PreservationStore.java:29` and
+  `moderation/infrastructure/persistence/JdbcCases.java:32`.
+- The exported record carries status, hold deadlines, retention state and
+  `recordedAt=c.now()`, but neither the report's `resolved_at` nor the standalone
+  action's `created_at`, nor an equivalent authoritative retention-eligible-at
+  value. The exported History also omits its original timestamp. `recordedAt` is
+  export observation time, not the terminal/age anchor used by JdbcCases.eligible.
+- Failure scenario: an old backup still has an OPEN case (or lacks a later
+  standalone action), and recovery has only the newer immutable export. Even a
+  verified receipt cannot recover the actual ADR-016 365-day deadline from that
+  record. Inferring it from export time changes the policy; leaving it unknown
+  indefinitely is not the assigned complete export contract. This is a missing
+  prerequisite for recovery, not a claim that the unimplemented III importer
+  currently deletes evidence prematurely.
+- Required outcome: deliver ADR-017 D08's explicit root/version/terminal-eligibility/
+  hold-deadline export contract now, as Group C.3 requires. Capture authoritative
+  source eligibility provenance under the same root/version observation, with
+  explicit unresolved/unknown semantics and truthful history timestamps where
+  history is exported. Keep private evidence/reasons out of the archive. Do not
+  substitute current time or change ADR-016's retention rule.
+- Existing exported bodies/digests/receipts are immutable. Specify a compatible
+  format/provenance distinction and append a sufficient new baseline for roots
+  already marked complete under the old format; do not rewrite old records or
+  let their cached complete state certify the corrected export. If schema changes
+  are necessary, inspect current HEAD and start at V0052, preserving V0001–V0051.
+- Regression expectation: inspect the actual independently appended and verified
+  archive body for unresolved and terminal reports, standalone actions, holds and
+  releases, with source times deliberately different from export time; assert
+  exact policy deadlines and no private payload. Cover old-format completed
+  baselines, bounded multi-page history, retries/stale root versions and the
+  existing post-redaction export. No III importer/restore implementation is asked.
+- Developer response: pending.
+
+### Independent checks and limitations
+
+- Java21 `./mvnw -B -ntp verify`: **469 PASS (62 fast +407 IT)**,
+  zero failures/errors/skips, Maven exit0,8m04s, finished2026-10-23 20:10:12+07.
+  Current-run log entries were matched to their50 class XML reports. Three older
+  reports left in target (a prior targeted Surefire IT and two benchmark reports)
+  are retained in the evidence copy but excluded from this run's counts.
+- Durable main evidence: `/home/vonhuphi/social-p9aii-main-review.YE7Otx/`;
+  `verify.log`, copied `surefire-reports/`/`failsafe-reports/`,
+  `history-scan.log` and `positive-control.log`. The existing post-System.exit(0)
+  thirty-second fork-shutdown error line and stopped-container Hikari warnings
+  are retained, not hidden; Maven's final test summaries/build still pass.
+- All391 developer manifest paths match the submitted executable/config/API/CI
+  bytes. V0001–V0037 unchanged; diff whitespace and Compose config checks pass.
+- Pinned redacted Gitleaks full history:76 commits, no leaks, unchanged three exact
+  ignores. External synthetic positive control detects its intended key and passes.
+  Review-doc staged scan/diff checks and all11 local Markdown links pass.
+- Native fresh/V0037/V0032 and3200-request benchmark remain attributed developer
+  evidence bound to `6d3fbfc`, not independent main reruns. The500ms goal is still
+  unmet. No real data, production activation, restore, push or deployment occurred.
+
+### Next action — one combined repair package in the existing development chat
+
+User reopens **`Develop Phase 9A-II — Sources, Media & Completion`**. Do not create
+or spawn another thread. Read this mailbox and the binding assignment, set
+IN_PROGRESS, then complete both findings sequentially: ordinary content-retention
+regression first, moderation export provenance/compatibility second, followed by
+the combined verification gate. Do not hand off after only the first repair unless
+there is a concrete authority/architecture blocker.
+
+Run targeted regressions, Java21 formatting/full verify and the required II delivery
+checks on the repaired executable, including current-source manifest, native/
+upgrade evidence and pinned staged/history/positive scans. Record exact scope and
+provenance for every rerun or retained historical result; do not relabel old native
+or benchmark evidence as a rerun. No timeout/pool/lease increase, fake writer drain,
+waived private payload or relaxed architectural/DB denial. Preserve P9AI-R1/R2 and
+C01–C05. Main decides acceptance after checking each response.
+
+Commit verified fixes and affected contracts/phase evidence, then separately commit
+the mailbox with actual code hash, per-ID responses, checks/limitations,
+READY_FOR_REVIEW and next owner main. Development never pushes. Main is withholding
+this candidate checkpoint while findings remain open. III/9B, real erasure/restore,
+U01–U06 policy decisions, release/deployment and automatic next-phase activation
+remain out of scope.
