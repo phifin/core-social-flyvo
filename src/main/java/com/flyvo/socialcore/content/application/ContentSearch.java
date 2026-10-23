@@ -44,6 +44,12 @@ public class ContentSearch implements ContentSearchSources {
   }
 
   @Transactional(readOnly = true)
+  public List<UUID> scanByAuthor(UUID author, UUID after, int limit) {
+    if (author == null || limit < 1 || limit > 100) throw Failure.invalid();
+    return store.searchScanByAuthor(author, after, limit);
+  }
+
+  @Transactional(readOnly = true)
   public List<Source> inspect(List<UUID> ids) {
     batch(ids);
     var sources = store.searchSources(ids);

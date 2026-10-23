@@ -20,7 +20,8 @@ public interface CaseOperations {
 
   enum Maintenance {
     ENCRYPT,
-    RETENTION
+    RETENTION,
+    PRESERVATION
   }
 
   record Filter(String status, UUID assignedTo, boolean unassigned) {}
@@ -115,7 +116,16 @@ public interface CaseOperations {
 
   record AccountState(UUID userId, String status, String platformRole, long version) {}
 
-  record Progress(long legacyPayloads, long pendingCaseRoots, long pendingActionRoots) {}
+  record Progress(
+      long legacyPayloads,
+      long pendingCaseRoots,
+      long pendingActionRoots,
+      long pendingPreservationExports,
+      long preservationFailures) {
+    public Progress(long legacyPayloads, long pendingCaseRoots, long pendingActionRoots) {
+      this(legacyPayloads, pendingCaseRoots, pendingActionRoots, 0, 0);
+    }
+  }
 
   Page queue(ActorContext actor, UUID community, Filter filter, int size, int offset);
 

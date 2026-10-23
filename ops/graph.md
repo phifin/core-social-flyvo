@@ -19,3 +19,13 @@ See [graph contract](../docs/graph.md) and [worker operations](community.md).
 - Pair revisions are retained across relation deletion; do not prune independently
   of the event replay horizon. Request/relationship erasure and production retention
   are Phase 9A gates. No production launch or live-provider readiness implied.
+
+
+## Phase9A-II terminal relations
+
+GRAPH_ERASURE locks sorted accounts, its step, then canonical pair advisory keys.
+At most12 pairs/96 possible relation items are removed per pass; pair UUID and
+monotonic sequence remain. Pending requests terminate, accepted history remains
+pseudonymous. New inbound block creation is denied for pending/deleted targets;
+removals and blocks of suspended targets retain their existing behavior. Expiry/
+old delivery cannot recreate an edge or reset a sequence.

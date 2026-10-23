@@ -438,7 +438,7 @@ class ErasureProofChainIT {
                 "SELECT count(*) FROM account.erasure_step WHERE user_id=? AND reason='OWNER_NOT_IMPLEMENTED'",
                 Integer.class,
                 user.actor().userId()))
-        .isEqualTo(8);
+        .isEqualTo(0);
     assertThat(
             jdbc.queryForObject(
                 "SELECT count(*) FROM account.user_account WHERE status='DELETED'", Integer.class))

@@ -115,6 +115,9 @@ public class Relationships implements GraphCommands, RelationshipQueries {
   @Transactional
   public void block(ActorContext actor, UUID target, boolean enabled) {
     var p = guard(actor, target, false);
+    // Blocking a suspended account remains valid; terminal erasure cannot regain graph edges.
+    if (enabled && Set.of("DELETION_PENDING", "DELETED").contains(accounts.find(target).status()))
+      throw new Failure(404, "NOT_FOUND");
     if (!store.edge("blocks", actor.userId(), target, enabled, clock.instant())) return;
     FriendRequest resolved = null;
     if (enabled) {

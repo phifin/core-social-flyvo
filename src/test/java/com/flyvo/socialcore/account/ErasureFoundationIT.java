@@ -114,6 +114,17 @@ class ErasureFoundationIT {
   @Autowired AccountErasure erasure;
   @Autowired ErasureStore store;
   @Autowired Erasures internal;
+  @Autowired com.flyvo.socialcore.community.application.CommunityErasure communityErasure;
+  @Autowired com.flyvo.socialcore.graph.application.GraphErasure graphErasure;
+  @Autowired com.flyvo.socialcore.content.application.ContentErasure contentErasure;
+  @Autowired com.flyvo.socialcore.content.application.PostRetention postRetention;
+  @Autowired com.flyvo.socialcore.moderation.application.ModerationErasure moderationErasure;
+  @Autowired com.flyvo.socialcore.moderation.application.ModerationPreservation preservation;
+  @Autowired com.flyvo.socialcore.moderation.api.Reports reports;
+  @Autowired com.flyvo.socialcore.moderation.api.CaseOperations cases;
+  @Autowired com.flyvo.socialcore.graph.api.GraphCommands graphCommands;
+  @Autowired com.flyvo.socialcore.community.api.AdmissionCommands admissions;
+  @Autowired com.flyvo.socialcore.community.api.MembershipCommands memberships;
   @Autowired Authentication auth;
 
   @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
@@ -125,6 +136,9 @@ class ErasureFoundationIT {
   @org.springframework.test.context.bean.override.mockito.MockitoSpyBean RecoveryArchive archive;
   @org.springframework.test.context.bean.override.mockito.MockitoSpyBean DurableWorkStore jobs;
   @Autowired ErasureExports exporter;
+  @Autowired ErasureCompletion completion;
+  @Autowired com.flyvo.socialcore.search.application.SearchSources searchSources;
+  @Autowired com.flyvo.socialcore.search.application.port.SearchIndex searchIndex;
   @Autowired AccessTokens tokens;
   @Autowired MockMvc mvc;
   @Autowired java.util.List<JobHandler> dbHandlers;
@@ -145,7 +159,7 @@ class ErasureFoundationIT {
     jdbc.update(
         "UPDATE platform.job SET available_at=timestamptz '2100-01-01 00:00:00Z' WHERE kind='MAIL' AND status IN ('PENDING','RETRY')");
     jdbc.update(
-        "UPDATE platform.job SET available_at=timestamptz '2100-01-01 00:00:00Z' WHERE kind IN ('ERASURE_EXPORT','ERASURE_RECONCILE','ERASURE_SCAN','ERASURE_TECHNICAL','IDENTITY_ERASURE','PROFILE_ERASURE') AND status IN ('PENDING','RETRY')");
+        "UPDATE platform.job SET available_at=timestamptz '2100-01-01 00:00:00Z' WHERE (kind LIKE 'ERASURE_%' OR kind LIKE '%_ERASURE' OR kind='MODERATION_PRESERVE') AND status IN ('PENDING','RETRY')");
   }
 
   void due(UUID user) {
@@ -534,7 +548,7 @@ class ErasureFoundationIT {
   }
 
   @Test
-  void realWorkerNeverDispatchesUnimplementedOwnersOrCompletesAnEmptyAccount() {
+  void foundationOnlyWorkerSubsetCannotCompleteWithoutOtherOwnerPasses() {
     var user = actor(false);
     historical(user);
     converge(user.userId(), 45);
@@ -555,6 +569,13 @@ class ErasureFoundationIT {
                 Set.of(
                         "IDENTITY_ERASURE",
                         "PROFILE_ERASURE",
+                        "COMMUNITY_ERASURE",
+                        "GRAPH_ERASURE",
+                        "CONTENT_ERASURE",
+                        "MEDIA_ERASURE",
+                        "MODERATION_ERASURE",
+                        "NOTIFICATION_ERASURE",
+                        "SEARCH_ERASURE",
                         "ERASURE_RECONCILE",
                         "ERASURE_TECHNICAL")
                     .contains(k));
@@ -563,7 +584,1272 @@ class ErasureFoundationIT {
                 "SELECT count(*) FROM account.erasure_step WHERE user_id=? AND status='WAITING_DEPENDENCY' AND reason='OWNER_NOT_IMPLEMENTED'",
                 Integer.class,
                 user.userId()))
-        .isEqualTo(8);
+        .isEqualTo(0);
+  }
+
+  private void ownerPass(UUID subject, AccountErasure.Step step, JobHandler handler) {
+    var state = store.step(subject, step, false);
+    var pass = new AccountErasure.Pass(subject, step, state.view().version(), state.execution());
+    tx().executeWithoutResult(s -> handler.apply(json.writeValueAsString(pass)));
+  }
+
+  @Test
+  void closeFirstDeniesOutstandingInvitationFromTerminalInviterAndNewInboundBlock() {
+    var owner = actor(false);
+    var subject = actor(false);
+    var invitee = actor(false);
+    var c =
+        communities.create(
+            owner,
+            "synthetic-invite-" + UUID.randomUUID(),
+            "Synthetic",
+            "",
+            "PRIVATE",
+            "INVITE_ONLY",
+            null);
+    var initial = admissions.invite(owner, c.id(), subject.userId(), null);
+    admissions.respondInvite(subject, initial.id(), "accept");
+    memberships.role(owner, c.id(), subject.userId(), 0, "ADMIN");
+    var invitation = admissions.invite(subject, c.id(), invitee.userId(), null);
+    auth.close(subject, 0);
+    exports();
+    tx().executeWithoutResult(s -> internal.reconcile(subject.userId()));
+    assertThatThrownBy(() -> admissions.respondInvite(invitee, invitation.id(), "accept"))
+        .isInstanceOf(Failure.class)
+        .hasMessage("ACCOUNT_INACTIVE");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM community.membership WHERE community_id=? AND user_id=?",
+                Integer.class,
+                c.id(),
+                invitee.userId()))
+        .isZero();
+    ownerPass(subject.userId(), AccountErasure.Step.GRAPH, graphErasure);
+    assertThat(store.step(subject.userId(), AccountErasure.Step.GRAPH, false).view().status())
+        .isEqualTo("DONE");
+    assertThatThrownBy(() -> graphCommands.block(owner, subject.userId(), true))
+        .isInstanceOf(Failure.class)
+        .hasMessage("NOT_FOUND");
+    graphCommands.block(owner, subject.userId(), false);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM graph.block WHERE blocked_id=? OR blocker_id=?",
+                Integer.class,
+                subject.userId(),
+                subject.userId()))
+        .isZero();
+  }
+
+  @Test
+  void historicalActiveOwnershipAnomalyWaitsWithoutTransferringOrArchivingCommunity() {
+    var subject = actor(false);
+    var c =
+        communities.create(
+            subject,
+            "synthetic-anomaly-" + UUID.randomUUID(),
+            "Synthetic anomaly",
+            "",
+            "PRIVATE",
+            "INVITE_ONLY",
+            null);
+    historical(subject);
+    exports();
+    tx().executeWithoutResult(s -> internal.reconcile(subject.userId()));
+    ownerPass(subject.userId(), AccountErasure.Step.COMMUNITY, communityErasure);
+    assertThat(store.step(subject.userId(), AccountErasure.Step.COMMUNITY, false).view().reason())
+        .isEqualTo("ACTIVE_OWNERSHIP");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT status FROM community.community WHERE id=?", String.class, c.id()))
+        .isEqualTo("ACTIVE");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT owner_user_id FROM community.community WHERE id=?", UUID.class, c.id()))
+        .isEqualTo(subject.userId());
+    assertThat(queries.find(subject.userId()).status()).isEqualTo("DELETION_PENDING");
+  }
+
+  private void awaitDatabaseLock() throws Exception {
+    long end = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+    while (System.nanoTime() < end) {
+      if (jdbc.queryForObject(
+              "SELECT count(*) FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock'",
+              Integer.class)
+          > 0) return;
+      Thread.sleep(10);
+    }
+    throw new AssertionError("Competing command never reached its PostgreSQL account guard");
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(booleans = {true, false})
+  void invitationAndInboundBlockAgainstRealCloseSerializeInBothWinningOrders(boolean closeFirst)
+      throws Exception {
+    var owner = actor(false);
+    var subject = actor(false);
+    var invitee = actor(false);
+    var c =
+        communities.create(
+            owner, "race-" + UUID.randomUUID(), "Synthetic", "", "PRIVATE", "INVITE_ONLY", null);
+    admissions.respondInvite(
+        subject, admissions.invite(owner, c.id(), subject.userId(), null).id(), "accept");
+    memberships.role(owner, c.id(), subject.userId(), 0, "ADMIN");
+    var invitation = admissions.invite(subject, c.id(), invitee.userId(), null);
+    var entered = new java.util.concurrent.CountDownLatch(1);
+    var release = new java.util.concurrent.CountDownLatch(1);
+    Runnable pause =
+        () -> {
+          entered.countDown();
+          try {
+            if (!release.await(15, java.util.concurrent.TimeUnit.SECONDS))
+              throw new AssertionError("race release deadline");
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(e);
+          }
+        };
+    DurableWorkStore auditTarget =
+        org.springframework.test.util.AopTestUtils.getUltimateTargetObject(jobs);
+    if (closeFirst)
+      org.mockito.Mockito.doAnswer(
+              call -> {
+                var result = call.callRealMethod();
+                pause.run();
+                return result;
+              })
+          .when(auditTarget)
+          .audit(
+              subject.userId(),
+              "ACCOUNT_DELETION_REQUESTED",
+              "account",
+              subject.userId(),
+              "SUCCESS",
+              null);
+    Runnable mutation =
+        () -> {
+          if (closeFirst) {
+            assertThatThrownBy(() -> admissions.respondInvite(invitee, invitation.id(), "accept"))
+                .hasMessage("ACCOUNT_INACTIVE");
+          } else {
+            tx().executeWithoutResult(
+                    s -> {
+                      admissions.respondInvite(invitee, invitation.id(), "accept");
+                      graphCommands.block(invitee, subject.userId(), true);
+                      pause.run();
+                    });
+          }
+        };
+    try (var pool = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+      var first = pool.submit(closeFirst ? () -> auth.close(subject, 0) : mutation);
+      assertThat(entered.await(15, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+      var second = pool.submit(closeFirst ? mutation : () -> auth.close(subject, 0));
+      try {
+        awaitDatabaseLock();
+      } finally {
+        release.countDown();
+      }
+      first.get(20, java.util.concurrent.TimeUnit.SECONDS);
+      second.get(20, java.util.concurrent.TimeUnit.SECONDS);
+    } finally {
+      release.countDown();
+    }
+    if (closeFirst)
+      assertThatThrownBy(() -> graphCommands.block(invitee, subject.userId(), true))
+          .hasMessage("NOT_FOUND");
+    exports();
+    tx().executeWithoutResult(s -> internal.reconcile(subject.userId()));
+    for (int i = 0; i < 10; i++) {
+      ownerPass(subject.userId(), AccountErasure.Step.COMMUNITY, communityErasure);
+      ownerPass(subject.userId(), AccountErasure.Step.GRAPH, graphErasure);
+    }
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM graph.block WHERE blocker_id=? OR blocked_id=?",
+                Integer.class,
+                subject.userId(),
+                subject.userId()))
+        .isZero();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM community.membership WHERE community_id=? AND user_id=? AND status='ACTIVE'",
+                Integer.class,
+                c.id(),
+                invitee.userId()))
+        .isEqualTo(closeFirst ? 0 : 1);
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(booleans = {true, false})
+  void emptyIndexLiveSnapshotAndCloseSerializeBeforeDocumentLocksInBothOrders(boolean closeFirst)
+      throws Exception {
+    var subject = actor(false);
+    var kind = com.flyvo.socialcore.search.api.SearchQueries.Kind.USER;
+    var ids = List.of(subject.userId());
+    var stale = searchSources.inspect(kind, ids).getFirst();
+    assertThat(stale.tombstone()).isFalse();
+    var entered = new java.util.concurrent.CountDownLatch(1);
+    var release = new java.util.concurrent.CountDownLatch(1);
+    Runnable pause =
+        () -> {
+          entered.countDown();
+          try {
+            if (!release.await(15, java.util.concurrent.TimeUnit.SECONDS))
+              throw new AssertionError("snapshot release deadline");
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(e);
+          }
+        };
+    DurableWorkStore auditTarget =
+        org.springframework.test.util.AopTestUtils.getUltimateTargetObject(jobs);
+    if (closeFirst)
+      org.mockito.Mockito.doAnswer(
+              call -> {
+                var result = call.callRealMethod();
+                pause.run();
+                return result;
+              })
+          .when(auditTarget)
+          .audit(
+              subject.userId(),
+              "ACCOUNT_DELETION_REQUESTED",
+              "account",
+              subject.userId(),
+              "SUCCESS",
+              null);
+    Runnable projection =
+        () ->
+            tx().executeWithoutResult(
+                    s -> {
+                      var captured = searchSources.guard(kind, ids);
+                      if (!closeFirst) pause.run();
+                      searchSources.materialize(captured);
+                    });
+    try (var pool = java.util.concurrent.Executors.newFixedThreadPool(2)) {
+      var first = pool.submit(closeFirst ? () -> auth.close(subject, 0) : projection);
+      assertThat(entered.await(15, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+      var second = pool.submit(closeFirst ? projection : () -> auth.close(subject, 0));
+      try {
+        awaitDatabaseLock();
+      } finally {
+        release.countDown();
+      }
+      first.get(20, java.util.concurrent.TimeUnit.SECONDS);
+      try {
+        second.get(20, java.util.concurrent.TimeUnit.SECONDS);
+      } catch (java.util.concurrent.ExecutionException e) {
+        // A source inspection can load an account entity before its guard waits.
+        // Hibernate rejects that obsolete entity version rather than refreshing it
+        // inside this transaction. The real worker rolls back and retries afresh.
+        if (!closeFirst) throw e;
+        assertThat(e.getCause())
+            .isInstanceOf(org.springframework.orm.ObjectOptimisticLockingFailureException.class);
+        assertThat(
+                jdbc.queryForObject(
+                    "SELECT count(*) FROM search.document WHERE source_kind='USER' AND source_id=?",
+                    Integer.class,
+                    subject.userId()))
+            .isZero();
+      }
+    } finally {
+      release.countDown();
+    }
+    tx().executeWithoutResult(s -> searchSources.refresh(kind, ids));
+    tx().executeWithoutResult(s -> assertThat(searchIndex.upsert(stale)).isFalse());
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT erased_by_account AND tombstone AND source_key='' AND title='' AND body='' AND search_vector=''::tsvector FROM search.document WHERE source_kind='USER' AND source_id=?",
+                Boolean.class,
+                subject.userId()))
+        .isTrue();
+  }
+
+  private void preservationExports() {
+    for (int i = 0; i < 20; i++) jobs.consumeExternalJob(UUID.randomUUID(), List.of(preservation));
+  }
+
+  private void allOwners(UUID user, boolean finalize) {
+    due(user);
+    jobs.consumeJob(
+        UUID.randomUUID(),
+        dbHandlers.stream()
+            .filter(h -> h.kind().endsWith("_ERASURE") || h.kind().equals("ERASURE_RECONCILE"))
+            .toList());
+    jobs.consumeExternalJob(
+        UUID.randomUUID(),
+        externalHandlers.stream()
+            .filter(
+                h ->
+                    Set.of(
+                                "ERASURE_EXPORT",
+                                "ERASURE_TECHNICAL",
+                                "MEDIA_ERASURE",
+                                "MODERATION_PRESERVE")
+                            .contains(h.kind())
+                        || finalize && h.kind().equals("ERASURE_COMPLETE"))
+            .toList());
+  }
+
+  private ActorContext completionReady() {
+    var user = actor(false);
+    jdbc.update(
+        "UPDATE account.user_account SET status='DELETION_PENDING',deletion_requested_at=clock_timestamp()-interval '31 days',version=version+1 WHERE id=?",
+        user.userId());
+    tx().executeWithoutResult(s -> internal.reconcile(user.userId()));
+    for (int n = 0;
+        n < 250
+            && !"RUNNABLE"
+                .equals(
+                    store
+                        .step(user.userId(), AccountErasure.Step.COMPLETION, false)
+                        .view()
+                        .status());
+        n++) allOwners(user.userId(), false);
+    assertThat(store.step(user.userId(), AccountErasure.Step.COMPLETION, false).view().status())
+        .isEqualTo("RUNNABLE");
+    return user;
+  }
+
+  @Test
+  void
+      tenThousandGraphEdgesAndNotificationActorsConvergeInBoundedPassesAndPreserveOtherReadState() {
+    var subject = actor(false);
+    var recipient = actor(false);
+    var other = actor(false);
+    UUID ownedPost = UUID.randomUUID(),
+        otherPost = UUID.randomUUID(),
+        group = UUID.randomUUID(),
+        shared = UUID.randomUUID();
+    String prefix = "synthetic-p9aii-" + UUID.randomUUID() + ":";
+    jdbc.update(
+        "INSERT INTO account.user_account(id,status,created_at,updated_at) SELECT md5(?||n)::uuid,'ACTIVE',now(),now() FROM generate_series(1,10001) n",
+        prefix);
+    jdbc.update(
+        "INSERT INTO graph.follow(follower_id,followed_id,created_at) SELECT ?,md5(?||n)::uuid,now() FROM generate_series(1,10001) n",
+        subject.userId(),
+        prefix);
+    jdbc.update(
+        "INSERT INTO content.post(id,author_id,body,audience,status,revision_number,published_at,created_at,updated_at) VALUES (?,?,'Synthetic target','PUBLIC','PUBLISHED',1,now(),now(),now()),(?,?,'Other synthetic body','PUBLIC','PUBLISHED',1,now(),now(),now())",
+        ownedPost,
+        subject.userId(),
+        otherPost,
+        recipient.userId());
+    jdbc.update(
+        "INSERT INTO notification.recipient_state(recipient_id,changed_at) VALUES (?,now())",
+        recipient.userId());
+    jdbc.update(
+        "INSERT INTO notification.notification(id,recipient_id,kind,target_type,target_id,grouping_key,group_window_start,activity_version,read_version,last_activity_at,created_at) VALUES (?,?,'REACTION_ON_CONTENT','POST',?,'synthetic-large',now(),10001,10001,now(),now()),(?,?,'REACTION_ON_CONTENT','POST',?,'synthetic-mixed',now(),2,2,now(),now())",
+        group,
+        recipient.userId(),
+        ownedPost,
+        shared,
+        recipient.userId(),
+        otherPost);
+    jdbc.update(
+        "INSERT INTO content.reaction(id,actor_id,post_id,type,active,created_at,updated_at) SELECT md5(?||'reaction:'||n)::uuid,md5(?||n)::uuid,?,'LIKE',true,now(),now() FROM generate_series(1,10001) n",
+        prefix,
+        prefix,
+        ownedPost);
+    jdbc.update(
+        "INSERT INTO notification.contribution(id,notification_id,source_event_id,actor_id,source_type,source_id,source_version,active,occurred_at,reaction_type) SELECT gen_random_uuid(),?,gen_random_uuid(),md5(?||n)::uuid,'REACTION',md5(?||'reaction:'||n)::uuid,0,true,now(),'LIKE' FROM generate_series(1,10001) n",
+        group,
+        prefix,
+        prefix);
+    jdbc.update(
+        "INSERT INTO notification.source_state(recipient_id,kind,source_type,source_id,actor_id,latest_source_version,activity_decided_version,active,notification_id,updated_at) SELECT ?,'REACTION_ON_CONTENT','REACTION',md5(?||'reaction:'||n)::uuid,md5(?||n)::uuid,0,0,true,?,now() FROM generate_series(1,10001) n",
+        recipient.userId(),
+        prefix,
+        prefix,
+        group);
+    for (var a : List.of(subject, other))
+      jdbc.update(
+          "INSERT INTO notification.contribution(id,notification_id,source_event_id,actor_id,source_type,source_id,source_version,active,occurred_at,reaction_type) VALUES (?,?,?,?,'REACTION',?,0,true,now(),'LOVE')",
+          UUID.randomUUID(),
+          shared,
+          UUID.randomUUID(),
+          a.userId(),
+          UUID.randomUUID());
+    jdbc.update(
+        "UPDATE account.user_account SET status='DELETION_PENDING',deletion_requested_at=clock_timestamp()-interval '31 days',version=version+1 WHERE id=?",
+        subject.userId());
+    tx().executeWithoutResult(s -> internal.reconcile(subject.userId()));
+    int passes = 0;
+    long peak = 0;
+    while (!"RUNNABLE"
+        .equals(
+            store.step(subject.userId(), AccountErasure.Step.COMPLETION, false).view().status())) {
+      long graphBefore = store.step(subject.userId(), AccountErasure.Step.GRAPH, false).examined();
+      long notificationBefore =
+          store.step(subject.userId(), AccountErasure.Step.NOTIFICATION, false).examined();
+      allOwners(subject.userId(), false);
+      assertThat(
+              store.step(subject.userId(), AccountErasure.Step.GRAPH, false).examined()
+                  - graphBefore)
+          .isBetween(0L, 100L);
+      assertThat(
+              store.step(subject.userId(), AccountErasure.Step.NOTIFICATION, false).examined()
+                  - notificationBefore)
+          .isBetween(0L, 100L);
+      peak = Math.max(peak, Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory());
+      assertThat(++passes).isLessThan(1800);
+    }
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM graph.follow WHERE follower_id=? OR followed_id=?",
+                Integer.class,
+                subject.userId(),
+                subject.userId()))
+        .isZero();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM notification.notification WHERE id=?", Integer.class, group))
+        .isZero();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM notification.contribution WHERE actor_id=?",
+                Integer.class,
+                subject.userId()))
+        .isZero();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM notification.contribution WHERE notification_id=? AND actor_id=? AND active AND reaction_type='LOVE'",
+                Integer.class,
+                shared,
+                other.userId()))
+        .isEqualTo(1);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT read_version=2 AND activity_version=2 FROM notification.notification WHERE id=?",
+                Boolean.class,
+                shared))
+        .isTrue();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM notification.source_state WHERE notification_id=? OR (actor_id IN (SELECT md5(?||n)::uuid FROM generate_series(1,10001) n) AND active)",
+                Integer.class,
+                group,
+                prefix))
+        .isZero();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM content.reaction WHERE post_id=? AND type='LIKE' AND active",
+                Integer.class,
+                ownedPost))
+        .isEqualTo(10001);
+    System.out.println(
+        "P9AII_LARGE_GRAPH_NOTIFICATION passes="
+            + passes
+            + " maxCollectionItems=100 peakHeapBytes="
+            + peak
+            + " graphEdges=10001 targetActors=10001");
+  }
+
+  private String completionPass(UUID user) {
+    var state = store.step(user, AccountErasure.Step.COMPLETION, false);
+    return json.writeValueAsString(
+        new AccountErasure.Pass(
+            user, AccountErasure.Step.COMPLETION, state.view().version(), state.execution()));
+  }
+
+  private ExternalJobHandler.Lease completionLease(UUID user) {
+    var state = store.step(user, AccountErasure.Step.COMPLETION, false);
+    return new ExternalJobHandler.Lease(
+        1, 1, Instant.now().plusSeconds(60), state.execution().toString());
+  }
+
+  @Test
+  void realOwnersAndIndependentNonrecursiveCertificateFinalizeEvenNoDataSubjectExactlyOnce() {
+    var user = completionReady();
+    for (int n = 0; n < 20 && !"DELETED".equals(queries.find(user.userId()).status()); n++)
+      allOwners(user.userId(), true);
+    assertThat(queries.find(user.userId()).status()).isEqualTo("DELETED");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM account.erasure_step WHERE user_id=? AND status='DONE' AND proof_version=version",
+                Integer.class,
+                user.userId()))
+        .isEqualTo(12);
+    var export = store.export(store.request(user.userId()).id(), "COMPLETION");
+    assertThat(export.receipt()).isEqualTo(export.digest());
+    var certificate =
+        json.readValue(
+            export.record(), com.flyvo.socialcore.account.domain.ErasureCertificate.class);
+    assertThat(certificate.prerequisites())
+        .hasSize(11)
+        .noneMatch(p -> p.step().equals("completion-manifest"));
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT account.completion_proven(?,?)",
+                Boolean.class,
+                user.userId(),
+                export.digest()))
+        .isTrue();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM platform.outbox_event WHERE aggregate_id=? AND event_type='AccountDeletionCompleted'",
+                Integer.class,
+                user.userId()))
+        .isEqualTo(1);
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    "UPDATE account.user_account SET status='ACTIVE' WHERE id=?", user.userId()))
+        .isInstanceOf(org.springframework.dao.DataAccessException.class);
+    assertThatThrownBy(
+            () ->
+                tx().executeWithoutResult(
+                        s -> {
+                          queries.guard(user.userId(), false);
+                          erasure.invalidateModeration(List.of(user.userId()));
+                        }))
+        .isInstanceOf(Failure.class);
+  }
+
+  @Test
+  void changedPrerequisiteVectorRejectsOldCertificateAndSupersededFailureWithoutFinalSideEffects() {
+    var user = completionReady();
+    String payload = completionPass(user.userId());
+    var lease = completionLease(user.userId());
+    String prepared = tx().execute(s -> completion.prepare(payload, lease)),
+        receipt = completion.execute(prepared);
+    var original = json.readValue(prepared, ErasureCompletion.Prepared.class);
+    tx().executeWithoutResult(
+            s -> {
+              queries.guard(user.userId(), false);
+              erasure.invalidateModeration(List.of(user.userId()));
+            });
+    tx().executeWithoutResult(s -> completion.complete(payload, lease, prepared, receipt));
+    tx().executeWithoutResult(s -> completion.failed(payload, lease));
+    assertThat(queries.find(user.userId()).status()).isEqualTo("DELETION_PENDING");
+    assertThat(store.export(original.attempt()).receipt()).isNull();
+    for (int n = 0; n < 150 && !"DELETED".equals(queries.find(user.userId()).status()); n++)
+      allOwners(user.userId(), true);
+    assertThat(queries.find(user.userId()).status()).isEqualTo("DELETED");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM account.erasure_export WHERE intent_id=? AND operation='COMPLETION' AND receipt_digest=digest",
+                Integer.class,
+                store.request(user.userId()).id()))
+        .isEqualTo(1);
+    assertThat(store.export(original.attempt()).receipt()).isNull();
+  }
+
+  @Test
+  void failedFinalAuditRollsBackReceiptCheckpointAccountAndEventAndSameAttemptCanRetry() {
+    var user = completionReady();
+    String payload = completionPass(user.userId());
+    var lease = completionLease(user.userId());
+    String prepared = tx().execute(s -> completion.prepare(payload, lease)),
+        receipt = completion.execute(prepared);
+    var original = json.readValue(prepared, ErasureCompletion.Prepared.class);
+    DurableWorkStore auditTarget =
+        org.springframework.test.util.AopTestUtils.getUltimateTargetObject(jobs);
+    org.mockito.Mockito.doThrow(new IllegalStateException("SYNTHETIC_AUDIT_ROLLBACK"))
+        .when(auditTarget)
+        .audit(
+            org.mockito.ArgumentMatchers.isNull(),
+            org.mockito.ArgumentMatchers.eq("ACCOUNT_ERASURE_COMPLETED"),
+            org.mockito.ArgumentMatchers.eq("account"),
+            org.mockito.ArgumentMatchers.eq(user.userId()),
+            org.mockito.ArgumentMatchers.eq("SUCCESS"),
+            org.mockito.ArgumentMatchers.isNull());
+    assertThatThrownBy(
+            () ->
+                tx().executeWithoutResult(
+                        s -> completion.complete(payload, lease, prepared, receipt)))
+        .hasMessage("SYNTHETIC_AUDIT_ROLLBACK");
+    assertThat(queries.find(user.userId()).status()).isEqualTo("DELETION_PENDING");
+    assertThat(store.export(original.attempt()).receipt()).isNull();
+    assertThat(store.step(user.userId(), AccountErasure.Step.COMPLETION, false).view().status())
+        .isEqualTo("RUNNABLE");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM platform.outbox_event WHERE aggregate_id=? AND event_type='AccountDeletionCompleted'",
+                Integer.class,
+                user.userId()))
+        .isZero();
+    org.mockito.Mockito.doCallRealMethod()
+        .when(auditTarget)
+        .audit(
+            org.mockito.ArgumentMatchers.isNull(),
+            org.mockito.ArgumentMatchers.eq("ACCOUNT_ERASURE_COMPLETED"),
+            org.mockito.ArgumentMatchers.eq("account"),
+            org.mockito.ArgumentMatchers.eq(user.userId()),
+            org.mockito.ArgumentMatchers.eq("SUCCESS"),
+            org.mockito.ArgumentMatchers.isNull());
+    tx().executeWithoutResult(s -> completion.complete(payload, lease, prepared, receipt));
+    tx().executeWithoutResult(s -> completion.complete(payload, lease, prepared, receipt));
+    assertThat(queries.find(user.userId()).status()).isEqualTo("DELETED");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM platform.outbox_event WHERE aggregate_id=? AND event_type='AccountDeletionCompleted'",
+                Integer.class,
+                user.userId()))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void
+      malformedIndependentlyStoredCertificateCannotExploitMissingJsonBindingsOrUnknownResourceOwner() {
+    var user = completionReady();
+    String payload = completionPass(user.userId());
+    var lease = completionLease(user.userId());
+    String prepared = tx().execute(s -> completion.prepare(payload, lease));
+    var captured = json.readValue(prepared, ErasureCompletion.Prepared.class);
+    var value = (tools.jackson.databind.node.ObjectNode) json.readTree(captured.record());
+    value.remove("lineage");
+    String malformed = json.writeValueAsString(value), digest = ErasureProtocol.digest(malformed);
+    UUID id = UUID.randomUUID();
+    tx().executeWithoutResult(
+            s ->
+                store.addExport(
+                    id,
+                    store.request(user.userId()).id(),
+                    "COMPLETION",
+                    "account",
+                    null,
+                    null,
+                    malformed,
+                    digest));
+    var receipt =
+        archive.append(id, digest, malformed.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    archive.verify(receipt);
+    tx().executeWithoutResult(s -> store.receipt(id, receipt.digest()));
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT account.completion_proven(?,?)", Boolean.class, user.userId(), digest))
+        .isFalse();
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    "UPDATE account.erasure_step SET status='DONE',version=version+1,proof_version=version+1,proof=?,completed_at=clock_timestamp() WHERE user_id=? AND module='account' AND step='completion-manifest'",
+                    digest,
+                    user.userId()))
+        .isInstanceOf(org.springframework.dao.DataAccessException.class);
+    assertThatThrownBy(
+            () ->
+                tx().executeWithoutResult(
+                        s ->
+                            store.addExport(
+                                UUID.randomUUID(),
+                                store.request(user.userId()).id(),
+                                "RESOURCE",
+                                "moderation",
+                                "MEDIA_ASSET",
+                                List.of(UUID.randomUUID()),
+                                "{}",
+                                ErasureProtocol.digest("{}"))))
+        .isInstanceOf(org.springframework.dao.DataAccessException.class);
+    assertThat(queries.find(user.userId()).status()).isEqualTo("DELETION_PENDING");
+  }
+
+  @Test
+  void preservationDeadExportNeedsExplicitAuditedAdminResumeAndRejectsSupersededCallbacks()
+      throws Exception {
+    var subject = actor(false);
+    var reporter = actor(false);
+    var admin = actor(true);
+    UUID root = report(reporter, subject);
+    auth.close(subject, 0);
+    exports();
+    tx().executeWithoutResult(s -> internal.reconcile(subject.userId()));
+    ownerPass(subject.userId(), AccountErasure.Step.MODERATION, moderationErasure);
+    UUID id =
+        jdbc.queryForObject(
+            "SELECT id FROM moderation.preservation_export WHERE root_id=?", UUID.class, root);
+    UUID old =
+        jdbc.queryForObject(
+            "SELECT execution_id FROM moderation.preservation_export WHERE id=?", UUID.class, id);
+    String record =
+        jdbc.queryForObject(
+            "SELECT record FROM moderation.preservation_export WHERE id=?", String.class, id);
+    org.mockito.Mockito.doThrow(new Failure(503, "SYNTHETIC_ARCHIVE_OUTAGE"))
+        .when(archive)
+        .append(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.any());
+    for (int n = 0; n < 10; n++) {
+      jdbc.update(
+          "UPDATE platform.job SET available_at=clock_timestamp() WHERE kind='MODERATION_PRESERVE' AND dedup_key=?",
+          old.toString());
+      assertThat(jobs.consumeExternalJob(UUID.randomUUID(), List.of(preservation))).isFalse();
+    }
+    assertThat(scoped.executionStatus("MODERATION_PRESERVE", old)).isEqualTo("DEAD");
+    assertThatThrownBy(
+            () ->
+                cases.maintenance(
+                    reporter,
+                    com.flyvo.socialcore.moderation.api.CaseOperations.Maintenance.PRESERVATION,
+                    true))
+        .isInstanceOf(Failure.class)
+        .hasMessage("ACCESS_DENIED");
+    mvc.perform(
+            post("/api/v1/admin/moderation/maintenance/PRESERVATION")
+                .header("Authorization", "Bearer " + tokens.issue(admin))
+                .header("Origin", "https://social-core.invalid"))
+        .andExpect(status().isForbidden());
+    var progress =
+        cases.maintenance(
+            admin,
+            com.flyvo.socialcore.moderation.api.CaseOperations.Maintenance.PRESERVATION,
+            true);
+    assertThat(progress.preservationFailures()).isGreaterThanOrEqualTo(10);
+    UUID current =
+        jdbc.queryForObject(
+            "SELECT execution_id FROM moderation.preservation_export WHERE id=?", UUID.class, id);
+    assertThat(current).isNotEqualTo(old);
+    org.mockito.Mockito.doCallRealMethod()
+        .when(archive)
+        .append(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.any());
+    assertThat(jobs.consumeExternalJob(UUID.randomUUID(), List.of(preservation))).isTrue();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT receipt_digest=digest FROM moderation.preservation_export WHERE id=?",
+                Boolean.class,
+                id))
+        .isTrue();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT record FROM moderation.preservation_export WHERE id=?", String.class, id))
+        .isEqualTo(record);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT failures FROM moderation.preservation_export WHERE id=?", Long.class, id))
+        .isEqualTo(10);
+    var staleLease =
+        new ExternalJobHandler.Lease(1, 10, Instant.now().plusSeconds(60), old.toString());
+    assertThat(tx().<String>execute(s -> preservation.prepare(id.toString(), staleLease)))
+        .isEqualTo("STALE");
+    tx().executeWithoutResult(s -> preservation.failed(id.toString(), staleLease));
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT failures FROM moderation.preservation_export WHERE id=?", Long.class, id))
+        .isEqualTo(10);
+    assertThat(scoped.executionStatus("MODERATION_PRESERVE", old)).isEqualTo("DEAD");
+  }
+
+  private UUID report(ActorContext reporter, ActorContext subject) {
+    return reports
+        .submit(
+            reporter,
+            new com.flyvo.socialcore.moderation.api.Reports.Submit(
+                com.flyvo.socialcore.moderation.api.Reports.Target.USER,
+                subject.userId(),
+                com.flyvo.socialcore.moderation.api.Reports.Category.SPAM,
+                "Synthetic case evidence"),
+            UUID.randomUUID().toString())
+        .id();
+  }
+
+  @Test
+  void pendingSubjectCaseRemainsReviewableWithEncryptedResolutionAndCurrentProofInvalidation() {
+    var subject = actor(false);
+    var reporter = actor(false);
+    var admin = actor(true);
+    UUID id = report(reporter, subject);
+    auth.close(subject, 0);
+    exports();
+    tx().executeWithoutResult(s -> internal.reconcile(subject.userId()));
+    ownerPass(subject.userId(), AccountErasure.Step.MODERATION, moderationErasure);
+    preservationExports();
+    ownerPass(subject.userId(), AccountErasure.Step.MODERATION, moderationErasure);
+    assertThat(store.step(subject.userId(), AccountErasure.Step.MODERATION, false).view().status())
+        .isEqualTo("WAITING_CASE");
+    assertThat(reports.evidence(admin, null, id).detail()).isEqualTo("Synthetic case evidence");
+    long prior =
+        store.step(subject.userId(), AccountErasure.Step.MODERATION, false).view().version();
+    var result =
+        reports.resolve(
+            admin,
+            null,
+            0,
+            new com.flyvo.socialcore.moderation.api.Reports.Resolution(
+                id,
+                com.flyvo.socialcore.moderation.api.Reports.Action.DISMISS_REPORT,
+                "Synthetic legitimate dismissal",
+                null,
+                null));
+    assertThat(result.report().status()).isEqualTo("DISMISSED");
+    assertThat(store.step(subject.userId(), AccountErasure.Step.MODERATION, false).view().version())
+        .isGreaterThan(prior);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT ciphertext IS NOT NULL AND key_id IS NOT NULL AND redacted_at IS NULL FROM moderation.action_detail WHERE action_id=?",
+                Boolean.class,
+                result.actionId()))
+        .isTrue();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM moderation.action_detail WHERE legacy_payload::text LIKE '%Synthetic legitimate dismissal%'",
+                Integer.class))
+        .isZero();
+    assertThat(cases.action(admin, null, result.actionId()).reason())
+        .isEqualTo("Synthetic legitimate dismissal");
+    tx().executeWithoutResult(s -> internal.reconcile(subject.userId()));
+    ownerPass(subject.userId(), AccountErasure.Step.MODERATION, moderationErasure);
+    preservationExports();
+    ownerPass(subject.userId(), AccountErasure.Step.MODERATION, moderationErasure);
+    assertThat(store.step(subject.userId(), AccountErasure.Step.MODERATION, false).view().status())
+        .isEqualTo("WAITING_RETENTION");
+    assertThat(queries.find(subject.userId()).status()).isEqualTo("DELETION_PENDING");
+    assertThatThrownBy(() -> report(actor(false), subject)).isInstanceOf(Failure.class);
+  }
+
+  @Test
+  void preservationAppendFailureAndAuthorityChangeLeavePriorHoldEffective() {
+    var subject = actor(false);
+    var reporter = actor(false);
+    var admin = actor(true);
+    UUID id = report(reporter, subject);
+    var first =
+        cases.hold(
+            admin,
+            null,
+            com.flyvo.socialcore.moderation.api.CaseOperations.Root.REPORT,
+            id,
+            0,
+            new com.flyvo.socialcore.moderation.api.CaseOperations.Hold(
+                Instant.now().plusSeconds(7200), "SYNTHETIC_HOLD"));
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM moderation.preservation_export WHERE root_id=? AND operation='PRESERVE' AND receipt_digest=digest",
+                Integer.class,
+                id))
+        .isEqualTo(1);
+    org.mockito.Mockito.doThrow(new Failure(503, "SYNTHETIC_ARCHIVE_OUTAGE"))
+        .when(archive)
+        .append(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.any());
+    assertThatThrownBy(
+            () ->
+                cases.hold(
+                    admin,
+                    null,
+                    com.flyvo.socialcore.moderation.api.CaseOperations.Root.REPORT,
+                    id,
+                    first.version(),
+                    new com.flyvo.socialcore.moderation.api.CaseOperations.Hold(
+                        Instant.now().plusSeconds(10800), "SYNTHETIC_RENEWAL")))
+        .hasMessage("SYNTHETIC_ARCHIVE_OUTAGE");
+    assertThat(
+            jdbc.queryForObject(
+                    "SELECT hold_until FROM moderation.report WHERE id=?", OffsetDateTime.class, id)
+                .toInstant())
+        .isEqualTo(first.holdUntil());
+    org.mockito.Mockito.doAnswer(
+            call -> {
+              var receipt = call.callRealMethod();
+              jdbc.update(
+                  "UPDATE account.user_account SET platform_role='USER' WHERE id=?",
+                  admin.userId());
+              return receipt;
+            })
+        .when(archive)
+        .append(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.any());
+    assertThatThrownBy(
+            () ->
+                cases.hold(
+                    admin,
+                    null,
+                    com.flyvo.socialcore.moderation.api.CaseOperations.Root.REPORT,
+                    id,
+                    first.version(),
+                    new com.flyvo.socialcore.moderation.api.CaseOperations.Hold(
+                        Instant.now().plusSeconds(10800), "SYNTHETIC_RENEWAL")))
+        .isInstanceOf(Failure.class)
+        .hasMessage("ACCESS_DENIED");
+    assertThat(
+            jdbc.queryForObject(
+                    "SELECT hold_until FROM moderation.report WHERE id=?", OffsetDateTime.class, id)
+                .toInstant())
+        .isEqualTo(first.holdUntil());
+  }
+
+  @Test
+  void expiredModerationRootExportsOneWayRedactionAndConvergesWithoutDiscardingMetadata() {
+    var subject = actor(false);
+    var reporter = actor(false);
+    UUID id = UUID.randomUUID();
+    tx().executeWithoutResult(
+            s -> {
+              jdbc.update(
+                  "INSERT INTO moderation.report(id,reporter_id,target_type,target_id,source_author_id,category,status,resolved_at,created_at,updated_at) VALUES (?,?,'USER',?,?,'SPAM','DISMISSED',now()-interval '366 days',now()-interval '367 days',now()-interval '366 days')",
+                  id,
+                  reporter.userId(),
+                  subject.userId(),
+                  subject.userId());
+              jdbc.update(
+                  "INSERT INTO moderation.report_evidence(report_id,ciphertext,key_id) VALUES (?,?,?)",
+                  id,
+                  secrets.encrypt(
+                      "report:" + id,
+                      json.writeValueAsString(
+                          new com.flyvo.socialcore.moderation.application.ReportWorkflow.Captured(
+                              Instant.now().minusSeconds(367L * 86400),
+                              "Synthetic expired evidence",
+                              "Synthetic summary"))),
+                  secrets.keyId());
+            });
+    historical(subject);
+    exports();
+    tx().executeWithoutResult(s -> internal.reconcile(subject.userId()));
+    for (int n = 0;
+        n < 20
+            && !"DONE"
+                .equals(
+                    store
+                        .step(subject.userId(), AccountErasure.Step.MODERATION, false)
+                        .view()
+                        .status());
+        n++) {
+      ownerPass(subject.userId(), AccountErasure.Step.MODERATION, moderationErasure);
+      preservationExports();
+    }
+    assertThat(store.step(subject.userId(), AccountErasure.Step.MODERATION, false).view().status())
+        .isEqualTo("DONE");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT ciphertext IS NULL AND key_id IS NULL AND redacted_at IS NOT NULL FROM moderation.report_evidence WHERE report_id=?",
+                Boolean.class,
+                id))
+        .isTrue();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT retention_state FROM moderation.report WHERE id=?", String.class, id))
+        .isEqualTo("DONE");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM moderation.preservation_export WHERE root_id=? AND receipt_digest=digest AND record::jsonb->>'retentionState'='DONE'",
+                Integer.class,
+                id))
+        .isGreaterThan(0);
+  }
+
+  @Test
+  void repeatedCurrentMentionsShareTheHundredItemBudgetWithLastRecipientRepair() {
+    var subject = actor(false);
+    var other = actor(false);
+    UUID post = UUID.randomUUID();
+    tx().executeWithoutResult(
+            s -> {
+              jdbc.update(
+                  "INSERT INTO content.post(id,author_id,body,audience,status,revision_number,published_at,created_at,updated_at) VALUES (?,?,'Other synthetic body','CUSTOM','PUBLISHED',1,now(),now(),now())",
+                  post,
+                  other.userId());
+              jdbc.update(
+                  "INSERT INTO content.post_recipient(post_id,user_id) VALUES (?,?)",
+                  post,
+                  subject.userId());
+              // A historical skewed SQL fixture also exercises offsets outside current HTTP quotas.
+              jdbc.update(
+                  "INSERT INTO content.post_mention(post_id,mentioned_user_id,start_offset,end_offset) SELECT ?,?,n,n+1 FROM generate_series(1,10001) n",
+                  post,
+                  subject.userId());
+            });
+    auth.close(subject, 0);
+    exports();
+    tx().executeWithoutResult(s -> internal.reconcile(subject.userId()));
+    int passes = 0;
+    while (jdbc.queryForObject(
+            "SELECT count(*) FROM content.post_mention WHERE post_id=?", Integer.class, post)
+        > 0) {
+      int before =
+          jdbc.queryForObject(
+              "SELECT (SELECT count(*) FROM content.post_mention WHERE post_id=?)+(SELECT count(*) FROM content.post_recipient WHERE post_id=?)",
+              Integer.class,
+              post,
+              post);
+      long examined = store.step(subject.userId(), AccountErasure.Step.CONTENT, false).examined();
+      ownerPass(subject.userId(), AccountErasure.Step.CONTENT, contentErasure);
+      int after =
+          jdbc.queryForObject(
+              "SELECT (SELECT count(*) FROM content.post_mention WHERE post_id=?)+(SELECT count(*) FROM content.post_recipient WHERE post_id=?)",
+              Integer.class,
+              post,
+              post);
+      assertThat(before - after).isBetween(1, 100);
+      assertThat(
+              store.step(subject.userId(), AccountErasure.Step.CONTENT, false).examined()
+                  - examined)
+          .isEqualTo(before - after);
+      assertThat(
+              jdbc.queryForObject(
+                  "SELECT audience='ONLY_ME' AND body='Other synthetic body' FROM content.post WHERE id=?",
+                  Boolean.class,
+                  post))
+          .isTrue();
+      assertThat(++passes).isLessThan(103);
+    }
+    assertThat(passes).isEqualTo(101);
+  }
+
+  @Test
+  void contentErasureBoundsNestedCollectionsAndPreservesOtherAuthorsReplies() {
+    var subject = actor(false);
+    var other = actor(false);
+    UUID post = UUID.randomUUID(), reply = UUID.randomUUID();
+    jdbc.update(
+        "INSERT INTO content.post(id,author_id,body,link_url,audience,status,revision_number,published_at,created_at,updated_at) VALUES (?,?,'Synthetic body','https://example.invalid/synthetic','PUBLIC','PUBLISHED',10001,now(),now(),now())",
+        post,
+        subject.userId());
+    jdbc.update(
+        "INSERT INTO content.post_revision(post_id,revision_number,editor_id,body,audience_snapshot,media_ids_snapshot,mentions_snapshot,edited_at) SELECT ?,n,?,'Synthetic revision','{}','[]','[]',now() FROM generate_series(1,10001) n",
+        post,
+        subject.userId());
+    jdbc.update(
+        "INSERT INTO content.comment(id,post_id,author_id,body,status,created_at,updated_at) SELECT gen_random_uuid(),?,?,'Synthetic comment','VISIBLE',now(),now() FROM generate_series(1,10001)",
+        post,
+        subject.userId());
+    jdbc.update(
+        "INSERT INTO content.comment(id,post_id,author_id,reply_to_user_id,body,status,created_at,updated_at) VALUES (?,?,?,?,'Other synthetic reply','VISIBLE',now(),now())",
+        reply,
+        post,
+        other.userId(),
+        subject.userId());
+    jdbc.update(
+        "INSERT INTO content.reaction(id,actor_id,post_id,type,active,created_at,updated_at) VALUES (?,?,?,'LOVE',true,now(),now())",
+        UUID.randomUUID(),
+        subject.userId(),
+        post);
+    jdbc.update(
+        "UPDATE account.user_account SET status='DELETION_PENDING',deletion_requested_at=clock_timestamp()-interval '31 days',version=version+1 WHERE id=?",
+        subject.userId());
+    tx().executeWithoutResult(s -> internal.reconcile(subject.userId()));
+    exports();
+    tx().executeWithoutResult(s -> internal.reconcile(subject.userId()));
+    int passes = 0;
+    while (!"DONE"
+        .equals(store.step(subject.userId(), AccountErasure.Step.CONTENT, false).view().status())) {
+      long before = store.step(subject.userId(), AccountErasure.Step.CONTENT, false).examined();
+      ownerPass(subject.userId(), AccountErasure.Step.CONTENT, contentErasure);
+      long after = store.step(subject.userId(), AccountErasure.Step.CONTENT, false).examined();
+      assertThat(after - before).isBetween(0L, 100L);
+      assertThat(++passes).isLessThan(500);
+    }
+    assertThat(passes).isGreaterThan(300);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM content.post_revision WHERE post_id=?", Integer.class, post))
+        .isZero();
+    assertThat(jdbc.queryForObject("SELECT body FROM content.post WHERE id=?", String.class, post))
+        .isEmpty();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM content.comment WHERE author_id=? AND body<>''",
+                Integer.class,
+                subject.userId()))
+        .isZero();
+    assertThat(
+            jdbc.queryForObject("SELECT body FROM content.comment WHERE id=?", String.class, reply))
+        .isEqualTo("Other synthetic reply");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT reply_to_user_id FROM content.comment WHERE id=?", UUID.class, reply))
+        .isEqualTo(subject.userId());
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT erased_by_account AND NOT active AND type IS NULL FROM content.reaction WHERE actor_id=?",
+                Boolean.class,
+                subject.userId()))
+        .isTrue();
+    assertThatThrownBy(
+            () ->
+                jdbc.update(
+                    "UPDATE content.reaction SET type='LIKE',erased_by_account=false WHERE actor_id=?",
+                    subject.userId()))
+        .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+  }
+
+  @Test
+  void contentRetainsAuthoredBytesUntilThirtyDaysAndQueuedParentRetentionIsHarmless() {
+    var subject = actor(false);
+    var other = actor(false);
+    UUID post = UUID.randomUUID(), reply = UUID.randomUUID();
+    jdbc.update(
+        "INSERT INTO content.post(id,author_id,body,audience,status,revision_number,published_at,created_at,updated_at) VALUES (?,?,'Synthetic retained body','PUBLIC','PUBLISHED',1,now(),now(),now())",
+        post,
+        subject.userId());
+    jdbc.update(
+        "INSERT INTO content.comment(id,post_id,author_id,body,status,created_at,updated_at) VALUES (?,?,?,'Other retained reply','VISIBLE',now(),now())",
+        reply,
+        post,
+        other.userId());
+    auth.close(subject, 0);
+    exports();
+    tx().executeWithoutResult(s -> internal.reconcile(subject.userId()));
+    for (int i = 0; i < 6; i++)
+      ownerPass(subject.userId(), AccountErasure.Step.CONTENT, contentErasure);
+    assertThat(store.step(subject.userId(), AccountErasure.Step.CONTENT, false).view().status())
+        .isEqualTo("WAITING_RETENTION");
+    assertThat(jdbc.queryForObject("SELECT body FROM content.post WHERE id=?", String.class, post))
+        .isEqualTo("Synthetic retained body");
+    tx().executeWithoutResult(s -> postRetention.apply(post.toString()));
+    assertThat(
+            jdbc.queryForObject("SELECT body FROM content.comment WHERE id=?", String.class, reply))
+        .isEqualTo("Other retained reply");
+  }
+
+  @Test
+  void sourceOwnersRemoveSubjectParticipationAndReferencesWithoutWideningOthersContent() {
+    var subject = actor(false);
+    var owner = actor(false);
+    var third = actor(false);
+    UUID community = UUID.randomUUID(), archived = UUID.randomUUID();
+    UUID invitation = UUID.randomUUID(), request = UUID.randomUUID(), post = UUID.randomUUID();
+    tx().executeWithoutResult(
+            s -> {
+              jdbc.update(
+                  "INSERT INTO community.community(id,slug_normalized,name,description,visibility,join_mode,status,owner_user_id,created_at,updated_at) VALUES (?,'synthetic-a-source','Synthetic A','','PRIVATE','INVITE_ONLY','ACTIVE',?,now(),now())",
+                  community,
+                  owner.userId());
+              jdbc.update(
+                  "INSERT INTO community.membership(community_id,user_id,role,status,joined_at,updated_at) VALUES (?,?,'ADMIN','ACTIVE',now(),now()),(?,?,'MEMBER','ACTIVE',now(),now())",
+                  community,
+                  owner.userId(),
+                  community,
+                  subject.userId());
+              jdbc.update(
+                  "INSERT INTO community.community(id,slug_normalized,name,description,visibility,join_mode,status,owner_user_id,created_at,updated_at) VALUES (?,'synthetic-a-archived','Synthetic archived','','PRIVATE','INVITE_ONLY','ARCHIVED',?,now(),now())",
+                  archived,
+                  subject.userId());
+              jdbc.update(
+                  "INSERT INTO community.membership(community_id,user_id,role,status,joined_at,updated_at) VALUES (?,?,'ADMIN','ACTIVE',now(),now())",
+                  archived,
+                  subject.userId());
+              jdbc.update(
+                  "INSERT INTO community.invitation(id,community_id,invitee_id,inviter_id,status,expires_at,created_at,updated_at) VALUES (?,?,?,?,'PENDING',now()+interval '7 days',now(),now())",
+                  invitation,
+                  community,
+                  third.userId(),
+                  subject.userId());
+              jdbc.update(
+                  "INSERT INTO community.join_request(id,community_id,user_id,status,message,created_at,updated_at) VALUES (?,?,?,'PENDING','synthetic request',now(),now())",
+                  request,
+                  community,
+                  subject.userId());
+              jdbc.update(
+                  "INSERT INTO graph.follow(follower_id,followed_id,created_at) VALUES (?,?,now()),(?,?,now())",
+                  subject.userId(),
+                  owner.userId(),
+                  owner.userId(),
+                  subject.userId());
+              jdbc.update(
+                  "INSERT INTO graph.block(blocker_id,blocked_id,created_at) VALUES (?,?,now())",
+                  owner.userId(),
+                  subject.userId());
+              jdbc.update(
+                  "INSERT INTO graph.mute(muter_id,muted_id,created_at) VALUES (?,?,now())",
+                  subject.userId(),
+                  owner.userId());
+              jdbc.update(
+                  "INSERT INTO graph.friend_request(id,requester_id,addressee_id,status,created_at,expires_at) VALUES (?,?,?,'PENDING',now(),now()+interval '7 days')",
+                  UUID.randomUUID(),
+                  owner.userId(),
+                  subject.userId());
+              jdbc.update(
+                  "INSERT INTO content.post(id,author_id,body,audience,status,revision_number,published_at,created_at,updated_at) VALUES (?,?,'Other author synthetic text','CUSTOM','PUBLISHED',1,now(),now(),now())",
+                  post,
+                  owner.userId());
+              jdbc.update(
+                  "INSERT INTO content.post_recipient(post_id,user_id) VALUES (?,?)",
+                  post,
+                  subject.userId());
+              jdbc.update(
+                  "INSERT INTO content.post_mention(post_id,mentioned_user_id,start_offset,end_offset) VALUES (?,?,0,5)",
+                  post,
+                  subject.userId());
+              jdbc.update(
+                  "INSERT INTO content.post_revision(post_id,revision_number,editor_id,body,audience_snapshot,media_ids_snapshot,mentions_snapshot,edited_at) VALUES (?,1,?,'Other author synthetic history','{}','[]','[]',now())",
+                  post,
+                  owner.userId());
+            });
+    auth.close(subject, 0);
+    exports();
+    tx().executeWithoutResult(s -> internal.reconcile(subject.userId()));
+    for (int i = 0;
+        i < 8
+            && !"DONE"
+                .equals(
+                    store
+                        .step(subject.userId(), AccountErasure.Step.COMMUNITY, false)
+                        .view()
+                        .status());
+        i++) ownerPass(subject.userId(), AccountErasure.Step.COMMUNITY, communityErasure);
+    for (int i = 0;
+        i < 8
+            && !"DONE"
+                .equals(
+                    store.step(subject.userId(), AccountErasure.Step.GRAPH, false).view().status());
+        i++) ownerPass(subject.userId(), AccountErasure.Step.GRAPH, graphErasure);
+    ownerPass(subject.userId(), AccountErasure.Step.CONTENT, contentErasure);
+    assertThat(store.step(subject.userId(), AccountErasure.Step.COMMUNITY, false).view().status())
+        .isEqualTo("DONE");
+    assertThat(store.step(subject.userId(), AccountErasure.Step.GRAPH, false).view().status())
+        .isEqualTo("DONE");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT status FROM community.membership WHERE community_id=? AND user_id=?",
+                String.class,
+                community,
+                subject.userId()))
+        .isEqualTo("LEFT");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT status FROM community.membership WHERE community_id=? AND user_id=?",
+                String.class,
+                archived,
+                subject.userId()))
+        .isEqualTo("ACTIVE");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT status FROM community.invitation WHERE id=?", String.class, invitation))
+        .isEqualTo("REVOKED");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT message FROM community.join_request WHERE id=?", String.class, request))
+        .isNull();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM graph.follow WHERE follower_id=? OR followed_id=?",
+                Integer.class,
+                subject.userId(),
+                subject.userId()))
+        .isZero();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM graph.block WHERE blocker_id=? OR blocked_id=?",
+                Integer.class,
+                subject.userId(),
+                subject.userId()))
+        .isZero();
+    assertThat(
+            jdbc.queryForObject("SELECT audience FROM content.post WHERE id=?", String.class, post))
+        .isEqualTo("ONLY_ME");
+    assertThat(jdbc.queryForObject("SELECT body FROM content.post WHERE id=?", String.class, post))
+        .isEqualTo("Other author synthetic text");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT body FROM content.post_revision WHERE post_id=? AND revision_number=1",
+                String.class,
+                post))
+        .isEqualTo("Other author synthetic history");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM content.post_recipient WHERE post_id=?", Integer.class, post))
+        .isZero();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM content.post_mention WHERE post_id=?", Integer.class, post))
+        .isZero();
   }
 
   @Test

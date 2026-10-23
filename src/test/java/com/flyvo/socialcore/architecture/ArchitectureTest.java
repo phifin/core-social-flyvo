@@ -86,8 +86,16 @@ class ArchitectureTest {
             ROOT + ".account.application.Erasures",
             ROOT + ".account.application.ErasureExports",
             ROOT + ".account.application.ErasureTechnical",
+            ROOT + ".account.application.ErasureCompletion",
             ROOT + ".identity.application.IdentityErasure",
-            ROOT + ".profile.application.ProfileErasure");
+            ROOT + ".profile.application.ProfileErasure",
+            ROOT + ".community.application.CommunityErasure",
+            ROOT + ".graph.application.GraphErasure",
+            ROOT + ".content.application.ContentErasure",
+            ROOT + ".media.application.MediaErasure",
+            ROOT + ".notification.application.NotificationErasure",
+            ROOT + ".search.application.SearchErasure",
+            ROOT + ".moderation.application.ModerationErasure");
     PRODUCTION.stream()
         .flatMap(c -> c.getMethodCallsFromSelf().stream())
         .filter(

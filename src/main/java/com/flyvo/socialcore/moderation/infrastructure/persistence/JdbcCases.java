@@ -56,6 +56,15 @@ class JdbcCases implements CaseStore {
     return list.isEmpty() ? null : list.getFirst();
   }
 
+  public List<UUID> subjects(Root root) {
+    return jdbc.queryForList(
+        report(root)
+            ? "SELECT DISTINCT u FROM moderation.report r CROSS JOIN LATERAL unnest(ARRAY[r.reporter_id,r.source_author_id,r.parent_author_id,r.assigned_to]) u WHERE r.id=? AND u IS NOT NULL ORDER BY u"
+            : "SELECT DISTINCT u FROM moderation.action a CROSS JOIN LATERAL unnest(ARRAY[a.actor_id,CASE WHEN a.target_type IN ('MEMBER','ACCOUNT') THEN a.target_id ELSE NULL END]) u WHERE a.id=? AND u IS NOT NULL ORDER BY u",
+        UUID.class,
+        root.id());
+  }
+
   public List<CaseOperations.CaseView> queue(
       UUID community, CaseOperations.Filter filter, int size, int offset) {
     var args = new ArrayList<Object>();
@@ -332,6 +341,11 @@ class JdbcCases implements CaseStore {
             "SELECT count(*) FROM moderation.report WHERE retention_state='STARTED'", Long.class),
         jdbc.queryForObject(
             "SELECT count(*) FROM moderation.action_retention WHERE retention_state='STARTED'",
-            Long.class));
+            Long.class),
+        jdbc.queryForObject(
+            "SELECT count(*) FROM moderation.preservation_export WHERE receipt_digest IS NULL",
+            Long.class),
+        jdbc.queryForObject(
+            "SELECT COALESCE(sum(failures),0) FROM moderation.preservation_export", Long.class));
   }
 }

@@ -37,7 +37,18 @@ public class JdbcInbox implements InboxRepository {
         recipient);
   }
 
+  public boolean terminal(UUID recipient) {
+    return jdbc
+        .queryForList(
+            "SELECT terminal FROM notification.recipient_state WHERE recipient_id=?",
+            Boolean.class,
+            recipient)
+        .stream()
+        .anyMatch(Boolean.TRUE::equals);
+  }
+
   public boolean apply(Change c, Instant now) {
+    if (terminal(c.recipient())) return false;
     var keyArgs =
         new Object[] {c.recipient(), c.kind().name(), c.sourceType(), c.sourceId(), c.actor()};
     var previous =

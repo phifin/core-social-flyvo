@@ -44,10 +44,13 @@ public class PostRetention implements JobHandler {
     UUID id = UUID.fromString(payload);
     var first = store.find(id, false);
     if (first == null) return;
-    accounts.guard(first.author(), false);
+    var author = accounts.guard(first.author(), false);
     // Retention is owner-module maintenance, not a user membership command; no earlier scope
     // mutation is performed.
     var p = store.find(id, true);
+    // Closure can win before the content owner has marked this root. Ordinary parent
+    // retention must then leave other authors' descendants for the erasure branch.
+    if (!author.active() || store.erasureOrigin(id)) return;
     var cutoff = clock.instant().minusSeconds(30L * 86400);
     boolean more = store.pruneRevisions(id, cutoff);
     if (p.deleted() != null && !p.deleted().isAfter(cutoff)) {

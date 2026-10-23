@@ -32,6 +32,7 @@ public class ReportWorkflow implements Reports {
   private final Clock clock;
   private final ObjectMapper json;
   private final CaseStore cases;
+  private final ModerationSubjects subjects;
 
   public ReportWorkflow(
       ReportRepository store,
@@ -49,7 +50,8 @@ public class ReportWorkflow implements Reports {
       DurableWork work,
       Clock clock,
       ObjectMapper json,
-      CaseStore cases) {
+      CaseStore cases,
+      ModerationSubjects subjects) {
     this.store = store;
     this.actions = actions;
     this.accounts = accounts;
@@ -66,6 +68,7 @@ public class ReportWorkflow implements Reports {
     this.clock = clock;
     this.json = json;
     this.cases = cases;
+    this.subjects = subjects;
   }
 
   public record Captured(Instant capturedAt, String detail, String summary) {}
@@ -286,7 +289,7 @@ public class ReportWorkflow implements Reports {
             false);
     if (metadata == null || !Objects.equals(metadata.community(), community))
       throw new Failure(404, "NOT_FOUND");
-    guard(actor, metadata.author(), metadata.parentAuthor());
+    subjects.existing(actor, metadata.root());
     boolean sanction =
         Set.of(Action.SUSPEND_MEMBER, Action.BAN_MEMBER, Action.UNBAN_MEMBER)
             .contains(input.action());

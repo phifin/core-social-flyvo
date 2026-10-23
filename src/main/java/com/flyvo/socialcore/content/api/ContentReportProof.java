@@ -8,4 +8,7 @@ public interface ContentReportProof {
   record Proof(UUID communityId, UUID authorId, UUID parentAuthorId, String body, long version) {}
 
   Proof reportProof(ActorContext actor, UUID postId, UUID commentId);
+
+  /** Metadata only, for moderation's structural guards before creating a standalone root. */
+  java.util.List<UUID> structuralUsers(UUID postId);
 }

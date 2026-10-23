@@ -51,7 +51,7 @@ class ErasureMigrationIT {
     jdbc.update(
         "INSERT INTO account.user_account(id,status,deletion_requested_at,created_at,updated_at,version) VALUES (?,'DELETION_PENDING',now()-interval '2 hours',now()-interval '3 hours',now(),1)",
         pending);
-    for (int prefix = 33; prefix <= 37; prefix++) {
+    for (int prefix = 33; prefix <= 51; prefix++) {
       var candidate = migration(PG.getJdbcUrl(), prefix);
       assertThat(candidate.migrate().migrationsExecuted).isEqualTo(1);
       candidate.validate();
@@ -77,6 +77,94 @@ class ErasureMigrationIT {
         .isEqualTo("DELETION_PENDING");
     assertThat(jdbc.queryForObject("SELECT count(*) FROM account.erasure_request", Integer.class))
         .isZero();
+  }
+
+  @Test
+  void acceptedPackageIUpgradePreservesAllChecksumsAndLiveSourceValues() {
+    var admin =
+        new JdbcTemplate(
+            new org.springframework.jdbc.datasource.DriverManagerDataSource(
+                PG.getJdbcUrl(), PG.getUsername(), PG.getPassword()));
+    admin.execute("CREATE DATABASE p9a_ii_upgrade");
+    var url = PG.getJdbcUrl().replace("/p9a_migrations?", "/p9a_ii_upgrade?");
+    var prior = migration(url, 37);
+    assertThat(prior.migrate().migrationsExecuted).isEqualTo(37);
+    var sums =
+        Arrays.stream(prior.info().applied())
+            .map(org.flywaydb.core.api.MigrationInfo::getChecksum)
+            .toList();
+    var jdbc =
+        new JdbcTemplate(
+            new org.springframework.jdbc.datasource.DriverManagerDataSource(
+                url, PG.getUsername(), PG.getPassword()));
+    UUID user = UUID.randomUUID(), post = UUID.randomUUID(), reaction = UUID.randomUUID();
+    jdbc.update(
+        "INSERT INTO account.user_account(id,status,created_at,updated_at) VALUES (?,'ACTIVE',now(),now())",
+        user);
+    jdbc.update(
+        "INSERT INTO content.post(id,author_id,body,audience,status,revision_number,published_at,created_at,updated_at) VALUES (?,?,'Synthetic upgrade content','PUBLIC','PUBLISHED',1,now(),now(),now())",
+        post,
+        user);
+    jdbc.update(
+        "INSERT INTO content.reaction(id,actor_id,post_id,type,active,created_at,updated_at) VALUES (?,?,?,'LOVE',true,now(),now())",
+        reaction,
+        user,
+        post);
+    var candidate = migration(url, 51);
+    assertThat(candidate.migrate().migrationsExecuted).isEqualTo(14);
+    candidate.validate();
+    assertThat(
+            Arrays.stream(candidate.info().applied())
+                .limit(37)
+                .map(org.flywaydb.core.api.MigrationInfo::getChecksum)
+                .toList())
+        .isEqualTo(sums);
+    assertThat(jdbc.queryForObject("SELECT body FROM content.post WHERE id=?", String.class, post))
+        .isEqualTo("Synthetic upgrade content");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT type FROM content.reaction WHERE id=?", String.class, reaction))
+        .isEqualTo("LOVE");
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT erased_by_account FROM content.reaction WHERE id=?",
+                Boolean.class,
+                reaction))
+        .isFalse();
+  }
+
+  @Test
+  void failedPackageIIMigrationRollsBackEveryEarlierStatementThenRecoversForward() {
+    var admin =
+        new JdbcTemplate(
+            new org.springframework.jdbc.datasource.DriverManagerDataSource(
+                PG.getJdbcUrl(), PG.getUsername(), PG.getPassword()));
+    admin.execute("CREATE DATABASE p9a_ii_failure");
+    var url = PG.getJdbcUrl().replace("/p9a_migrations?", "/p9a_ii_failure?");
+    migration(url, 45).migrate();
+    var jdbc =
+        new JdbcTemplate(
+            new org.springframework.jdbc.datasource.DriverManagerDataSource(
+                url, PG.getUsername(), PG.getPassword()));
+    jdbc.execute("CREATE TABLE moderation.preservation_state(synthetic_blocker boolean)");
+    assertThatThrownBy(() -> migration(url, 46).migrate())
+        .isInstanceOf(org.flywaydb.core.api.FlywayException.class);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT max(version::int) FROM public.flyway_schema_history WHERE success",
+                Integer.class))
+        .isEqualTo(45);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT to_regclass('moderation.preservation_export') IS NULL", Boolean.class))
+        .isTrue();
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT to_regclass('moderation.report_erasure_source') IS NULL", Boolean.class))
+        .isTrue();
+    jdbc.execute("DROP TABLE moderation.preservation_state");
+    assertThat(migration(url, 51).migrate().migrationsExecuted).isEqualTo(6);
+    migration(url, 51).validate();
   }
 
   @Test

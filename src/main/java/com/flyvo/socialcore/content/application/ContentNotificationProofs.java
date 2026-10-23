@@ -38,6 +38,13 @@ public class ContentNotificationProofs implements ContentNotificationSources {
   }
 
   @Transactional(readOnly = true)
+  public List<UUID> ownedTargets(Type type, UUID owner, UUID after, int limit) {
+    if (type == null || type == Type.REACTION || owner == null || limit < 1 || limit > 100)
+      throw Failure.invalid();
+    return store.ownedTargets(type, owner, after, limit);
+  }
+
+  @Transactional(readOnly = true)
   public Set<UUID> eligible(UUID recipient, Type type, String kind, List<UUID> ids) {
     validate(type, ids);
     if (recipient == null) throw Failure.unauthorized();

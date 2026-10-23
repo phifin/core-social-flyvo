@@ -29,6 +29,9 @@ public interface ContentNotificationSources {
 
   List<Source> inspect(Type type, List<UUID> sourceIds);
 
+  /** Restricted owner-root IDs for bounded notification cleanup and moderation inventory. */
+  List<UUID> ownedTargets(Type type, UUID owner, UUID after, int limit);
+
   /** Current parent/actor policy plus the recipient's specific route, no text fallback. */
   Set<UUID> eligible(UUID recipient, Type type, String kind, List<UUID> sourceIds);
 }

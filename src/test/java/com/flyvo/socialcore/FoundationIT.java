@@ -28,7 +28,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @Testcontainers
 @org.springframework.test.context.ActiveProfiles("test")
 class FoundationIT {
-  private static final int LATEST_MIGRATIONS = 37;
+  private static final int LATEST_MIGRATIONS = 51;
 
   @Container
   static final PostgreSQLContainer POSTGRES =

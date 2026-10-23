@@ -46,10 +46,12 @@ public class SearchAccountRepair implements JobHandler {
   public void apply(String payload) {
     var p = json.readValue(payload, Pass.class);
     var batch = index.owned(p.owner(), p.after(), 100);
+    var captured = new ArrayList<SearchSources.Prepared>();
     for (var kind : Kind.values()) {
       var ids = batch.stream().filter(k -> k.kind() == kind).map(SearchIndex.Owned::id).toList();
-      if (!ids.isEmpty()) sources.refresh(kind, ids);
+      if (!ids.isEmpty()) captured.add(sources.guard(kind, ids));
     }
+    for (var prepared : captured) sources.materialize(prepared);
     if (batch.size() == 100) enqueue(new Pass(p.owner(), p.event(), batch.getLast()));
   }
 }

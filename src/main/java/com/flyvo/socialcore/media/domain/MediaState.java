@@ -21,7 +21,9 @@ public final class MediaState {
       Instant uploadExpires,
       Instant orphanExpires,
       Instant purgeAfter,
-      long version) {
+      long version,
+      UUID erasureRequest,
+      Instant erasurePurgedAt) {
     public boolean finalizable(UUID actor, Instant now) {
       return owner.equals(actor) && state.equals("UPLOAD_PENDING") && now.isBefore(uploadExpires);
     }

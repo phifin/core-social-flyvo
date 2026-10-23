@@ -120,3 +120,30 @@ before resuming. Correlate SSE active/pending/closed reasons with REST repair an
 search lag; >30s is an investigation signal on the recorded workload, not an SLA.
 Do not raise caps/pools/timeouts or remove holds to hide resource failures. Prior
 feed p95<500ms remains unmet, not newly promised capacity.
+
+
+## Phase9A-II pending-subject cases and recovery exports
+
+Existing pending-subject cases remain reviewable/resolvable with required encrypted
+action detail. Complete structural account guards precede moderation/completion
+proof invalidation, then community/case locks. No ordinary new root is admitted
+for a pending subject and no new private payload for DELETED. Source restoration
+still obeys its owner's AUTHOR_DELETED denial. Subject scans cover reporter, actor,
+assignee history, target, source and parent without decrypting arbitrary text.
+UNRESOLVED_CASE/HOLD/RETENTION waits retain legitimate private bytes and keys.
+
+With the isolated erasure policy enabled, hold/renewal/release is an outside-TX
+prepare/export/recheck protocol. A conservative PRESERVE intent is independently
+verified before current authority/version/root is checked again and control/history/
+audit plus COMMITTED intent commit. Failure leaves the prior hold intact. Calls
+from an ambient business transaction are rejected rather than doing network I/O
+under locks. Default-off deployments retain the existing transaction behavior.
+
+MODERATION_PRESERVATION exports bounded current controls/history, restarting its
+keyset when the root version changes; MODERATION_PRESERVE uses ordinary fenced
+external jobs. GET/POST maintenance/PRESERVATION is current ADMIN-only with existing
+CSRF/audit. POST resumes at most100 DEAD immutable export executions explicitly,
+retaining cumulative failures, and starts baseline scanning. It changes no hold
+or payload and never erases old jobs. Missing receipts stay pending. Exported
+metadata includes no reasons/body/ciphertext. One-way redaction controls are also
+exported; import/latest-cut verification and restore remain III.

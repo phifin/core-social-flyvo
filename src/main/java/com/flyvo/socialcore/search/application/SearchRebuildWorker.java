@@ -42,13 +42,16 @@ public class SearchRebuildWorker implements JobHandler {
   @Transactional(propagation = Propagation.MANDATORY)
   public void apply(String payload) {
     var p = json.readValue(payload, Pass.class);
-    var r = index.rebuild(p.id(), true);
+    var r = index.rebuild(p.id(), false);
     if (r == null || r.version() != p.version() || "DONE".equals(r.stage())) return;
     var ids =
         "EXPORT".equals(r.stage())
             ? sources.scan(r.kind(), r.after())
             : index.scan(r.kind(), r.after(), 100);
-    int changed = sources.refresh(r.kind(), ids);
+    var captured = sources.guard(r.kind(), ids);
+    var locked = index.rebuild(p.id(), true);
+    if (locked == null || !locked.equals(r)) return;
+    int changed = sources.materialize(captured);
     String next = ids.size() == 100 ? r.stage() : "EXPORT".equals(r.stage()) ? "RECONCILE" : "DONE";
     UUID after = r.stage().equals(next) ? ids.getLast() : null;
     index.checkpoint(r, next, after, ids.size(), changed, clock.instant());

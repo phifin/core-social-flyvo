@@ -1,10 +1,12 @@
-# Account erasure — implemented package 9A-I
+# Account erasure — local synthetic packages I–II
 
 Local synthetic I implementation accepted at `bbbde93`, G1 review `faf0ad8`.
-II is separately assigned, not yet implemented. Read [ADR-017 C01–C05](adr/017-account-erasure-and-recovery.md),
+The [II candidate](phases/phase-9a-ii.md) implements the assigned source/media/completion
+package and awaits main review. Read [ADR-017 C01–C05](adr/017-account-erasure-and-recovery.md),
 [inventory](work-packages/phase-9a-data-inventory.md), [package plan](work-packages/phase-9a-plan.md)
-and [operator guide](../ops/erasure.md). This is **not complete erasure**, a restore
-implementation, production policy or permission to process developer/real data.
+and [operator guide](../ops/erasure.md). This is no restore implementation,
+production policy or permission to process developer/real data. Unknown physical
+writers and legitimate retained moderation payload keep a subject pending.
 
 ## Activation and lifecycle
 
@@ -28,20 +30,26 @@ receipt/204 is protected by the immutable PREPARED record. An unmatched intent
 does not authorize deleting an ACTIVE account; future recovery must quarantine
 it. No public progress token, reactivation, forced close or ABORTED API exists.
 
-No package-I account can reach DELETED. Application completion checks refuse any
-missing/current-version/round proof and stale certificate; a database trigger
-also rejects a new DELETED transition. Later package-II approval must replace
-that negative guard with the complete tested finalization protocol, not disable
-it operationally.
+Package I cannot reach DELETED. II replaces its negative guard through new account
+migrations with strict current proof/receipt/certificate checks. Finalization takes
+the exclusive subject guard and fixed roster rows in order; compares the captured
+eleven-prerequisite vector; then atomically commits its verified receipt, completion
+DONE, terminal account status/epoch/version, audit and AccountDeletionCompleted v1.
+The certificate excludes its own step version/receipt and final event. A stale
+vector never certifies its successor; a new immutable attempt is required. No
+owner callbacks or archive/network calls occur in that final transaction.
 
 ## Fixed roster, progress and execution
 
 The twelve `(module,step)` identities in AccountErasure.Step are persisted, not
-inferred from discovered consumers. Eight later steps (community, graph, content,
-moderation, media, notification, search, completion-manifest) stay
-WAITING_DEPENDENCY / OWNER_NOT_IMPLEMENTED, without jobs. Implemented kinds are
+inferred from discovered consumers. II registers all twelve steps with real owner
+handlers; unknown protocol/owner still fails closed. Package-I-only deployments
+retain their explicit OWNER_NOT_IMPLEMENTED wait. Implemented kinds include
 ERASURE_EXPORT, ERASURE_RECONCILE, ERASURE_SCAN, ERASURE_TECHNICAL,
-IDENTITY_ERASURE and PROFILE_ERASURE. Owner handlers alone use account.api
+IDENTITY_ERASURE, PROFILE_ERASURE, COMMUNITY_ERASURE, GRAPH_ERASURE, CONTENT_ERASURE,
+MODERATION_ERASURE, MEDIA_ERASURE, NOTIFICATION_ERASURE, SEARCH_ERASURE and
+ERASURE_COMPLETE. Independent moderation exports use MODERATION_PRESERVE and the
+bounded MODERATION_PRESERVATION baseline scanner. Owner handlers alone use account.api
 begin/advance/resource acknowledgements; focused architecture tests restrict
 those callers. Account imports no higher owner and platform imports no business
 module or foreign SQL. Existing delivery receipts do not substitute for step proof.
@@ -68,8 +76,9 @@ Minute reconciliation keysets pending/deleted IDs in100-ID pages even if old
 events/deliveries disappeared. Historical pending state with authentic t0/version
 gets a conservative late PREPARED/COMMITTED baseline and complete roster. This is
 explicitly not retrospective backup safety. Invalid generation/time is a visible
-erasure_issue, not an invented t0. Historical DELETED without this protocol waits
-for packageII residual verification, never becomes ACTIVE or silently healthy.
+erasure_issue, not an invented t0. Historical DELETED without trustworthy request/
+generation provenance remains a visible issue for authoritative review; II never
+guesses a prior pending generation, relabels it ACTIVE or silently certifies it.
 
 ## Independent archive and manifests
 
@@ -108,7 +117,10 @@ keep the same immutable journal and existing worker fence.
 ErasureCertificate binds request/subject/generation, protocol/policy/roster,
 verification round, resource-manifest digest and exactly eleven current prerequisite
 proof/version/round entries. It has no own final-step receipt/version or DELETED
-event field (C02). Successful certificate export/finalization is not enabled in I.
+event field (C02). ERASURE_COMPLETE exports that canonical certificate outside
+locks and matches exact intent/request/generation/round/step execution on ack.
+Superseded success/failure has no successor effects. Missing JSON bindings, unknown
+resource owner/kind, incomplete roster or missing receipt also fail DB checks.
 
 ## Identity and technical drain
 
@@ -164,7 +176,7 @@ zero scoped secrets/sessions/mailbox mappings; a minimal pruning marker UUID sta
 Re-registration needs fresh mailbox/provider proof and creates a new UUID, with
 no old content/relationship/session recovery or email-based linking.
 
-## Profile and later owners
+## Profile and source owners
 
 Avatar IDs are externally receipted before the profile drops its last binding
 mapping; release uses the existing media API in the owner transaction. It does
@@ -184,10 +196,61 @@ Exact expiry
 permits a fresh claimant; synthetic scheduled cleanup removes at most100 expired
 reservations transactionally with system audit. No permanent handle redirect exists.
 
-C01 moderation case liveness is unchanged: no new moderation ban, trigger exemption,
-redaction or fake metadata-only action is introduced. Existing pending-subject
-review/resolution must remain possible under ADR-016; its inventory invalidation,
-retention/holds and owner completion are packageII. All social-source/media purge/
-projection/restore implementations remain gated. UUID tombstones, immutable audit/
-job metadata, expiring restricted backups and already delivered external copies
-are explicit retention exceptions, never anonymity/compliance claims.
+Community clears effective memberships/admissions/messages, retaining archived
+owner FKs and terminal attributable history. ACTIVE ownership is a visible blocker,
+never an automatic transfer/archive. Invitation acceptance guards inviter/invitee;
+a terminal inviter cannot issue an effective admission through an old invitation.
+Graph clears both directions and pending requests under canonical pair locks,
+retaining pair IDs/sequence. At most12 pairs/96 possible relation items are handled
+per pass. New inbound blocks to a terminal account are denied; ordinary removals
+and blocking a suspended account retain their existing behavior.
+
+Content first removes current subject references, narrowing the last CUSTOM
+recipient to ONLY_ME in the same post transaction. Other authors' text/revisions/
+reply UUIDs remain immutable. Owned posts/comments soft-delete and reaction choice
+becomes a one-way null tombstone. At t0+30d nested stages remove revisions,
+recipients, mentions, attachments/alt text, tags, body/link and owned comment text
+in at most100 collection items per pass. The documented one-post+100-recipient
+atomic audience exception remains bounded; fixed root/protocol rows are separate.
+An erasure origin/terminal author prevents queued ordinary PostRetention from
+redacting another author's descendants. Media IDs are receipted before their last
+content mapping is removed. Terminal post/comment/reaction shapes reject restoration.
+
+Media independently enumerates all owned states/generations, verifies asset-ID
+chunks, waits for source release, claims a stable generation fence and requires
+positive writer drain before purging every version/delete marker. Short prepare/
+ack transactions surround external drain/storage calls. Exact asset/request/round/
+step/execution fences protect once-only quota release and metadata stripping.
+No runtime drain adapter is installed; disabled storage or unknown writer completion
+keeps existing assets WAITING_EXTERNAL. Periodic sweeps/lease expiry are not proof.
+
+Notification projection takes complete sorted actor/recipient account guards before
+recipient rows and rechecks source eligibility; terminal principals create no new
+source/default state. Cleanup preserves V0032 ordering/decided-through watermarks,
+deletes contributions in100-item pages before deleting their group and preserves
+other eligible actors/read versions. Permanent recipient markers plus account
+denial survive30-day receipt and120-day inactive source-state pruning. Search
+takes owner guards before rebuild/document locks, re-reads snapshots and creates
+permanent blank USER/POST markers even in an empty index. Owner post enumeration
+does not depend on an old index row. Feed continues to authorize current sources.
+
+C01 existing pending-subject cases remain reviewable/resolvable with mandatory
+encrypted action detail. Complete structural account guards precede moderation/
+completion proof invalidation and community/case locks. Ordinary new roots for a
+pending subject and all new private payload for DELETED are denied. Structural
+report/action/history/target/source/parent scans never decrypt foreign free text.
+Unresolved cases, holds and terminal+365d retention produce explicit waits. Legitimate
+redaction still follows root→payload and preserves keys while ciphertext remains.
+
+Moderation's independent exporter records current control plus bounded structural
+history pages, including one-way redaction state. A hold/renewal/release persists
+PRESERVE intent, appends/verifies outside locks and repeats current authority/root/
+If-Match checks before committing control/history/audit and COMMITTED intent.
+Archive failure leaves the prior hold intact; an unmatched external intent remains
+conservative recovery evidence. Current ADMIN can explicitly resume at most100
+DEAD immutable exports through PRESERVATION maintenance; cumulative failures and
+old executions remain. No restore/import/latest-cut exposure gate is implemented.
+
+UUID tombstones, immutable audit/job/control metadata, expiring restricted backups
+and already delivered external copies remain declared retention exceptions, never
+anonymity/compliance or production-durability claims. III and U01–U06 remain gated.

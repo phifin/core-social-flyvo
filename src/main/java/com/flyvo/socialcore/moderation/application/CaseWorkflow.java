@@ -24,6 +24,9 @@ public class CaseWorkflow implements CaseOperations {
   private final ObjectMapper json;
   private final Clock clock;
   private final ModerationTelemetry telemetry;
+  private final org.springframework.beans.factory.ObjectProvider<ModerationPreservation>
+      preservation;
+  private final org.springframework.transaction.support.TransactionTemplate tx;
 
   public CaseWorkflow(
       CaseStore store,
@@ -35,7 +38,9 @@ public class CaseWorkflow implements CaseOperations {
       DurableWork work,
       ObjectMapper json,
       Clock clock,
-      ModerationTelemetry telemetry) {
+      ModerationTelemetry telemetry,
+      org.springframework.beans.factory.ObjectProvider<ModerationPreservation> preservation,
+      org.springframework.transaction.PlatformTransactionManager manager) {
     this.store = store;
     this.accounts = accounts;
     this.commands = commands;
@@ -46,6 +51,8 @@ public class CaseWorkflow implements CaseOperations {
     this.json = json;
     this.clock = clock;
     this.telemetry = telemetry;
+    this.preservation = preservation;
+    this.tx = new org.springframework.transaction.support.TransactionTemplate(manager);
   }
 
   private void guard(ActorContext actor, UUID target) {
@@ -148,7 +155,37 @@ public class CaseWorkflow implements CaseOperations {
         c.retentionState());
   }
 
+  @Transactional(propagation = org.springframework.transaction.annotation.Propagation.SUPPORTS)
   public Control hold(
+      ActorContext actor, UUID community, Root type, UUID id, long expected, Hold hold) {
+    if (hold == null) throw Failure.invalid();
+    var normalized =
+        new Hold(
+            hold.expiresAt() == null
+                ? null
+                : hold.expiresAt().truncatedTo(java.time.temporal.ChronoUnit.MICROS),
+            hold.reasonCode());
+    var exporter = preservation.getIfAvailable();
+    boolean active =
+        org.springframework.transaction.support.TransactionSynchronizationManager
+            .isActualTransactionActive();
+    if (exporter == null) {
+      if (active) return applyHold(actor, community, type, id, expected, normalized, null);
+      return tx.execute(s -> applyHold(actor, community, type, id, expected, normalized, null));
+    }
+    if (active) throw new IllegalStateException("PRESERVATION_REQUIRES_EXTERNAL_BOUNDARY");
+    var intent =
+        tx.execute(
+            s -> {
+              var c = validateHold(actor, community, type, id, expected, normalized);
+              return exporter.intent(
+                  c, actor.userId(), normalized.expiresAt(), "PRESERVE", List.of());
+            });
+    exporter.exportNow(intent);
+    return tx.execute(s -> applyHold(actor, community, type, id, expected, normalized, intent));
+  }
+
+  private CaseStore.Control validateHold(
       ActorContext actor, UUID community, Root type, UUID id, long expected, Hold hold) {
     guard(actor, null);
     scope(actor, community, false);
@@ -168,6 +205,23 @@ public class CaseWorkflow implements CaseOperations {
         || hold.expiresAt().isAfter(c.now().plus(Duration.ofDays(365)))
         || hold.reasonCode() == null
         || !hold.reasonCode().matches("[A-Z_]{1,64}")) throw Failure.invalid();
+    return c;
+  }
+
+  private Control applyHold(
+      ActorContext actor,
+      UUID community,
+      Root type,
+      UUID id,
+      long expected,
+      Hold hold,
+      UUID intent) {
+    var c = validateHold(actor, community, type, id, expected, hold);
+    var exporter = preservation.getIfAvailable();
+    if (exporter != null) {
+      if (intent == null) throw new Failure(503, "PRESERVATION_INTENT_REQUIRED");
+      exporter.require(intent, c, actor.userId(), hold.expiresAt());
+    }
     store.hold(c.root(), expected, hold.expiresAt(), hold.reasonCode());
     if (type == Root.REPORT)
       store.history(
@@ -180,7 +234,10 @@ public class CaseWorkflow implements CaseOperations {
         community,
         "SUCCESS",
         hold.expiresAt() == null ? c.holdReason() : hold.reasonCode());
-    return view(store.control(c.root(), false));
+    var next = store.control(c.root(), false);
+    if (exporter != null)
+      exporter.intent(next, actor.userId(), hold.expiresAt(), "COMMITTED", List.of());
+    return view(next);
   }
 
   public History history(ActorContext actor, UUID community, UUID report, int size, int offset) {
@@ -307,9 +364,15 @@ public class CaseWorkflow implements CaseOperations {
     guard(actor, null);
     scope(actor, null, false);
     if (operation == null) throw Failure.invalid();
-    if (resume)
+    if (resume) {
+      if (operation == Maintenance.PRESERVATION) {
+        var exporter = preservation.getIfAvailable();
+        if (exporter == null) throw new Failure(503, "ERASURE_SYNTHETIC_POLICY_DISABLED");
+        exporter.resumePending();
+      }
       work.job(
           "MODERATION_" + operation.name(), "operator:" + UUID.randomUUID(), "{}", clock.instant());
+    }
     var progress = store.progress();
     audit(
         actor,

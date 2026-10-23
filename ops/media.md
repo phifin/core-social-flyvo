@@ -144,3 +144,26 @@ separate runtime roles, strict ingress/volume/overwrite controls, processor sand
 egress, dependency/image security review, DB/storage/key restore and erasure replay,
 alert export/retention/legal decisions and shared limits for multiple public instances.
 Local checks do not prove those external gates passed.
+
+
+## Phase9A-II strict physical erasure
+
+The owner scans all asset states in100-ID pages and verifies independent resource
+chunks before physical work. Profile/content release must finish first. An asset
+claim stores request/generation and once-only accounting due amounts. Processor
+prepare/complete/failure now guard terminal owners before quota/asset rows; old
+external writes can finish but cannot READY/charge after close.
+
+MEDIA_ERASURE requires a positive external MediaWriterDrain attestation for every
+accepted ingress and variant writer. No runtime implementation is configured.
+WRITER_DRAIN_UNPROVEN/disabled storage stays pending even for old DELETED rows.
+Elapsed leases, persisted settling and periodic sweeping remain useful ordinary
+cleanup but cannot certify account erasure. Only explicitly closed/joined synthetic
+writers provide positive test evidence.
+
+Outside SQL locks, purge lists/deletes at most50 versions/markers per prefix page
+and repeats until empty. Ack rechecks exact job/step/request/round/asset generation;
+then removes variants/old metadata and releases quota exactly once. A crash before
+ack repeats absence verification. The immutable minimal purge digest/time remains;
+periodic tombstone rechecks never charge/release again. Production drain/ingress/
+IAM/latest-cut and restore remain unapproved gates.

@@ -27,6 +27,8 @@ public interface ContentSearchSources {
 
   List<UUID> scan(UUID after, int limit);
 
+  List<UUID> scanByAuthor(UUID author, UUID after, int limit);
+
   List<Source> inspect(List<UUID> ids);
 
   void authorize(ActorContext actor, UUID communityId);

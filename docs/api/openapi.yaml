@@ -2668,7 +2668,7 @@ paths:
         default: {$ref: '#/components/responses/Problem'}
   /api/v1/admin/moderation/maintenance/{operation}:
     parameters:
-      - {name: operation, in: path, required: true, schema: {type: string, enum: [ENCRYPT, RETENTION]}}
+      - {name: operation, in: path, required: true, schema: {type: string, enum: [ENCRYPT, RETENTION, PRESERVATION]}}
     get:
       operationId: getModerationMaintenance
       summary: Audited current ADMIN-only restricted progress, no private exports
@@ -3283,7 +3283,7 @@ components:
       properties:
         expiresAt: {type: [string, 'null'], format: date-time}
         reasonCode: {type: [string, 'null'], pattern: '^[A-Z_]{1,64}$'}
-      description: Explicit engineering hold, not a legal product. Expiry must be after DB now and at most365 days ahead. Both null release. Current scoped staff/global ADMIN and root If-Match required; renewal is explicit. STARTED/DONE rejects new/renewed holds, no resurrection. Archived scope may retain evidence under current staff read authority. Linked actions use case root, never independent action hold.
+      description: Explicit engineering hold, not a legal product. Expiry must be after DB now and at most365 days ahead. Both null release. Current scoped staff/global ADMIN and root If-Match required; renewal is explicit. Under the isolated erasure policy a verified independent PRESERVE intent precedes the control commit; authority, scope and root version are checked again after external append. Archive failure returns503 and preserves the prior hold. STARTED/DONE rejects new/renewed holds, no resurrection. Archived scope may retain evidence under current staff read authority. Linked actions use case root, never independent action hold.
     ModerationControl:
       type: object
       required: [type, id, version, holdUntil, holdReason, retentionState]
@@ -3366,12 +3366,14 @@ components:
         version: {type: integer, minimum: 0}
     ModerationProgress:
       type: object
-      required: [legacyPayloads, pendingCaseRoots, pendingActionRoots]
+      required: [legacyPayloads, pendingCaseRoots, pendingActionRoots, pendingPreservationExports, preservationFailures]
       properties:
         legacyPayloads: {type: integer, minimum: 0}
         pendingCaseRoots: {type: integer, minimum: 0}
         pendingActionRoots: {type: integer, minimum: 0}
-      description: Restricted operational counts, not user discovery totals. Pending roots mean partial STARTED work. Resume enqueues a new bounded durable pass, never weakens a guard or deletes DEAD history.
+        pendingPreservationExports: {type: integer, minimum: 0}
+        preservationFailures: {type: integer, minimum: 0}
+      description: Restricted operational counts, not user discovery totals. Pending roots mean partial STARTED work. Preservation failures are cumulative attempts, including explicitly resumed executions. PRESERVATION resume is synthetic-policy gated, inspects at most100 immutable pending intents, gives only DEAD executions a new budget and starts a bounded baseline scan. It never changes a hold, waives a receipt or deletes failure history.
     ReportAction:
       type: object
       additionalProperties: false

@@ -1,5 +1,6 @@
 package com.flyvo.socialcore.media.application;
 
+import com.flyvo.socialcore.account.api.AccountQueries;
 import com.flyvo.socialcore.media.application.port.*;
 import com.flyvo.socialcore.media.domain.MediaState.*;
 import com.flyvo.socialcore.platform.api.*;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class ImageWork implements ExternalJobHandler {
   private final MediaRepository store;
+  private final AccountQueries accounts;
   private final ObjectProvider<ObjectStorage> objects;
   private final ImageProcessor processor;
   private final Clock clock;
@@ -21,6 +23,7 @@ public class ImageWork implements ExternalJobHandler {
 
   public ImageWork(
       MediaRepository store,
+      AccountQueries accounts,
       ObjectProvider<ObjectStorage> objects,
       ImageProcessor processor,
       Clock clock,
@@ -28,6 +31,7 @@ public class ImageWork implements ExternalJobHandler {
       tools.jackson.databind.ObjectMapper json,
       MediaLimits limits) {
     this.store = store;
+    this.accounts = accounts;
     this.objects = objects;
     this.processor = processor;
     this.clock = clock;
@@ -44,9 +48,11 @@ public class ImageWork implements ExternalJobHandler {
     UUID id = UUID.fromString(payload);
     var first = store.asset(id, false);
     if (first == null) return "";
+    if (terminal(first.owner())) return "";
     store.quota(first.owner(), clock.instant());
     var a = store.asset(id, true);
-    if (!List.of("UPLOADED", "PROCESSING").contains(a.state())) return "";
+    if (a.erasureRequest() != null || !List.of("UPLOADED", "PROCESSING").contains(a.state()))
+      return "";
     store.processing(id, lease.generation(), clock.instant());
     // Every generation has a durable orphan check, including crash before READY.
     work.job(
@@ -58,6 +64,10 @@ public class ImageWork implements ExternalJobHandler {
   }
 
   public record Result(List<Variant> variants, String rejection) {}
+
+  private boolean terminal(UUID owner) {
+    return List.of("DELETION_PENDING", "DELETED").contains(accounts.guard(owner, false).status());
+  }
 
   public String execute(String prepared) {
     if (prepared.isEmpty()) return "";
@@ -109,9 +119,12 @@ public class ImageWork implements ExternalJobHandler {
   public void complete(String payload, Lease lease, String prepared, String result) {
     if (prepared.isEmpty()) return;
     var snapshot = json.readValue(prepared, Asset.class);
+    if (terminal(snapshot.owner())) return;
     var q = store.quota(snapshot.owner(), clock.instant());
     var a = store.asset(snapshot.id(), true);
-    if (!a.state().equals("PROCESSING") || a.generation() != lease.generation()) return;
+    if (a.erasureRequest() != null
+        || !a.state().equals("PROCESSING")
+        || a.generation() != lease.generation()) return;
     var r = json.readValue(result, Result.class);
     long retained = r.variants().stream().mapToLong(Variant::bytes).sum();
     String rejection = r.rejection();
@@ -157,6 +170,7 @@ public class ImageWork implements ExternalJobHandler {
     UUID id = UUID.fromString(payload);
     var first = store.asset(id, false);
     if (first == null) return;
+    if (terminal(first.owner())) return;
     store.quota(first.owner(), clock.instant());
     var a = store.asset(id, true);
     if (a.state().equals("PROCESSING") && a.generation() == lease.generation()) {

@@ -51,6 +51,8 @@ public interface InboxRepository {
 
   void guard(UUID recipient, Instant now);
 
+  boolean terminal(UUID recipient);
+
   boolean apply(Change change, Instant now);
 
   List<Group> scan(UUID recipient, int limit, Instant cutoff, Key after, boolean unread);

@@ -47,7 +47,9 @@ public class JdbcMediaRepository implements MediaRepository {
                     instant(r, "upload_expires_at"),
                     instant(r, "orphan_expires_at"),
                     instant(r, "purge_after"),
-                    r.getLong("version")),
+                    r.getLong("version"),
+                    r.getObject("erasure_request_id", UUID.class),
+                    instant(r, "erasure_purged_at")),
             id);
     return rows.isEmpty() ? null : rows.getFirst();
   }

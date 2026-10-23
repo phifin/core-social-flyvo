@@ -14,15 +14,15 @@ public interface AccountErasure {
     RECOVERY_INTENT("account", "recovery-intent", "ERASURE_EXPORT"),
     IDENTITY("identity", "credentials", "IDENTITY_ERASURE"),
     PROFILE("profile", "social", "PROFILE_ERASURE"),
-    COMMUNITY("community", "participation", null),
-    GRAPH("graph", "relations", null),
-    CONTENT("content", "authored-and-references", null),
-    MODERATION("moderation", "private-payloads", null),
+    COMMUNITY("community", "participation", "COMMUNITY_ERASURE"),
+    GRAPH("graph", "relations", "GRAPH_ERASURE"),
+    CONTENT("content", "authored-and-references", "CONTENT_ERASURE"),
+    MODERATION("moderation", "private-payloads", "MODERATION_ERASURE"),
     TECHNICAL("account", "technical", "ERASURE_TECHNICAL"),
-    MEDIA("media", "objects", null),
-    NOTIFICATION("notification", "derived", null),
-    SEARCH("search", "derived", null),
-    COMPLETION("account", "completion-manifest", null);
+    MEDIA("media", "objects", "MEDIA_ERASURE"),
+    NOTIFICATION("notification", "derived", "NOTIFICATION_ERASURE"),
+    SEARCH("search", "derived", "SEARCH_ERASURE"),
+    COMPLETION("account", "completion-manifest", "ERASURE_COMPLETE");
 
     private final String owner;
     private final String name;
@@ -80,6 +80,9 @@ public interface AccountErasure {
   /** All begin/advance/resource calls join the worker's fenced DB transaction. */
   Context begin(UUID user, Step step, long expectedVersion);
 
+  /** Nonlocking stage observation for pre-reading the complete owner account guard set. */
+  String checkpoint(Pass pass);
+
   void advance(
       Context context,
       String checkpoint,
@@ -99,6 +102,9 @@ public interface AccountErasure {
 
   Instant databaseTime();
 
+  /** Existing-case private append; caller holds all sorted subject account guards first. */
+  void invalidateModeration(List<UUID> subjects);
+
   void executionFailed(Pass pass, int attempts);
 
   List<UUID> scanSubjects(UUID after, int limit);
@@ -112,6 +118,8 @@ public interface AccountErasure {
 
   Progress resume(ActorContext actor, UUID user, long expectedVersion, Step step);
 
-  /** Negative guard in I; a successful finalization is deliberately unavailable. */
+  /**
+   * Validate an eleven-proof vector; finalization additionally needs the fenced archive receipt.
+   */
   void requireCompletion(UUID user, String prerequisiteVectorDigest);
 }

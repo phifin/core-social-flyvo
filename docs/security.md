@@ -25,8 +25,15 @@ Anonymous callback/onboarding/mailbox issuance and expiry now use PostgreSQL
 and post-write rollback checks. A cached pre-lock time or delayed exchange cannot
 renew an expired proof. Recovery export outcomes bind to the exact request/
 generation/round/current execution, never merely the same user. See
-[protocol](account-erasure.md) and [operations](../ops/erasure.md). Full erasure,
-pending moderation case protocol/final proofs, restore and public policy remain gated.
+[protocol](account-erasure.md) and [operations](../ops/erasure.md). The II candidate
+adds sorted account guards before projection materialization, terminal source
+fences and C01 existing-case append invalidation before case locks. No new ordinary
+private root may refer structurally to a terminal subject; existing pending cases
+retain mandatory encrypted resolution detail and all ADR-016 protection. Final
+DELETED requires a verified nonrecursive certificate of eleven current owner
+proofs and every resource receipt, compared under an exclusive account guard.
+Media without positive writer drain remains pending. Restore, real-data activation
+and production/public policy remain gated.
 
 Registration is two-step to prevent unverified-account pre-hijacking. `POST /auth/registrations` takes email, returns a generic 202, and sends a short-lived email verification link bound to a browser transaction. It does **not** preinstall a password or create an active account. Completion takes the verification secret plus a newly chosen password from the mailbox owner and creates account, verified login email, local credential and initial profile atomically. Links expire in 30 minutes; incomplete intents expire without reserving the email. Verification must not make an attacker-supplied password usable just because the victim clicked a link. An existing email receives recovery/sign-in guidance with the same outward 202 behavior; never silently overwrite it.
 

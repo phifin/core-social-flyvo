@@ -79,6 +79,13 @@ public class CommunityAccess {
     if (account == null || !account.active()) throw new Failure(409, "ACCOUNT_INACTIVE");
   }
 
+  public void nonterminalAccount(UUID id) {
+    var account = accounts.find(id);
+    if (account == null
+        || java.util.Set.of("DELETION_PENDING", "DELETED").contains(account.status()))
+      throw new Failure(409, "ACCOUNT_INACTIVE");
+  }
+
   @Transactional(propagation = Propagation.MANDATORY)
   public Community guard(UUID id, boolean exclusive) {
     var c = store.community(id, true, exclusive);

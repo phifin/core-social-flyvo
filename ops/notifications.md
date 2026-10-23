@@ -94,3 +94,16 @@ contributions), never a partial unread badge. Inspect the recipient workload und
 restricted operational access and define a reviewed capacity change. Do not bypass
 source filtering or mark all future activity read to clear it. These are engineering
 retention defaults, not a legal erasure or production readiness statement.
+
+
+## Phase9A-II terminal projection fences
+
+Projection takes complete sorted actor/recipient account guards before recipient
+rows, then refreshes current source eligibility. Pending/deleted principals cannot
+create source, contribution or preference state; suspended-actor denial still
+advances V0032 activity decisions. The owner removes inbox/preferences, actor
+contributions and owned POST/COMMENT target residues in100-item stages. Source
+ordering/decided-through watermarks remain inactive, and unrelated actors/read
+versions are preserved. Children detach/delete before a group is removed, so a
+large reaction group cannot cause an unbounded cascade. Permanent recipient/account
+fences survive receipt and inactive-source pruning; never clear them for replay.

@@ -48,6 +48,8 @@ public interface SearchIndex {
 
   boolean upsert(Document document);
 
+  void erase(UUID owner, Kind kind, UUID id);
+
   /**
    * Bounded count/checksum comparison; accepts genuinely newer stored vectors, not mixed stale
    * state.

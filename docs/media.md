@@ -7,7 +7,15 @@ Images are in the first usable content phase. Use an S3-compatible object store,
 Phase9A-I's narrow profile erasure first obtains an independent receipt for its
 avatar asset ID, then calls the existing release API transactionally before dropping
 profile/avatar mapping. This is source-binding release only, not full media erasure,
-all-version absence or restore proof; the media roster step stays waiting for II.
+all-version absence or restore proof. The II owner scans all states in100-ID
+pages, independently exports their IDs, waits for source release and fences old
+processing/finalize commits. Old-generation variant metadata drains in at most100 rows per pass after its asset is claimed; a root-locked insert fence rejects new variants after that claim. A positive writer-drain provider must attest all
+accepted ingress/variant writers ended before all-version/marker purge can certify
+absence and release quota once. No runtime drain provider is installed: elapsed
+lease/settling or periodic purge is insufficient and existing assets remain
+WAITING_EXTERNAL. Only the sealed, joined synthetic test harness supplies positive
+local drain evidence. Purged tombstones clear MIME/checksum/dimensions/version
+metadata irreversibly and retain minimal request/generation/drain-digest/time.
 
 Phase 4 implements this sequence, including source-authorized post/avatar access,
 real Silo processing and durable recovery. [Phase evidence](phases/phase-4.md),

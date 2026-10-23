@@ -112,7 +112,9 @@ public class Images implements MediaCommands, MediaQueries {
                       now.plusSeconds(900),
                       now.plusSeconds(86400),
                       null,
-                      0);
+                      0,
+                      null,
+                      null);
               store.create(asset, now);
               store.charge(actor.userId(), request.bytes(), 0);
               store.issued(actor.userId(), now, reset);
@@ -229,6 +231,7 @@ public class Images implements MediaCommands, MediaQueries {
           || b == null
           || !b.purpose().equals(purpose)
           || !b.context().equals(context)) throw new Failure(409, "MEDIA_BINDING_MISMATCH");
+      if (b.released() != null) continue;
       store.release(id, clock.instant(), purgeAfter);
       cleanup(a, purgeAfter, "release-" + a.version());
     }

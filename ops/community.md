@@ -42,3 +42,15 @@ Separate migration/runtime roles and restrict moderation reasons/snapshots.
 All Phase 1 SMTP/provider/key/TLS/rate-limit and Phase 9A launch gates remain.
 Full membership/admission/action retention and erasure requires the approved
 launch-hardening workflow; this phase retains attributable history.
+
+
+## Phase9A-II terminal participation
+
+COMMUNITY_ERASURE uses subject/counterpart account guards before its step and sorted
+community rows, at most100 participation items/pass. It revokes both inviter and
+invitee pending invitations, clears subject request messages and effective
+memberships, and preserves archived-owner membership/FKs/terminal history.
+Invitation acceptance now guards both participants and denies a terminal inviter.
+An unexpected ACTIVE owner stays WAITING_DEPENDENCY/ACTIVE_OWNERSHIP; only an
+independently authorized ownership action can resolve it. Never auto-transfer,
+archive or weaken owner constraints to finish erasure.

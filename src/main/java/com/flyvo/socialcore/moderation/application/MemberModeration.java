@@ -18,18 +18,21 @@ public class MemberModeration {
   private final DurableWork work;
   private final Clock clock;
   private final tools.jackson.databind.ObjectMapper json;
+  private final ModerationSubjects subjects;
 
   public MemberModeration(
       MembershipCommands members,
       ModerationActions actions,
       DurableWork work,
       Clock clock,
-      tools.jackson.databind.ObjectMapper json) {
+      tools.jackson.databind.ObjectMapper json,
+      ModerationSubjects subjects) {
     this.members = members;
     this.actions = actions;
     this.work = work;
     this.clock = clock;
     this.json = json;
+    this.subjects = subjects;
   }
 
   public record Result(UUID id, MembershipQueries.Facts membership) {}
@@ -48,6 +51,7 @@ public class MemberModeration {
         || reason == null
         || reason.isBlank()
         || reason.length() > 2000) throw Failure.invalid();
+    subjects.member(actor, target);
     var transition = members.sanction(actor, community, target, version, action, until);
     var id = UUID.randomUUID();
     String request = MDC.get("requestId");

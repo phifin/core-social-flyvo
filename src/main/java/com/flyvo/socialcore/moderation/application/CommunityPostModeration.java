@@ -16,18 +16,21 @@ public class CommunityPostModeration {
   private final DurableWork work;
   private final Clock clock;
   private final tools.jackson.databind.ObjectMapper json;
+  private final ModerationSubjects subjects;
 
   public CommunityPostModeration(
       PostModeration posts,
       ModerationActions actions,
       DurableWork work,
       Clock clock,
-      tools.jackson.databind.ObjectMapper json) {
+      tools.jackson.databind.ObjectMapper json,
+      ModerationSubjects subjects) {
     this.posts = posts;
     this.actions = actions;
     this.work = work;
     this.clock = clock;
     this.json = json;
+    this.subjects = subjects;
   }
 
   public record Result(UUID actionId, long version, String status) {}
@@ -42,6 +45,7 @@ public class CommunityPostModeration {
         || action == null
         || !java.util.Set.of("REMOVE_CONTENT", "RESTORE_CONTENT").contains(action))
       throw Failure.invalid();
+    subjects.post(actor, post);
     UUID id = UUID.randomUUID();
     var change = posts.apply(actor, community, post, expected, action, id);
     String request = org.slf4j.MDC.get("requestId");

@@ -81,6 +81,27 @@ public class JdbcErasureStore implements ErasureStore {
     return rows.isEmpty() ? null : rows.getFirst();
   }
 
+  public boolean current(UUID request, String rosterDigest) {
+    return Boolean.TRUE.equals(
+        jdbc.queryForObject(
+            "SELECT EXISTS(SELECT 1 FROM account.erasure_request r JOIN account.erasure_intent i ON i.id=r.id AND i.user_id=r.user_id WHERE r.id=? AND r.protocol=? AND r.policy=? AND r.roster_digest=? AND i.protocol=r.protocol AND i.policy=r.policy AND r.lifecycle_generation=i.expected_version+1)",
+            Boolean.class,
+            request,
+            AccountErasure.PROTOCOL,
+            AccountErasure.POLICY,
+            rosterDigest));
+  }
+
+  public void completionAttempt(Context c, UUID attempt) {
+    if (jdbc.update(
+            "UPDATE account.erasure_step SET checkpoint=?,updated_at=clock_timestamp() WHERE user_id=? AND module='account' AND step='completion-manifest' AND version=? AND verification_round=? AND status='RUNNABLE'",
+            "ATTEMPT:" + attempt,
+            c.userId(),
+            c.version(),
+            c.round())
+        != 1) throw new IllegalStateException("ERASURE_STALE_PASS");
+  }
+
   public void createRequest(Intent i, Instant at, long generation, String digest) {
     jdbc.update(
         "INSERT INTO account.erasure_request(id,user_id,requested_at,lifecycle_generation,protocol,policy,roster_digest) VALUES (?,?,?,?,?,?,?)",
@@ -169,6 +190,17 @@ public class JdbcErasureStore implements ErasureStore {
     jdbc.update(
         "UPDATE account.erasure_step SET failures=failures+1,status=?,reason='EXECUTION_FAILED',updated_at=clock_timestamp() WHERE user_id=? AND module=? AND step=? AND status<>'DONE'",
         dead ? "FAILED" : "RETRY",
+        user,
+        step.owner(),
+        step.step());
+    jdbc.update(
+        "UPDATE account.erasure_request SET version=version+1,updated_at=clock_timestamp() WHERE user_id=?",
+        user);
+  }
+
+  public void invalidate(UUID user, Step step) {
+    jdbc.update(
+        "UPDATE account.erasure_step SET checkpoint='START',status=CASE WHEN status='FAILED' THEN 'FAILED' ELSE 'WAITING_DEPENDENCY' END,reason='PRIVATE_PAYLOAD_CHANGED',next_check_at=NULL,proof=NULL,proof_version=NULL,completed_at=NULL,version=version+1,updated_at=clock_timestamp() WHERE user_id=? AND module=? AND step=?",
         user,
         step.owner(),
         step.step());
@@ -283,7 +315,7 @@ public class JdbcErasureStore implements ErasureStore {
 
   public List<Export> pending(UUID intent) {
     return jdbc.query(
-        "SELECT * FROM account.erasure_export WHERE intent_id=? AND receipt_digest IS NULL ORDER BY created_at,id LIMIT 100",
+        "SELECT * FROM account.erasure_export WHERE intent_id=? AND operation<>'COMPLETION' AND receipt_digest IS NULL ORDER BY created_at,id LIMIT 100",
         EXPORT,
         intent);
   }

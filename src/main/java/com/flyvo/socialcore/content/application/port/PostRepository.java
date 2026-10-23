@@ -20,6 +20,8 @@ public interface PostRepository {
 
   List<UUID> searchScan(UUID after, int limit);
 
+  List<UUID> searchScanByAuthor(UUID author, UUID after, int limit);
+
   List<Post> searchLoad(UUID viewer, List<UUID> ids, UUID community, Instant now);
 
   Instant databaseTime();
@@ -45,6 +47,8 @@ public interface PostRepository {
   Map<UUID, Facts> facts(UUID viewer, List<UUID> ids, Instant now);
 
   boolean pruneRevisions(UUID post, Instant cutoff);
+
+  boolean erasureOrigin(UUID post);
 
   void redactDeleted(UUID post, Instant now);
 }

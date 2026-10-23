@@ -62,6 +62,8 @@ public interface CaseStore {
 
   Control control(Root root, boolean lock);
 
+  List<UUID> subjects(Root root);
+
   List<CaseOperations.CaseView> queue(
       UUID community, CaseOperations.Filter filter, int size, int offset);
 

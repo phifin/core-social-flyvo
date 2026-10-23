@@ -43,10 +43,14 @@ integrity is not an auth protocol. Failure retries with no partial checkpoint.
 Reconcile refreshes indexed missing IDs; account jobs scan indexed owner keys.
 Examined/changed counts are per-pass work, not a frozen global/public total.
 
-Locks: platform delivery/job row → rebuild state when used → document kind/UUID.
-Export reads take no owner business lock/network call. Operator account guard
-precedes rebuild state; unique resume job keys avoid waiting on a running job row
-while holding state it needs. Retain ordering through replay; no Phase9 erasure.
+Locks: platform delivery/job row → complete sorted owner account guards →
+rebuild state when used → document kind/UUID. Source snapshots are re-read after
+account guards; terminal accounts produce permanent blank erasure markers even
+when the source/index was absent. Rebuild pre-reads its state and batch, takes
+account guards, then locks/rechecks rebuild state before materializing. No network
+call is made under these locks. Operator account guard precedes rebuild state; unique resume job keys avoid waiting on a running job row
+while holding state it needs. Retain ordering through replay. The II owner also scans every author post through
+content's published API, then indexed owner keys, so an empty index is covered.
 
 Search has a dedicated application API and infrastructure adapter. `search.document` is a rebuildable projection keyed by source type/ID/version, updated from durable events. It stores only text needed for users, communities and posts, with PostgreSQL full-text `tsvector` and GIN indexes. Use the `simple` configuration initially to avoid silently assuming English; support exact/prefix handles and normalized community names. Vietnamese/other language tokenization and accent behavior require relevance fixtures before adding language-specific dictionaries or unaccent. `pg_trgm` is an optional measured enhancement for names, not a default wildcard scan over post bodies.
 

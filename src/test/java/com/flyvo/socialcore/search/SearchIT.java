@@ -188,6 +188,46 @@ class SearchIT {
   }
 
   @Test
+  void tenThousandPostEmptyIndexRebuildCannotMaterializeTerminalAuthorText() {
+    var author = user();
+    var operator = admin();
+    String term = word();
+    jdbc.update(
+        "INSERT INTO content.post(id,author_id,body,audience,status,revision_number,published_at,created_at,updated_at) SELECT gen_random_uuid(),?,?,'PUBLIC','PUBLISHED',1,now(),now(),now() FROM generate_series(1,10001)",
+        author.userId(),
+        term);
+    jdbc.update(
+        "UPDATE account.user_account SET status='DELETION_PENDING',deletion_requested_at=clock_timestamp(),version=version+1 WHERE id=?",
+        author.userId());
+    var r = maintenance.start(operator, Kind.POST, null, null);
+    int passes = 0;
+    while (!"DONE".equals(maintenance.read(operator, r.id()).stage())) {
+      var before = maintenance.read(operator, r.id());
+      assertThat(worker.consumeJob(UUID.randomUUID(), List.of(rebuild))).isTrue();
+      var after = maintenance.read(operator, r.id());
+      assertThat(after.examined() - before.examined()).isBetween(0L, 100L);
+      assertThat(++passes).isLessThan(400);
+    }
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM search.document WHERE owner_id=? AND source_kind='POST' AND erased_by_account AND tombstone AND body='' AND search_vector=''::tsvector",
+                Integer.class,
+                author.userId()))
+        .isEqualTo(10001);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM search.document WHERE owner_id=? AND (source_key<>'' OR title<>'' OR body<>'' OR search_vector<>''::tsvector)",
+                Integer.class,
+                author.userId()))
+        .isZero();
+    System.out.println(
+        "P9AII_LARGE_SEARCH posts=10001 passes=" + passes + " maxCollectionItems=100");
+    // Remove only this test's synthetic roots so other rebuild-size fixtures stay independent.
+    jdbc.update("DELETE FROM search.document WHERE owner_id=?", author.userId());
+    jdbc.update("DELETE FROM content.post WHERE author_id=?", author.userId());
+  }
+
+  @Test
   void liveWorkerIndexesAccentedNamesHandlesCardsAndPostsWithoutUnaccentClaim() {
     var owner = user();
     var viewer = user();

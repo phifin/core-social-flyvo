@@ -158,6 +158,8 @@ public class Erasures implements AccountErasure {
     if (account == null || !"DELETION_PENDING".equals(account.status())) throw Failure.conflict();
     var request = store.request(user);
     if (request == null || step == null) throw Failure.conflict();
+    if (!store.current(request.id(), ErasureProtocol.rosterDigest()))
+      throw new Failure(409, "ERASURE_PROTOCOL_MISMATCH");
     if (!policy.lineage().equals(store.intent(request.id()).lineage()))
       throw new Failure(503, "RECOVERY_LINEAGE_MISMATCH");
     var state = store.step(user, step, true);
@@ -177,6 +179,19 @@ public class Erasures implements AccountErasure {
         request.at(),
         state.checkpoint(),
         state.examined());
+  }
+
+  @Transactional(propagation = Propagation.MANDATORY)
+  public String checkpoint(Pass pass) {
+    policy.requireEnabled();
+    if (pass == null || pass.step() == null || pass.executionId() == null) return null;
+    var account = accounts.find(pass.userId());
+    if (account == null || !"DELETION_PENDING".equals(account.status())) return null;
+    var state = store.step(pass.userId(), pass.step(), false);
+    if (state == null
+        || state.view().version() != pass.version()
+        || !pass.executionId().equals(state.execution())) return null;
+    return state.checkpoint();
   }
 
   @Transactional(propagation = Propagation.MANDATORY)
@@ -246,7 +261,10 @@ public class Erasures implements AccountErasure {
         || ids.size() > 100
         || ids.stream().anyMatch(Objects::isNull)
         || ids.stream().distinct().count() != ids.size()
-        || !Set.of("MAIL_PROOF", "MEDIA_ASSET").contains(kind)) throw Failure.invalid();
+        || !("MAIL_PROOF".equals(kind) && c.step() == Step.IDENTITY
+            || "MEDIA_ASSET".equals(kind)
+                && Set.of(Step.PROFILE, Step.CONTENT, Step.MEDIA).contains(c.step())))
+      throw Failure.invalid();
     if (!c.equals(begin(c.userId(), c.step(), c.version()))) throw Failure.conflict();
     var old = store.lockManifest(c.requestId());
     var chunk = addExport(store.intent(c.requestId()), "RESOURCE", c.step().owner(), kind, ids);
@@ -290,6 +308,29 @@ public class Erasures implements AccountErasure {
   public Instant databaseTime() {
     policy.requireEnabled();
     return store.now();
+  }
+
+  @Transactional(propagation = Propagation.MANDATORY)
+  public void invalidateModeration(List<UUID> subjects) {
+    if (subjects == null || subjects.size() > 100) throw Failure.invalid();
+    var pending = new ArrayList<UUID>();
+    for (var id :
+        subjects.stream().distinct().sorted(Comparator.comparing(UUID::toString)).toList()) {
+      var account = accounts.find(id);
+      if (account == null || "DELETED".equals(account.status()))
+        throw new Failure(409, "TERMINAL_SUBJECT");
+      if ("DELETION_PENDING".equals(account.status())) pending.add(id);
+    }
+    if (pending.isEmpty()) return;
+    policy.requireEnabled();
+    for (var id : pending) {
+      if (store.request(id) == null) throw new Failure(409, "ERASURE_REQUEST_REQUIRED");
+      for (var step : List.of(Step.MODERATION, Step.COMPLETION)) {
+        store.step(id, step, true);
+        store.invalidate(id, step);
+      }
+      work.job("ERASURE_RECONCILE", UUID.randomUUID().toString(), id.toString(), store.now());
+    }
   }
 
   /** Reconcile fixed rows only; never dispatch unknown handlers or replace DEAD budgets. */
@@ -348,7 +389,8 @@ public class Erasures implements AccountErasure {
         continue;
       }
       if (!"WAITING_DEPENDENCY".equals(state.view().status())
-          || !"PREREQUISITE_PENDING".equals(state.view().reason())) continue;
+          || !Set.of("PREREQUISITE_PENDING", "PRIVATE_PAYLOAD_CHANGED")
+              .contains(state.view().reason())) continue;
       if (ErasureProtocol.predecessors(step).stream()
           .anyMatch(p -> !"DONE".equals(store.step(user, p, false).view().status()))) continue;
       var c =
@@ -480,8 +522,7 @@ public class Erasures implements AccountErasure {
       throw Failure.conflict();
     if (r.version() != expected) throw new Failure(412, "STALE_VERSION");
     var s = store.step(user, step, true);
-    if (step.kind() == null || step == Step.COMPLETION)
-      throw new Failure(409, "OWNER_NOT_IMPLEMENTED");
+    if (step.kind() == null) throw new Failure(409, "OWNER_NOT_IMPLEMENTED");
     for (var export : store.pending(r.id())) {
       var record = json.readValue(export.record(), Journal.class);
       boolean matches =
@@ -534,12 +575,20 @@ public class Erasures implements AccountErasure {
   @Transactional
   public void requireCompletion(UUID user, String vector) {
     accounts.guard(user, true);
+    for (var step : Step.values()) store.step(user, step, true);
+    var certificate = certificate(user);
+    if (!ErasureProtocol.digest(json.writeValueAsString(certificate)).equals(vector))
+      throw new Failure(409, "ERASURE_STALE_CERTIFICATE");
+  }
+
+  com.flyvo.socialcore.account.domain.ErasureCertificate certificate(UUID user) {
     var r = store.request(user);
-    if (r == null) throw Failure.conflict();
+    if (r == null || !store.current(r.id(), ErasureProtocol.rosterDigest()))
+      throw Failure.conflict();
     var prerequisites =
         new ArrayList<com.flyvo.socialcore.account.domain.ErasureCertificate.Proof>();
     for (var step : Step.values()) {
-      var s = store.step(user, step, true);
+      var s = store.step(user, step, false);
       if (step == Step.COMPLETION)
         continue; // C02: never hash the certificate's own receipt/version.
       if (!"DONE".equals(s.view().status())
@@ -551,20 +600,16 @@ public class Erasures implements AccountErasure {
               step.owner(), step.step(), s.view().version(), s.round(), s.proof()));
     }
     if (store.pendingResources(r.id())) throw new Failure(409, "ERASURE_RESOURCE_RECEIPT_REQUIRED");
-    var certificate =
-        new com.flyvo.socialcore.account.domain.ErasureCertificate(
-            store.intent(r.id()).lineage(),
-            r.id(),
-            user,
-            r.generation(),
-            PROTOCOL,
-            POLICY,
-            ErasureProtocol.rosterDigest(),
-            r.round(),
-            r.manifestDigest(),
-            prerequisites);
-    if (!ErasureProtocol.digest(json.writeValueAsString(certificate)).equals(vector))
-      throw new Failure(409, "ERASURE_STALE_CERTIFICATE");
-    throw new Failure(409, "PACKAGE_I_FINALIZATION_DISABLED");
+    return new com.flyvo.socialcore.account.domain.ErasureCertificate(
+        store.intent(r.id()).lineage(),
+        r.id(),
+        user,
+        r.generation(),
+        PROTOCOL,
+        POLICY,
+        ErasureProtocol.rosterDigest(),
+        r.round(),
+        r.manifestDigest(),
+        prerequisites);
   }
 }

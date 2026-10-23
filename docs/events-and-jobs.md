@@ -238,3 +238,21 @@ Recheck recipient status, preferences, blocks/mutes, target access and actor eli
 SSE sends `{type:"notifications.changed",eventId:...}` or a notification ID/version hint, not content snippets/actor details. REST supplies authoritative state. Authenticate connection via Bearer fetch streaming, close at token expiry, cap connections/user, send heartbeats, handle disconnect/backpressure and poll current session/account status at heartbeat. Logout revocation closes at the next check (target <=15 seconds); frames contain only invalidations during that window. Reconnect triggers REST refresh; Last-Event-ID is a best-effort hint, not guaranteed durable replay. WebSockets are unnecessary for one-way inbox updates.
 
 For multiple HTTP instances, either local listeners poll a recipient change watermark or introduce Redis pub/sub invalidation (loss is repaired by REST refresh). Redis pub/sub is not the durable inbox/outbox. Introduce a broker only when independent consumers need transport at measured throughput; publisher confirms, consumer receipts, retries and outbox durability remain required.
+
+
+## Phase9A-II fixed owner work
+
+The fixed account roster now registers COMMUNITY_ERASURE, GRAPH_ERASURE,
+CONTENT_ERASURE, MODERATION_ERASURE, MEDIA_ERASURE, NOTIFICATION_ERASURE,
+SEARCH_ERASURE and ERASURE_COMPLETE alongside I's handlers. Each DB pass commits
+owner effects/checkpoint/audit/next job/fenced ack atomically. MEDIA_ERASURE and
+ERASURE_COMPLETE use short prepare/effect/ack; no network under business locks.
+MODERATION_PRESERVE exports immutable independent controls; MODERATION_PRESERVATION
+keysets baseline roots/history. Ten-attempt/60s lease semantics are unchanged.
+
+GraphErased carries the existing minimal RelationshipChanged shape, retaining the
+pair ID/sequence with inactive flags and no private block/mute payload. Content
+maintenance emits existing versioned PostAudienceChanged/PostDeleted/CommentDeleted/
+ReactionChanged facts; terminal reaction type is null. AccountDeletionCompleted v1
+contains only userId/requestId and commits with final status/certificate/audit. It
+is excluded from the certificate vector. No event payload is authorization.

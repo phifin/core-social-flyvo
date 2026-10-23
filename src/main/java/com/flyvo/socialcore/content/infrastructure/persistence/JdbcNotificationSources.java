@@ -59,6 +59,33 @@ public class JdbcNotificationSources implements NotificationSourceRepository {
         ids.toArray());
   }
 
+  public List<UUID> ownedTargets(Type type, UUID owner, UUID after, int limit) {
+    if (type == Type.POST)
+      return jdbc.queryForList(
+          "SELECT id FROM content.post WHERE author_id=? AND (?::uuid IS NULL OR id>?) "
+              + "ORDER BY id LIMIT ?",
+          UUID.class,
+          owner,
+          after,
+          after,
+          limit);
+    if (type == Type.COMMENT)
+      return jdbc.queryForList(
+          "SELECT id FROM (SELECT c.id FROM content.comment c WHERE c.author_id=? "
+              + "AND (?::uuid IS NULL OR c.id>?) UNION SELECT c.id FROM content.post p "
+              + "JOIN content.comment c ON c.post_id=p.id WHERE p.author_id=? "
+              + "AND (?::uuid IS NULL OR c.id>?)) owned ORDER BY id LIMIT ?",
+          UUID.class,
+          owner,
+          after,
+          after,
+          owner,
+          after,
+          after,
+          limit);
+    throw new IllegalArgumentException("Unsupported target type");
+  }
+
   public Set<UUID> eligible(UUID recipient, Type type, String kind, List<UUID> ids, Instant now) {
     var args = new ArrayList<Object>();
     var at = now.atOffset(ZoneOffset.UTC);

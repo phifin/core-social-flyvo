@@ -147,8 +147,24 @@ public class NotificationProjector implements EventConsumer {
       }
     }
     var dedup = NotificationRoutes.deduplicate(actor, routes);
+    var guardIds =
+        java.util.stream.Stream.concat(
+                java.util.stream.Stream.of(actor),
+                dedup.stream().map(NotificationRoutes.Route::recipient))
+            .filter(Objects::nonNull)
+            .distinct()
+            .sorted(Comparator.comparing(UUID::toString))
+            .toList();
+    var guarded = new HashMap<UUID, AccountQueries.Account>();
+    for (var id : guardIds) guarded.put(id, accounts.guard(id, false));
+    if (actor == null
+        || guarded.get(actor) == null
+        || Set.of("DELETION_PENDING", "DELETED").contains(guarded.get(actor).status())) return;
     var activeRecipients =
-        accounts.activeIds(dedup.stream().map(NotificationRoutes.Route::recipient).toList());
+        dedup.stream()
+            .map(NotificationRoutes.Route::recipient)
+            .filter(id -> guarded.get(id) != null && guarded.get(id).active())
+            .collect(java.util.stream.Collectors.toSet());
     for (var route : dedup) {
       if (activeRecipients.contains(route.recipient())) store.guard(route.recipient(), now);
     }
@@ -163,6 +179,14 @@ public class NotificationProjector implements EventConsumer {
         throw new IllegalStateException("UNAVAILABLE_SOURCE_VERSION");
       active = current.active();
       reactionType = active ? current.reactionType() : null;
+    } else if (sourceType.equals("GRAPH")) {
+      var sources = graph.inspect(List.of(source));
+      if (sources.isEmpty()) return;
+      currentVersion = sources.getFirst().pairVersion();
+    } else if (sourceType.equals("INVITATION")) {
+      var sources = community.inspect(List.of(source));
+      if (sources.isEmpty()) return;
+      currentVersion = sources.getFirst().communityVersion();
     }
     for (var route : dedup) {
       if (!activeRecipients.contains(route.recipient())) continue;

@@ -11,9 +11,10 @@ Phase9A-I is accepted for explicitly isolated synthetic environments at executab
 It adds receipt-backed closure, a fixed twelve-owner roster, admin
 progress/resume and bounded identity/profile cleanup. Normal/default Compose keeps
 new maintenance off; a valid close without configured verified synthetic archive
-fails503. No package-I account reaches DELETED; II/III and public launch remain
-gated. II is now assigned, not implemented, in the
-[source/media/completion package](docs/work-packages/phase-9a-ii.md).
+fails503. Package I cannot finalize. The [II candidate](docs/phases/phase-9a-ii.md) implements
+source cleanup, physical media protocol, projections, moderation preservation and
+strict certificate-backed finalization under the same isolated policy. Main review
+remains required; III/real erasure/restore and public launch remain gated.
 See [protocol](docs/account-erasure.md), [operations](ops/erasure.md) and
 [package evidence](docs/phases/phase-9a-i.md). Do not enable against existing data.
 

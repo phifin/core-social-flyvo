@@ -12,10 +12,13 @@ import org.springframework.transaction.annotation.Transactional;
 public class ModerationSchedule {
   private final DurableWork work;
   private final Clock clock;
+  private final org.springframework.core.env.Environment environment;
 
-  public ModerationSchedule(DurableWork work, Clock clock) {
+  public ModerationSchedule(
+      DurableWork work, Clock clock, org.springframework.core.env.Environment environment) {
     this.work = work;
     this.clock = clock;
+    this.environment = environment;
   }
 
   @Scheduled(fixedDelay = 60000)
@@ -25,5 +28,7 @@ public class ModerationSchedule {
     String key = Long.toString(now.getEpochSecond() / 60);
     work.job("MODERATION_ENCRYPT", key, "{}", now);
     work.job("MODERATION_RETENTION", key, "{}", now);
+    if (environment.getProperty("app.erasure.enabled", Boolean.class, false)
+        && now.getEpochSecond() / 60 % 60 == 0) work.job("MODERATION_PRESERVATION", key, "{}", now);
   }
 }

@@ -85,6 +85,13 @@ public class ContentInteractions implements Interactions, CommentModeration, Con
   }
 
   @Transactional(propagation = Propagation.MANDATORY)
+  public java.util.List<UUID> structuralUsers(UUID postId) {
+    var p = posts.find(postId, false);
+    if (p == null) throw new Failure(404, "NOT_FOUND");
+    return java.util.List.of(p.author());
+  }
+
+  @Transactional(propagation = Propagation.MANDATORY)
   public Proof reportProof(ActorContext actor, UUID postId, UUID commentId) {
     if ((postId == null) == (commentId == null)) throw Failure.invalid();
     var c = commentId == null ? null : existing(commentId);

@@ -39,3 +39,14 @@ public rate limiting remains a separate gate. Monitor low-cardinality
 social.search.projection.lag{kind}, query.duration{kind}, examined/returned{kind},
 existing oldest/retry/DEAD and audited rebuild state. No query/actor/source labels.
 Final package checks include the unchanged feed pool10/50 all-success benchmark.
+
+
+## Phase9A-II terminal materialization
+
+Live refresh and rebuild capture source IDs, acquire all sorted owner account
+guards, re-read snapshots and only then take rebuild/document locks. A changed
+rebuild version abandons the pass. Terminal USER/POST markers permanently blank
+text, normalized fields and generated vectors, including a physically empty
+index. SEARCH_ERASURE scans every content author root before indexed-owner residue;
+an old index row is not the enumeration authority. Stale events/rebuild snapshots
+cannot restore the marker. Suspended sources remain normally restorable.

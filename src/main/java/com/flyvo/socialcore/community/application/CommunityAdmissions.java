@@ -71,7 +71,8 @@ public class CommunityAdmissions implements AdmissionCommands {
     if (!List.of("accept", "decline", "revoke").contains(action)) throw Failure.invalid();
     var observed = access.store().invitation(id);
     if (observed == null) throw new Failure(404, "NOT_FOUND");
-    access.guardAccounts(actor);
+    access.guardAccounts(actor, observed.inviterId(), observed.inviteeId());
+    if ("accept".equals(action)) access.nonterminalAccount(observed.inviterId());
     var c = access.guard(observed.communityId(), true);
     var i = access.store().invitation(id);
     if ("revoke".equals(action))

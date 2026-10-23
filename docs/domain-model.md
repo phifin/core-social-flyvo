@@ -16,8 +16,12 @@ PREPARED proof before DELETION_PENDING; I cannot transition to DELETED. Owner st
 and resource receipts are not event-consumer counts. Credentials/proofs/mail drain
 before email/provider reuse; a fresh proof creates a new UUID. Profile disappears
 with an immutable UUID/source-version absence tombstone; canonical handle claims
-reserve its former handle30d without a former-user pointer. Later owners remain
-waiting; inaccessible data is not claimed erased or anonymous.
+reserve its former handle30d without a former-user pointer. The II candidate
+activates every remaining owner; final DELETED requires all current owner proofs
+and the independently receipted eleven-proof certificate. Authored bytes wait30d,
+held/unresolved moderation preserves ciphertext, and unknown media writers keep
+completion pending. Other authors' bytes and immutable attribution remain retained;
+inaccessible data is not claimed erased or anonymous.
 
 `UserAccount` (`account`) is the durable actor: UUID, status, platform role, created time and version. Status is `PENDING_VERIFICATION -> ACTIVE -> SUSPENDED` (reversible) or `DELETION_PENDING -> DELETED` (terminal after erasure). Suspended users cannot authenticate/use private APIs; their content is hidden by account-status checks. Status changes are attributable and audited. A deletion request revokes access immediately and starts the retention/erasure workflow. Before deleting, an owner transfers or archives owned communities.
 

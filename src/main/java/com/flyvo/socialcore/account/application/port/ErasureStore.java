@@ -50,6 +50,10 @@ public interface ErasureStore {
 
   Request request(UUID user);
 
+  boolean current(UUID request, String rosterDigest);
+
+  void completionAttempt(Context context, UUID attempt);
+
   void createRequest(Intent intent, Instant at, long generation, String rosterDigest);
 
   void seed(UUID user, UUID request, Step step, String status, String reason);
@@ -67,6 +71,8 @@ public interface ErasureStore {
       UUID execution);
 
   void failed(UUID user, Step step, boolean dead);
+
+  void invalidate(UUID user, Step step);
 
   List<UUID> scan(UUID after, int limit);
 

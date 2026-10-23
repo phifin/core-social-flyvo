@@ -10,6 +10,8 @@ public interface NotificationSourceRepository {
   List<ContentNotificationSources.Source> inspect(
       ContentNotificationSources.Type type, List<UUID> ids);
 
+  List<UUID> ownedTargets(ContentNotificationSources.Type type, UUID owner, UUID after, int limit);
+
   Set<UUID> eligible(
       UUID recipient,
       ContentNotificationSources.Type type,

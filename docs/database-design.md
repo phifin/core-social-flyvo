@@ -42,6 +42,27 @@ rename/reserve/expiry keep sorted advisory keys. No earlier migration was edited
 to fix the observed20,050-profile benchmark seed failure. Retention/clock/lock/rollback details are in
 [erasure protocol](account-erasure.md); no mixed-old-writer compatibility is claimed.
 
+
+Package II migrations are V0038–V0051, with all earlier checksums preserved:
+community inviter reverse traversal (38); content erasure origin/reaction shape
+(39), all-state author keyset (41) and terminal comment/post relation guards (49);
+media claim/accounting/receipt tombstones (40,43) and claimed-asset variant insert fence (51); notification terminal recipients
+and reverse keys (42); sticky search erasure markers (44); account C01 proof
+invalidation (45), strict nonrecursive completion (47), NULL-safe JSON/transition
+checks (48) and resource owner/kind allowlist (50); moderation structural reverse
+keys and independent preservation export/page state (46). Owner boundaries remain
+unchanged. Post redaction rejects new private relations; reaction/comment/media
+terminal shapes cannot be restored. The final account guard replaces I's negative
+trigger only with current11-proof/resource-receipt/certificate checks, retaining
+terminal denial and exact request/generation/round/lineage/policy bindings.
+
+Private bytes do not become immediately erasable because an account is pending.
+Moderation roots still enforce ADR-016; C01 append takes sorted structural account
+guards and moderation/completion step invalidation before the case root. Completion
+uses subject exclusive then ordered fixed step rows, with archive I/O outside locks.
+Keep service closed during all prefixes and forward-fix; the I binary is not
+compatible with II's nullable erased choices/media metadata or finalization.
+
 Phase8's lifecycle prerequisite adds V0029: nonnegative authentication_epoch on
 account.user_account and identity.auth_session. Sessions capture the account
 epoch at issuance; suspension increments it, reinstatement never resets it.

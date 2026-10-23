@@ -167,3 +167,17 @@ Subsequent owner-policy batches may remove already selected old bodies, never
 reload newer text. Attribution and engagement are batched after eligibility.
 Feed owns rank/cursor/refill/metrics, not content authorization; [feed](feed.md)
 records chronology, continuation and query-budget semantics.
+
+
+## Phase9A-II authored erasure
+
+The isolated owner repairs current subject mentions/CUSTOM recipients immediately;
+the last-recipient change narrows to ONLY_ME atomically. It soft-deletes authored
+roots/comments, releases owned media bindings and nulls the subject's reaction
+choice with a one-way tombstone. At DB t0+30d, nested100-item stages remove all
+owned revisions, attachment/alt-text mappings after verified asset-ID export,
+recipients, mentions, hashtags and authored body/link/comment text. A complete
+post with arbitrary descendants is never one collection item. Ordinary queued
+parent retention skips terminal authors/erasure-origin posts, preserving other
+authors' replies, immutable history/reply IDs and shared community content.
+Post/comment/reaction terminal shapes cannot be restored by old writes.

@@ -63,6 +63,16 @@ public class JdbcPosts implements PostRepository {
         ids.toArray());
   }
 
+  public List<UUID> searchScanByAuthor(UUID author, UUID after, int limit) {
+    return jdbc.queryForList(
+        "SELECT id FROM content.post WHERE author_id=? AND (?::uuid IS NULL OR id>?) ORDER BY id LIMIT ?",
+        UUID.class,
+        author,
+        after,
+        after,
+        limit);
+  }
+
   public List<UUID> searchScan(UUID after, int limit) {
     return jdbc.queryForList(
         "SELECT id FROM content.post "
@@ -144,6 +154,12 @@ public class JdbcPosts implements PostRepository {
 
   public Instant databaseTime() {
     return jdbc.queryForObject("SELECT clock_timestamp()", OffsetDateTime.class).toInstant();
+  }
+
+  public boolean erasureOrigin(UUID post) {
+    return Boolean.TRUE.equals(
+        jdbc.queryForObject(
+            "SELECT erasure_origin FROM content.post WHERE id=?", Boolean.class, post));
   }
 
   private List<Object> policyArgs(UUID viewer, Instant now) {

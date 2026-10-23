@@ -80,6 +80,14 @@ public class UserAccount {
     updatedAt = now;
   }
 
+  public void completeDeletion(Instant now) {
+    if (!"DELETION_PENDING".equals(status))
+      throw new IllegalStateException("Account is not pending deletion");
+    status = "DELETED";
+    updatedAt = now;
+    authenticationEpoch = Math.incrementExact(authenticationEpoch);
+  }
+
   public void reinstate(Instant now) {
     if (!"SUSPENDED".equals(status)) throw new IllegalStateException("Account is not suspended");
     status = "ACTIVE";

@@ -89,7 +89,7 @@ public class PostgresSearchIndex implements SearchIndex {
           source_key=EXCLUDED.source_key,title=EXCLUDED.title,body=EXCLUDED.body,
           key_normalized=EXCLUDED.key_normalized,name_normalized=EXCLUDED.name_normalized,
           updated_at=EXCLUDED.updated_at
-        WHERE NOT current.missing_source AND (EXCLUDED.missing_source OR (
+        WHERE NOT current.erased_by_account AND NOT current.missing_source AND (EXCLUDED.missing_source OR (
           EXCLUDED.source_version>=current.source_version
           AND COALESCE(EXCLUDED.account_version,-1)>=COALESCE(current.account_version,-1)
           AND (current.owner_id IS NULL OR current.owner_id=EXCLUDED.owner_id)
@@ -110,6 +110,17 @@ public class PostgresSearchIndex implements SearchIndex {
             SearchTerms.normalize(key),
             SearchTerms.normalize(title))
         == 1;
+  }
+
+  @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+  public void erase(UUID owner, Kind kind, UUID id) {
+    if (kind == Kind.COMMUNITY || owner == null || id == null)
+      throw com.flyvo.socialcore.platform.api.Failure.invalid();
+    jdbc.update(
+        "INSERT INTO search.document(source_kind,source_id,owner_id,tombstone,missing_source,erased_by_account,source_key,title,body,key_normalized,name_normalized,updated_at) VALUES (?,?,?,true,true,true,'','','','','',clock_timestamp()) ON CONFLICT(source_kind,source_id) DO UPDATE SET tombstone=true,erased_by_account=true,source_key='',title='',body='',key_normalized='',name_normalized='',updated_at=clock_timestamp()",
+        kind.name(),
+        id,
+        owner);
   }
 
   @Transactional(readOnly = true)
@@ -164,6 +175,7 @@ public class PostgresSearchIndex implements SearchIndex {
         Long account,
         boolean tombstone,
         boolean missing,
+        boolean erased,
         UUID owner,
         UUID scope,
         byte[] checksum) {}
@@ -172,7 +184,7 @@ public class PostgresSearchIndex implements SearchIndex {
     documents.forEach(d -> args.add(d.id()));
     var stored = new HashMap<UUID, Proof>();
     jdbc.query(
-        "SELECT source_id,source_version,account_version,tombstone,missing_source,owner_id,scope_id,"
+        "SELECT source_id,source_version,account_version,tombstone,missing_source,erased_by_account,owner_id,scope_id,"
             + fingerprintSql()
             + " checksum FROM search.document WHERE source_kind=? AND source_id IN ("
             + String.join(",", Collections.nCopies(documents.size(), "?"))
@@ -185,6 +197,7 @@ public class PostgresSearchIndex implements SearchIndex {
                   r.getObject("account_version", Long.class),
                   r.getBoolean("tombstone"),
                   r.getBoolean("missing_source"),
+                  r.getBoolean("erased_by_account"),
                   r.getObject("owner_id", UUID.class),
                   r.getObject("scope_id", UUID.class),
                   r.getBytes("checksum")));
@@ -205,15 +218,17 @@ public class PostgresSearchIndex implements SearchIndex {
                   >= (d.accountVersion() == null ? -1 : d.accountVersion())
               && !equal;
       boolean valid =
-          d.missing()
-              ? p.missing() && p.tombstone() && Arrays.equals(p.checksum(), fingerprint(d))
-              : !p.missing()
-                  && Objects.equals(p.owner(), d.owner())
-                  && Objects.equals(p.scope(), d.scope())
-                  && (newer
-                      || equal
-                          && p.tombstone() == d.tombstone()
-                          && Arrays.equals(p.checksum(), fingerprint(d)));
+          p.erased()
+              ? p.tombstone() && d.tombstone() && Arrays.equals(p.checksum(), fingerprint(d))
+              : d.missing()
+                  ? p.missing() && p.tombstone() && Arrays.equals(p.checksum(), fingerprint(d))
+                  : !p.missing()
+                      && Objects.equals(p.owner(), d.owner())
+                      && Objects.equals(p.scope(), d.scope())
+                      && (newer
+                          || equal
+                              && p.tombstone() == d.tombstone()
+                              && Arrays.equals(p.checksum(), fingerprint(d)));
       if (!valid) throw new IllegalStateException("SEARCH_SNAPSHOT_CHECKSUM_MISMATCH");
     }
   }

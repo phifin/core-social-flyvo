@@ -186,3 +186,33 @@ media absence needs a total writer bound absent from developer Silo; backups ret
 restricted bytes until expiry and must reconcile on restore. None is resolved by
 claiming “inaccessible = erased,” disabling a trigger, deleting another user's
 content, or treating accepted Phases7–8 as a public-launch decision.
+
+
+## Package I–II implementation addendum — 2026-10-22
+
+The 56-table V0032 baseline above remains historical design evidence. Package I
+added eleven protocol tables: account.erasure_intent/request/step/export/issue;
+platform.work_scope/work_effect; identity.erasure_marker/erasure_mailbox;
+profile.handle_claim/erasure_tombstone. Package II adds only the two moderation
+protocol tables below; no module DAG edge, foreign SQL view or consumer is added.
+The fixed twelve-step roster is fully registered in the II candidate. Acceptance
+and exact evidence remain in the mailbox and [II phase record](../phases/phase-9a-ii.md).
+
+| New owner persistence | Data, retention and proof |
+|---|---|
+| moderation.preservation_export (V0046) | Immutable lineage/protocol/policy, root UUID/version, operation, actor/scope UUIDs, hold deadlines and at most100 structural history entries; SHA-256/verified independent receipt; execution and cumulative failure metadata. No reason, body, evidence or ciphertext. Append/verify outside business locks. Retain for the recovery lineage; no automatic disposal policy is invented. |
+| moderation.preservation_state (V0046) | Per-root/version keyset cursor, current pending export and verified-page completion. Root lock precedes this row. Changing root version restarts the baseline; only an exact verified receipt advances a page. It is a checkpoint, never preservation authority or a permission grant. |
+
+V0038–V0050 add actual owner indexes, one-way post/comment/reaction and media
+shapes, notification recipient/search document fences, moderation C01 invalidation
+and strict account certificate guards. Source text is redacted at t0+30d;
+moderation still follows terminal+365d and holds. Immutable UUID attribution,
+archived ownership, other authors' bytes/replies, audit/job/preservation metadata
+and restricted expiring copies remain declared exceptions. Unknown historical
+DELETED provenance remains an erasure_issue requiring authoritative review; it is
+not silently relabelled, assigned a guessed generation or certified complete.
+
+All-state media enumeration exports asset IDs before physical work; there is no
+runtime writer-drain provider. Unknown writers keep existing assets WAITING_EXTERNAL.
+Positive drain evidence is restricted to joined, sealed synthetic test writers.
+No restore/import/exposure gate, production authority or U01–U06 decision is delivered.
