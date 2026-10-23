@@ -4,11 +4,13 @@
 
 - Task: phase-9a-ii-sources-media-completion
 - Round: 1
-- State: READY_FOR_IMPLEMENTATION — isolated synthetic scope only
-- Last writer: main orchestrator/reviewer, 2026-10-20
-- Next owner: development, in a new user-opened chat
+- State: READY_FOR_REVIEW — isolated synthetic scope only
+- Last writer: development, 2026-10-23
+- Next owner: main
 - Chat name: `Develop Phase 9A-II — Sources, Media & Completion`
-- Accepted executable: `bbbde93c170246372895907dd4e446696521452d`
+- Delivered code commit: `6d3fbfc985cfa1e407e331d79ac5d25ffd3ae3b0`
+- Assignment baseline: `61623032ceb09537b1598d914fac3bb747c39302`
+- Accepted I executable: `bbbde93c170246372895907dd4e446696521452d`
 - G1 acceptance: `faf0ad851496f3708fb0f66f4ca28d7faee294d5`
 - Accepted design: ADR-017 D01–D10 with C01–C05, local synthetic only
 - Accepted I archive: [full review and evidence](handoffs/phase-9a-i-erasure-foundation-identity.md)
@@ -41,9 +43,9 @@ handoff merely after a small module if assigned safe work remains. A genuine
 security/architecture/authority conflict needs precise evidence and a bounded
 proposed decision; never weaken denial or invent a production guarantee.
 
-Next migration **V0038**, allocate actual consecutive owner migrations after
-inspecting HEAD. Preserve V0001–V0037; older tentative V0037–V0042 allocation is
-superseded. No placeholder migrations, new module DAG edge/SQL consumer or generic
+The assigned starting migration was **V0038**, after inspecting baseline HEAD.
+Delivery adds consecutive **V0038–V0051**; V0001–V0037 are unchanged. The older
+tentative V0037–V0042 allocation is superseded; III numbers remain unallocated. No placeholder migrations, new module DAG edge/SQL consumer or generic
 workflow engine. Existing account.api owner acknowledgement/worker fencing is
 the foundation, not permission to call higher-module internals.
 
@@ -56,7 +58,7 @@ C01–C05 bind this implementation; no private payload may be waived to obtain D
 Retain the fixed12-owner roster; owner activation requires real handlers,
 proofs and historical reconciliation, not empty/fake acknowledgements.
 
-No new II implementation findings yet. Development must not self-accept G2 or
+No main reviewer findings for II have been recorded yet. Development does not self-accept G2 or
 resolve future main findings. Review history is preserved in the archive above.
 
 ## Verification and delivery
@@ -105,6 +107,73 @@ The500ms feed goal remains unmet; earlier timeout root causes remain unproven.
 
 ## Developer report / main review
 
-Not started. Record the implementation plan, actual slice/final hashes, evidence,
-deviations and concrete blockers here while preserving the assignment and any
-later reviewer IDs. Main reviews the whole package at G2 before activating III.
+Complete II.1–II.4 candidate delivered at **`6d3fbfc985cfa1e407e331d79ac5d25ffd3ae3b0`**.
+The pre-code [implementation map](work-packages/phase-9a-ii-implementation-map.md)
+records the actual owner/API/lock/proof/migration/test plan and refinements.
+The [phase record](phases/phase-9a-ii.md) contains final behavior, all16 benchmark
+rows, failed-attempt explanations and retained limitations. No small-module early
+handoff, agent, push, deployment, III or real-data erasure/restore was used.
+
+| Internal gate | Delivered behavior and evidence |
+|---|---|
+| A — participation/references | Community and graph bounded owner passes; archived-owner history retained; ACTIVE ownership remains a blocker. Inviter/recipient guards and inbound-block denial serialize against real close in both orders. Current mention/recipient repair narrows last CUSTOM recipient to ONLY_ME, preserving other-author text/revisions/reply IDs. |
+| B — authored/media | Prompt denial/soft deletion, DB t0+30d nested redaction, one-way choices, erasure-origin retention protection. All-state/all-generation media manifests and receipts, stable claim fence, outside-lock drain/purge and once-only quota ack. Real PG/Silo/archive tests cover >50 versions/markers, joined late writers, crash-before-ack and stale generation. No runtime drain adapter; unproven writers/storage remain waiting. |
+| C — projections/preservation/finalization | Terminal notification/search guards, V0032 watermarks and unrelated actor/read-state preservation; empty-index snapshot/rebuild defenses. C01 existing pending cases resolve with mandatory encrypted detail and atomic proof invalidation. Independent bounded preservation exports/hold authority recheck, audited explicit DEAD resume. Eleven-proof nonrecursive certificate; exclusive subject→ordered step locks and atomic receipt/DONE/DELETED/audit/outbox; stale vector/audit/fence rollback regressions. |
+
+Large synthetic fixtures include10,001 posts, revisions, comments, graph edges,
+notification actors, all-state assets, old-generation variant rows and repeated
+current mentions. Per-pass collection bounds and actual row deltas, sampled heap,
+lock waits, queue/checkpoint behavior and inspected query bounds are distinguished
+in the phase record; no aggregate per-pass SQL profiler or capacity guarantee is
+claimed. Unknown/corrupt historical DELETED provenance remains visible for an
+authoritative decision; no t0/generation or owner proof is invented.
+
+### Inherited finding responses
+
+- **P9AI-R1 — preserved, already resolved by main at G1.** Original post-lock
+  DB-time/absolute inherited deadline checks remain. ErasureProofChainIT has21
+  passing cases in the final full run. No deadline, refresh, claim or denial fence
+  was relaxed to activate II.
+- **P9AI-R2 — preserved, already resolved by main at G1.** Exact intent/request/
+  lifecycle generation/round/execution receipt matching and superseded success/
+  failure regressions remain passing. New media, preservation and completion
+  exports enforce their current captured execution/vector/generation; stale ack
+  cannot certify a successor or charge its quota. Only the old unimplemented-owner
+  count expectation changed to zero; existing matching assertions were retained.
+
+### Final checks
+
+| Check | Actual result |
+|---|---|
+| Java21 formatting + `./mvnw -B -ntp verify` | **469 PASS** (62 fast +407 IT),0 failures/errors/skips,8m32s, finished2026-10-22 23:52:16+07. Curated50-class XML counts independently match the full log. Includes architecture, OpenAPI, SQL/object-policy parity, new prefixes/checksums/failure rollback/forward recovery and all inherited regressions. |
+| Current-source manifest/image |391 executable/config/API/CI paths unchanged through delivery; unchanged-source image build r2 PASS. First build lost Docker RPC on session interruption, retained as failure evidence. |
+| Native fresh / V0037 / V0032 | All3 PASS on actual PG/Silo/app; accepted prefix checksums unchanged; real upload/process/post/media/security, CSRF403, stale412, close204, old-session/media401, post404, SSE closure, restart and historical no-data12-proof/certificate finalization. Media subject stays PENDING; old URL denied at real TTL. |
+| Unchanged feed benchmark | **3,200/3,200 successes,0 failures**,16 complete scenarios, pool10/diagnostic50,7m18s, finished2026-10-23 19:52:07+07. Dense pool10 p95=3110.893/2642.999ms and pool50=2786.914/2149.009ms;500ms goal remains OPEN. No pool/timeout/lease/planner change or concurrent heavy build/verify/native app. |
+| Delivery/config/security checks | Diff/index and Compose config PASS;244 local Markdown links PASS. Pinned redacted staged/history Gitleaks plus external synthetic positive control PASS, unchanged3 exact ignores; final history/mailbox scan metadata is retained outside git. |
+
+Durable evidence: `/home/vonhuphi/social-p9aii-evidence.ll068R/` —
+`executable-manifest.json`, `full-verify-r5/`, native probe/bootstrap/isolation/
+checksum logs, `native-archives/`, `benchmark.log`/CSV/JSON/reports, scan reports,
+`delivery-checks.json` and the final artifact index/provenance. Failed/interrupted
+attempts are retained under `attempts/`. The full runner's post-System.exit(0)/30s
+fork shutdown and cached stopped-container Hikari warnings are preserved; Maven
+exits0 with all469 cases passing. Native r1 used an obsolete dynamic host binding
+after a successful restart; corrected harness r2 resolves the actual binding and
+all3 fresh fixtures passed. No test exclusion or retry/timeout increase was used.
+
+All3 exact Compose projects/volumes and newly generated fixture storage/keys are
+removed after their archives were retained durably. Existing developer data/keys/
+volumes were never used. Fixture teardown is not an erasure acknowledgement.
+
+No assigned implementation blocker remains. Material boundaries stay explicit:
+real writer quiescence, U01–U06/production retention/IAM/keys/latest-cut authority,
+III restore/import/exposure barriers and public launch are unapproved. OPEN/held/
+unexpired private moderation, unknown writers, missing receipts and bad provenance
+remain waiting/failed. The500ms feed goal and earlier timeout root causes remain
+open; this run's zero errors does not resolve those earlier causes.
+
+**Next action: main reviews the entire II candidate at the actual code hash above
+and the retained evidence for G2.** Only main accepts/resolves review findings or
+pushes. No automatic III activation is requested. The mailbox is committed
+separately after the code commit; it deliberately contains no self-referential
+mailbox commit hash.
