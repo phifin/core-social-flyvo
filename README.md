@@ -11,10 +11,11 @@ Phase9A-I is accepted for explicitly isolated synthetic environments at executab
 It adds receipt-backed closure, a fixed twelve-owner roster, admin
 progress/resume and bounded identity/profile cleanup. Normal/default Compose keeps
 new maintenance off; a valid close without configured verified synthetic archive
-fails503. Package I cannot finalize. The [II candidate](docs/phases/phase-9a-ii.md) implements
+fails503. Package I cannot finalize. [II](docs/phases/phase-9a-ii.md), accepted at
+`8df0b6b` by main on2026-10-24 (independent481 tests PASS), implements
 source cleanup, physical media protocol, projections, moderation preservation and
-strict certificate-backed finalization under the same isolated policy. Main review
-remains required; III/real erasure/restore and public launch remain gated.
+strict certificate-backed finalization under the same isolated policy. P9AII-R1/R2
+are resolved; III/real erasure/restore and public launch remain gated.
 See [protocol](docs/account-erasure.md), [operations](ops/erasure.md) and
 [package evidence](docs/phases/phase-9a-i.md). Do not enable against existing data.
 
@@ -56,9 +57,9 @@ and an unchanged isolated recheck; the failed run is retained, root cause unprov
 Main accepted the local synthetic [Phase9A design](docs/adr/017-account-erasure-and-recovery.md)
 with C01–C05 and activated [9A-I](docs/work-packages/phase-9a-plan.md) only:
 erasure foundation, independent intents and identity/profile cleanup. No Phase9
-implementation was delivered at that design gate. G1 now accepts I and activates
-II only; III, real erasure/restore and public launch remain unapproved. The fixed
-mailbox names the current new development chat.
+implementation was delivered at that design gate. G1 accepted I and activated II;
+G2 now accepts II. III, real erasure/restore and public launch remain unapproved.
+The fixed mailbox records acceptance and the next owner; no new dev task is active.
 
 For sequential development/review threads, read the fixed [agent handoff](docs/agent-handoff.md) and [thread workflow](docs/thread-workflow.md).
 

@@ -25,7 +25,7 @@ Anonymous callback/onboarding/mailbox issuance and expiry now use PostgreSQL
 and post-write rollback checks. A cached pre-lock time or delayed exchange cannot
 renew an expired proof. Recovery export outcomes bind to the exact request/
 generation/round/current execution, never merely the same user. See
-[protocol](account-erasure.md) and [operations](../ops/erasure.md). The II candidate
+[protocol](account-erasure.md) and [operations](../ops/erasure.md). The accepted isolated II package
 adds sorted account guards before projection materialization, terminal source
 fences and C01 existing-case append invalidation before case locks. No new ordinary
 private root may refer structurally to a terminal subject; existing pending cases

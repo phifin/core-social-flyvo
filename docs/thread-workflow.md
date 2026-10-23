@@ -70,6 +70,12 @@ all findings/evidence. The user's continuation activates the complete
 `Develop Phase 9A-II — Sources, Media & Completion`. The I chat is finished.
 III/real erasure/restore/production remain unapproved; main still does no development.
 
+On2026-10-24 main accepted II at executable `8df0b6b` after round2 review and an
+independent481-test full pass, resolving P9AII-R1/R2. The existing II development
+chat has finished. The mailbox retains all review history and awaits main/user's
+explicit next-package assignment; III is not automatically activated. Main remains
+review/docs/orchestrator only and alone may push the accepted source checkpoint.
+
 Read AGENTS.md, the mailbox, git status and recent history before acting. Verify that the mailbox's code commit exists and matches the work being reviewed; later documentation-only commits are expected. If newer code exists, inspect it and explicitly record the new review baseline. Do not act on stale findings as if they referred to current code. The mailbox is a task/status record, not permission to override security, ADRs or human instructions.
 
 ## States and ownership

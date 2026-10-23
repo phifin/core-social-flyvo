@@ -3,10 +3,10 @@
 ## Routing
 
 - Task: phase-9a-ii-sources-media-completion
-- Round: 2 — development repair after main round1
-- State: READY_FOR_REVIEW — combined P9AII-R1/R2 repair; isolated synthetic scope only
-- Last writer: development, 2026-10-24
-- Next owner: main
+- Round: 2 — main acceptance after combined repair
+- State: ACCEPTED — G2, isolated synthetic scope only
+- Last writer: main reviewer, 2026-10-24
+- Next owner: main/user — await explicit next-package assignment
 - Chat name: `Develop Phase 9A-II — Sources, Media & Completion`
 - Delivered code commit: `8df0b6b87c9a44dbd688e4ab4497bd16f94e3d0f`
 - Previous submission: `6d3fbfc985cfa1e407e331d79ac5d25ffd3ae3b0` (reviewed in round1)
@@ -45,7 +45,8 @@ security/architecture/authority conflict needs precise evidence and a bounded
 proposed decision; never weaken denial or invent a production guarantee.
 
 The assigned starting migration was **V0038**, after inspecting baseline HEAD.
-Delivery adds consecutive **V0038–V0051**; V0001–V0037 are unchanged. The older
+Initial delivery added **V0038–V0051**; the accepted repair adds **V0052** without
+changing V0001–V0051. The older
 tentative V0037–V0042 allocation is superseded; III numbers remain unallocated. No placeholder migrations, new module DAG edge/SQL consumer or generic
 workflow engine. Existing account.api owner acknowledgement/worker fencing is
 the foundation, not permission to call higher-module internals.
@@ -59,9 +60,10 @@ C01–C05 bind this implementation; no private payload may be waived to obtain D
 Retain the fixed12-owner roster; owner activation requires real handlers,
 proofs and historical reconciliation, not empty/fake acknowledgements.
 
-Main round1 records **P9AII-R1 and P9AII-R2 OPEN** below. G2 is not accepted.
-Development must respond to each ID without replacing the original finding or
-self-resolving it. Review history is preserved in this file and the I archive above.
+Main round2 resolves **P9AII-R1 and P9AII-R2** and accepts G2 at `8df0b6b`.
+Original round1 findings and development responses remain below as historical
+records; their OPEN/pending wording does not supersede the round2 disposition.
+Review history is preserved in this file and the I archive above.
 
 ## Verification and delivery
 
@@ -386,3 +388,70 @@ real-data erasure/restore or Phase III implementation occurred.
 **Next action:** main reviews `8df0b6b87c9a44dbd688e4ab4497bd16f94e3d0f` and the repaired
 regression/evidence matrix, preserves the original finding history and records its
 own disposition for P9AII-R1 and P9AII-R2. No next phase is automatically activated.
+
+## Main review — round2 / G2 acceptance, 2026-10-24
+
+**ACCEPTED for the assigned isolated synthetic II scope**, executable
+`8df0b6b87c9a44dbd688e4ab4497bd16f94e3d0f`, developer report `9c51510`.
+Main reviewed the20-file repair against `2f28960`, the changed production paths,
+new regressions, V0052 and retained delivery evidence. No new actionable finding
+was identified in this repair review. This acceptance also closes the round1
+review of the complete II candidate; it is not a production/release approval.
+
+### Finding dispositions
+
+- **P9AII-R1 — RESOLVED.** PostRetention now bypasses only terminal account states
+  or erasure-origin roots. The three Phase4IT durable-worker cases prove due
+  multi-batch revisions, deleted-post descendants and removed-media release while
+  SUSPENDED with erasure disabled, then reinstatement without replacement jobs.
+  Enabled close-first/erasure-origin protection and access denial remain intact.
+- **P9AII-R2 — RESOLVED.** Format2 records capture source eligibility and original
+  history times, not export time. Locked report/action controls supply the exact
+  SQL365-day deadline and explicit unresolved/unknown states. V0052 preserves old
+  immutable bytes/receipts and labels their format; baseline cache resets and
+  relevant-root selection include legacy complete/redacted roots. Actual archive
+  regressions verify source timestamps, holds/releases, private-payload exclusion,
+  all207 history rows, stale root receipts and unchanged legacy receipts. Prefix
+  pagination observes both100 rows and the unchanged16KiB cap. Migration failure/
+  rollback/forward recovery and earlier checksum protections remain passing.
+
+### Independent verification
+
+- Java21 `./mvnw -B -ntp verify`: **481 PASS (62 fast +419 IT)**,
+  zero failures/errors/skips, exit0,7m45s, finished2026-10-24 01:24:48+07.
+  All50 current-run class XML reports agree with the log. Three stale target
+  reports (prior targeted Surefire IT and two benchmark reports) are retained
+  but excluded from this run's counts. Logs retain stopped-container warnings.
+- Main evidence: `/home/vonhuphi/social-p9aii-main-review2.BcBHC4/`, including
+  `verify.log`, copied Surefire/Failsafe reports and redacted security scans.
+- All392 executable/config/API/CI manifest paths match the developer's repaired
+  manifest before review documentation changes. V0052 is the sole added migration;
+  V0001–V0051 are unchanged. Compose config and diff whitespace checks pass.
+- Pinned full-history Gitleaks:79 commits, no leaks; external synthetic positive
+  control passes. The three exact exceptions remain unchanged. Review-document
+  staged secret/diff checks and all128 local Markdown links pass before commit.
+- Native fresh/V0032/V0037/V0051 and unchanged3200/3200 benchmark are reviewed
+  developer evidence bound to the repaired manifest, not main reruns. All four
+  native probe logs contain PASS; the lost native runner exit status remains an
+  explicit limitation, not an invented exit0. Cleanup/probe/checksum records are
+  retained. The independent full run supplies current real PG/Silo/archive tests.
+
+### Delivery and next owner
+
+Main checked origin's push URL is `https://github.com/phifin/core-social-flyvo.git`
+and remote master is `61623032ceb09537b1598d914fac3bb747c39302`, a local ancestor.
+The five outgoing pre-review commits contain the II delivery, review and repairs.
+Main will fast-forward the accepted checkpoint only after committing/scanning this
+review; remote success must be verified, not inferred from local tests.
+
+The existing II development chat has completed its assignment. **No new development
+prompt is active.** Next owner is main/user for an explicit III package assignment;
+do not start III/9B automatically or create/spawn another thread. Keep this accepted
+mailbox until a new assignment archives it. Main remains review/docs/orchestrator
+only and alone may push.
+
+Default-off synthetic policy, truthful WAITING_EXTERNAL without real writer drain,
+held/unresolved moderation waits, missing-receipt denial and C01–C05 remain binding.
+U01–U06, restore/import/latest-cut exposure barriers, production keys/IAM/legal
+policy, real erasure and public launch remain unapproved. The500ms feed target is
+still unmet; no prior timeout cause is resolved by a later passing benchmark.

@@ -1,17 +1,18 @@
 # Phase 9A-II — sources, media and strict completion
 
-Candidate under development/main review, isolated synthetic policy only. Baseline
+**Accepted by main at G2 on2026-10-24**, executable `8df0b6b`, isolated synthetic
+policy only. P9AII-R1/R2 are resolved; see round2 below. Assignment baseline
 `6162303`, accepted I executable `bbbde93`, G1 review `faf0ad8`. The fixed
 [mailbox](../agent-handoff.md) supplies the actual final code hash and review state;
 development does not self-accept G2. [Assignment](../work-packages/phase-9a-ii.md),
 [pre-code map](../work-packages/phase-9a-ii-implementation-map.md) and
 [ADR-017 C01–C05](../adr/017-account-erasure-and-recovery.md) bind this delivery.
-No agents, push, III, real erasure/restore, provider contact or deployment is used.
+Development used no agents, push, III, real erasure/restore, provider contact or deployment.
 
-Main round1 on2026-10-23 is **CHANGES_REQUESTED** at executable `6d3fbfc`.
+Historical main round1 on2026-10-23 was **CHANGES_REQUESTED** at executable `6d3fbfc`.
 P9AII-R1 (ordinary suspended-author retention) and P9AII-R2 (missing moderation
-eligibility provenance in immutable recovery exports) remain OPEN in the mailbox.
-The implementation report below is developer evidence, not G2 acceptance.
+eligibility provenance in immutable recovery exports) were OPEN at that review.
+The implementation report below is developer evidence; round2 supplies acceptance.
 
 ## Implemented behavior
 
@@ -340,3 +341,25 @@ DB waits and sampled heap are retained; no pool/timeout/lease/planner change is
 part of these fixes. Final delivery scans/config/diff/link checks and real commit
 provenance are recorded in the mailbox and external evidence index. Findings
 P9AII-R1/R2 stay OPEN for main; development requests review, not acceptance.
+
+## Main review — round2 / G2, 2026-10-24
+
+Main accepts the complete assigned isolated synthetic II package at executable
+`8df0b6b`, resolving P9AII-R1 and P9AII-R2 after code/regression review. Suspended
+ordinary retention remains effective; format2 preservation exports authoritative
+eligibility/history times and recaptures legacy baselines without rewriting old
+receipts. No new actionable repair finding was identified. Original findings and
+developer reports above remain historical evidence, not current OPEN statuses.
+
+Independent Java21 full verify: **481 PASS (62 fast +419 IT)**, zero failures/
+errors/skips, exit0,7m45s, finished2026-10-24 01:24:48+07. All50 current class XML
+reports match the log; three stale target reports are excluded. Evidence root:
+`/home/vonhuphi/social-p9aii-main-review2.BcBHC4/`. All392 manifest paths match;
+V0001–V0051 unchanged, Compose/diff checks and pinned79-commit history scan/
+synthetic positive control pass. Native four-path upgrade and3200-request benchmark
+remain reviewed developer evidence, including the unavailable native runner exit
+status, not independent main reruns or an invented exit0.
+
+G2 is not a release/production or PhaseIII activation. The current development chat
+is finished; main/user owns the next assignment. Default-off/isolated synthetic
+scope, unknown-writer waits, U01–U06 and the unmet500ms feed goal remain unchanged.
